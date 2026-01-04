@@ -51,7 +51,7 @@ Use this method if your local machine architecture matches the dump file's archi
 #### Run the server
 ```bash
 export DUMP_PATH="/path/to/your/dump.core"
-dotnet run --project src/DotNetDump.Server/DotNetDump.Server.csproj
+dotnet run --project src/DotNetDump.Server/DotNetDump.Server.csproj --framework net9.0
 ```
 
 ---
