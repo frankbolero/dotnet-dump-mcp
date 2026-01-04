@@ -1,223 +1,187 @@
-using DotNetDump.Core.Models;
-using Microsoft.Diagnostics.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace DotNetDump.Core.Analyzers
-{
-    public class HeapAnalyzer
-    {
-        private readonly IDumpContext _context;
+using DotNetDump.Core.Models;
 
-        public HeapAnalyzer(IDumpContext context)
-        {
-            _context = context;
-        }
+using Microsoft.Diagnostics.Runtime;
 
-        private ClrHeap GetHeap()
-        {
-            if (!_context.IsLoaded || _context.Heap == null)
-                throw new InvalidOperationException("No dump loaded. Please use 'load_dump' tool first.");
-            return _context.Heap;
-        }
+namespace DotNetDump.Core.Analyzers {
+	public class HeapAnalyzer {
+		private readonly IDumpContext _context;
 
-        public IEnumerable<HeapStatItem> GetHeapStatistics(QueryParameters parameters)
-        {
-            var heap = GetHeap();
-            var stats = from obj in heap.EnumerateObjects()
-                        let type = obj.Type
-                        where type != null
-                        group obj by new { type.Name, type.MethodTable } into g
-                        select new HeapStatItem
-                        {
-                            TypeName = g.Key.Name,
-                            MethodTable = g.Key.MethodTable,
-                            Count = g.Count(),
-                            TotalSize = g.Sum(p => (long)p.Size)
-                        };
+		public HeapAnalyzer(IDumpContext context) {
+			_context = context;
+		}
 
-            // Apply sorting
-            if (parameters.SortBy?.ToLower() == "count")
-            {
-                stats = parameters.SortDirection == SortDirection.Asc ? stats.OrderBy(s => s.Count) : stats.OrderByDescending(s => s.Count);
-            }
-            else if (parameters.SortBy?.ToLower() == "typename")
-            {
-                stats = parameters.SortDirection == SortDirection.Asc ? stats.OrderBy(s => s.TypeName) : stats.OrderByDescending(s => s.TypeName);
-            }
-            else // Default: TotalSize
-            {
-                stats = parameters.SortDirection == SortDirection.Asc ? stats.OrderBy(s => s.TotalSize) : stats.OrderByDescending(s => s.TotalSize);
-            }
+		private ClrHeap GetHeap() {
+			if (!_context.IsLoaded || _context.Heap == null)
+				throw new InvalidOperationException("No dump loaded. Please use 'load_dump' tool first.");
+			return _context.Heap;
+		}
 
-            return stats.Skip(parameters.Offset).Take(parameters.Limit);
-        }
+		public IEnumerable<HeapStatItem> GetHeapStatistics(QueryParameters parameters) {
+			var heap = GetHeap();
+			var stats = from obj in heap.EnumerateObjects()
+							let type = obj.Type
+							where type != null
+							group obj by new { type.Name, type.MethodTable } into g
+							select new HeapStatItem {
+								TypeName = g.Key.Name,
+								MethodTable = g.Key.MethodTable,
+								Count = g.Count(),
+								TotalSize = g.Sum(p => (long)p.Size)
+							};
 
-        public IEnumerable<HeapObjectItem> GetObjects(QueryParameters parameters, string? typeFilter = null)
-        {
-            var heap = GetHeap();
-            var objects = heap.EnumerateObjects()
-                .Where(obj => typeFilter == null || (obj.Type?.Name?.Contains(typeFilter, StringComparison.OrdinalIgnoreCase) ?? false))
-                .Select(obj => new HeapObjectItem
-                {
-                    Address = obj.Address,
-                    MethodTable = obj.Type?.MethodTable ?? 0,
-                    Size = obj.Size,
-                    TypeName = obj.Type?.Name
-                });
+			// Apply sorting
+			if (parameters.SortBy?.ToLower() == "count") {
+				stats = parameters.SortDirection == SortDirection.Asc ? stats.OrderBy(s => s.Count) : stats.OrderByDescending(s => s.Count);
+			} else if (parameters.SortBy?.ToLower() == "typename") {
+				stats = parameters.SortDirection == SortDirection.Asc ? stats.OrderBy(s => s.TypeName) : stats.OrderByDescending(s => s.TypeName);
+			} else // Default: TotalSize
+			  {
+				stats = parameters.SortDirection == SortDirection.Asc ? stats.OrderBy(s => s.TotalSize) : stats.OrderByDescending(s => s.TotalSize);
+			}
 
-            // Apply sorting
-            if (parameters.SortBy?.ToLower() == "size")
-            {
-                objects = parameters.SortDirection == SortDirection.Asc ? objects.OrderBy(o => o.Size) : objects.OrderByDescending(o => o.Size);
-            }
-            else if (parameters.SortBy?.ToLower() == "address")
-            {
-                objects = parameters.SortDirection == SortDirection.Asc ? objects.OrderBy(o => o.Address) : objects.OrderByDescending(o => o.Address);
-            }
+			return stats.Skip(parameters.Offset).Take(parameters.Limit);
+		}
 
-            return objects.Skip(parameters.Offset).Take(parameters.Limit);
-        }
+		public IEnumerable<HeapObjectItem> GetObjects(QueryParameters parameters, string? typeFilter = null) {
+			var heap = GetHeap();
+			var objects = heap.EnumerateObjects()
+				 .Where(obj => typeFilter == null || (obj.Type?.Name?.Contains(typeFilter, StringComparison.OrdinalIgnoreCase) ?? false))
+				 .Select(obj => new HeapObjectItem {
+					 Address = obj.Address,
+					 MethodTable = obj.Type?.MethodTable ?? 0,
+					 Size = obj.Size,
+					 TypeName = obj.Type?.Name
+				 });
 
-        public IEnumerable<GCRootInfo> GetGCRoots(ulong targetAddress, QueryParameters parameters)
-        {
-            var runtime = _context.Runtime;
-            if (runtime == null) return Enumerable.Empty<GCRootInfo>();
+			// Apply sorting
+			if (parameters.SortBy?.ToLower() == "size") {
+				objects = parameters.SortDirection == SortDirection.Asc ? objects.OrderBy(o => o.Size) : objects.OrderByDescending(o => o.Size);
+			} else if (parameters.SortBy?.ToLower() == "address") {
+				objects = parameters.SortDirection == SortDirection.Asc ? objects.OrderBy(o => o.Address) : objects.OrderByDescending(o => o.Address);
+			}
 
-            var heap = GetHeap();
-            var roots = new List<GCRootInfo>();
+			return objects.Skip(parameters.Offset).Take(parameters.Limit);
+		}
 
-            // 1. Heap Roots (Handles, etc.)
-            foreach (var root in heap.EnumerateRoots())
-            {
-                if (root.Object.Address == targetAddress)
-                {
-                    roots.Add(new GCRootInfo
-                    {
-                        Address = root.Address,
-                        Kind = root.RootKind.ToString(),
-                        RootName = null, // ClrRoot doesn't have Name
-                        ObjectAddress = root.Object.Address,
-                        ManagedThreadId = -1,
-                        OSThreadId = 0
-                    });
-                }
-            }
+		public IEnumerable<GCRootInfo> GetGCRoots(ulong targetAddress, QueryParameters parameters) {
+			var runtime = _context.Runtime;
+			if (runtime == null) return Enumerable.Empty<GCRootInfo>();
 
-            // 2. Stack Roots
-            foreach (var thread in runtime.Threads)
-            {
-                foreach (var root in thread.EnumerateStackRoots())
-                {
-                    if (root.Object.Address == targetAddress)
-                    {
-                        string? name = root.StackFrame?.ToString();
-                        roots.Add(new GCRootInfo
-                        {
-                            Address = root.Address,
-                            Kind = "Stack",
-                            RootName = name,
-                            ObjectAddress = root.Object.Address,
-                            ManagedThreadId = thread.ManagedThreadId,
-                            OSThreadId = thread.OSThreadId
-                        });
-                    }
-                }
-            }
+			var heap = GetHeap();
+			var roots = new List<GCRootInfo>();
 
-            return roots.Skip(parameters.Offset).Take(parameters.Limit);
-        }
+			// 1. Heap Roots (Handles, etc.)
+			foreach (var root in heap.EnumerateRoots()) {
+				if (root.Object.Address == targetAddress) {
+					roots.Add(new GCRootInfo {
+						Address = root.Address,
+						Kind = root.RootKind.ToString(),
+						RootName = null, // ClrRoot doesn't have Name
+						ObjectAddress = root.Object.Address,
+						ManagedThreadId = -1,
+						OSThreadId = 0
+					});
+				}
+			}
 
-        public ObjectDetails GetObjectDetails(ulong address)
-        {
-            var heap = GetHeap();
-            var obj = heap.GetObject(address);
+			// 2. Stack Roots
+			foreach (var thread in runtime.Threads) {
+				foreach (var root in thread.EnumerateStackRoots()) {
+					if (root.Object.Address == targetAddress) {
+						string? name = root.StackFrame?.ToString();
+						roots.Add(new GCRootInfo {
+							Address = root.Address,
+							Kind = "Stack",
+							RootName = name,
+							ObjectAddress = root.Object.Address,
+							ManagedThreadId = thread.ManagedThreadId,
+							OSThreadId = thread.OSThreadId
+						});
+					}
+				}
+			}
 
-            if (obj.IsNull)
-                throw new ArgumentException($"Object at {address:X} is null or invalid.");
+			return roots.Skip(parameters.Offset).Take(parameters.Limit);
+		}
 
-            var details = new ObjectDetails
-            {
-                Address = obj.Address,
-                TypeName = obj.Type?.Name ?? "<unknown>",
-                Size = obj.Size,
-                MethodTable = obj.Type?.MethodTable ?? 0
-            };
+		public ObjectDetails GetObjectDetails(ulong address) {
+			var heap = GetHeap();
+			var obj = heap.GetObject(address);
 
-            if (obj.Type != null)
-            {
-                // ClrType.Fields are instance fields in ClrMD 3.1. StaticFields are separate.
-                foreach (var field in obj.Type.Fields)
-                {
-                    string fieldName = field.Name ?? $"<field_{field.Offset:X}>";
+			if (obj.IsNull)
+				throw new ArgumentException($"Object at {address:X} is null or invalid.");
 
-                    var fieldModel = new ObjectField
-                    {
-                        Name = fieldName,
-                        TypeName = field.Type?.Name ?? "Unknown",
-                        Offset = field.Offset,
-                        IsReference = field.IsObjectReference
-                    };
+			var details = new ObjectDetails {
+				Address = obj.Address,
+				TypeName = obj.Type?.Name ?? "<unknown>",
+				Size = obj.Size,
+				MethodTable = obj.Type?.MethodTable ?? 0
+			};
 
-                    try
-                    {
-                        if (field.IsObjectReference)
-                        {
-                            var refObj = obj.ReadObjectField(fieldName);
-                            fieldModel.Address = refObj.Address;
-                            
-                            // Enhance value for Strings
-                            if (field.ElementType == ClrElementType.String)
-                            {
-                                fieldModel.Value = !refObj.IsNull ? $"\"{refObj.AsString(100)}\"" : "null";
-                            }
-                            else
-                            {
-                                fieldModel.Value = refObj.IsNull ? "null" : $"<{refObj.Type?.Name}>";
-                            }
-                        }
-                        else
-                        {
-                            fieldModel.Value = ReadPrimitiveValue(obj, field)?.ToString() ?? "{error}";
-                        }
-                    }
-                    catch (Exception)
-                    {
-                        fieldModel.Value = "{error reading}";
-                    }
+			if (obj.Type != null) {
+				// ClrType.Fields are instance fields in ClrMD 3.1. StaticFields are separate.
+				foreach (var field in obj.Type.Fields) {
+					string fieldName = field.Name ?? $"<field_{field.Offset:X}>";
 
-                    details.Fields.Add(fieldModel);
-                }
-            }
+					var fieldModel = new ObjectField {
+						Name = fieldName,
+						TypeName = field.Type?.Name ?? "Unknown",
+						Offset = field.Offset,
+						IsReference = field.IsObjectReference
+					};
 
-            return details;
-        }
+					try {
+						if (field.IsObjectReference) {
+							var refObj = obj.ReadObjectField(fieldName);
+							fieldModel.Address = refObj.Address;
 
-        private object? ReadPrimitiveValue(ClrObject obj, ClrInstanceField field)
-        {
-            string fieldName = field.Name ?? "";
-            if (string.IsNullOrEmpty(fieldName)) return null;
+							// Enhance value for Strings
+							if (field.ElementType == ClrElementType.String) {
+								fieldModel.Value = !refObj.IsNull ? $"\"{refObj.AsString(100)}\"" : "null";
+							} else {
+								fieldModel.Value = refObj.IsNull ? "null" : $"<{refObj.Type?.Name}>";
+							}
+						} else {
+							fieldModel.Value = ReadPrimitiveValue(obj, field)?.ToString() ?? "{error}";
+						}
+					} catch (Exception) {
+						fieldModel.Value = "{error reading}";
+					}
 
-            if (field.ElementType == ClrElementType.Boolean) return obj.ReadField<bool>(fieldName);
-            if (field.ElementType == ClrElementType.UInt8) return obj.ReadField<byte>(fieldName);
-            if (field.ElementType == ClrElementType.Int8) return obj.ReadField<sbyte>(fieldName);
-            if (field.ElementType == ClrElementType.Char) return obj.ReadField<char>(fieldName);
-            if (field.ElementType == ClrElementType.Int16) return obj.ReadField<short>(fieldName);
-            if (field.ElementType == ClrElementType.UInt16) return obj.ReadField<ushort>(fieldName);
-            if (field.ElementType == ClrElementType.Int32) return obj.ReadField<int>(fieldName);
-            if (field.ElementType == ClrElementType.UInt32) return obj.ReadField<uint>(fieldName);
-            if (field.ElementType == ClrElementType.Int64) return obj.ReadField<long>(fieldName);
-            if (field.ElementType == ClrElementType.UInt64) return obj.ReadField<ulong>(fieldName);
-            if (field.ElementType == ClrElementType.Float) return obj.ReadField<float>(fieldName);
-            if (field.ElementType == ClrElementType.Double) return obj.ReadField<double>(fieldName);
-            // String is an object reference, handled in caller.
-            if (field.ElementType == ClrElementType.Pointer || field.ElementType == ClrElementType.NativeInt) return obj.ReadField<IntPtr>(fieldName);
-            if (field.ElementType == ClrElementType.NativeUInt) return obj.ReadField<UIntPtr>(fieldName);
-            // Structs are harder, maybe just show type name
-            if (field.ElementType == ClrElementType.Struct) return $"<struct {field.Type?.Name}>";
-            
-            return null;
-        }
-    }
+					details.Fields.Add(fieldModel);
+				}
+			}
+
+			return details;
+		}
+
+		private object? ReadPrimitiveValue(ClrObject obj, ClrInstanceField field) {
+			string fieldName = field.Name ?? "";
+			if (string.IsNullOrEmpty(fieldName)) return null;
+
+			if (field.ElementType == ClrElementType.Boolean) return obj.ReadField<bool>(fieldName);
+			if (field.ElementType == ClrElementType.UInt8) return obj.ReadField<byte>(fieldName);
+			if (field.ElementType == ClrElementType.Int8) return obj.ReadField<sbyte>(fieldName);
+			if (field.ElementType == ClrElementType.Char) return obj.ReadField<char>(fieldName);
+			if (field.ElementType == ClrElementType.Int16) return obj.ReadField<short>(fieldName);
+			if (field.ElementType == ClrElementType.UInt16) return obj.ReadField<ushort>(fieldName);
+			if (field.ElementType == ClrElementType.Int32) return obj.ReadField<int>(fieldName);
+			if (field.ElementType == ClrElementType.UInt32) return obj.ReadField<uint>(fieldName);
+			if (field.ElementType == ClrElementType.Int64) return obj.ReadField<long>(fieldName);
+			if (field.ElementType == ClrElementType.UInt64) return obj.ReadField<ulong>(fieldName);
+			if (field.ElementType == ClrElementType.Float) return obj.ReadField<float>(fieldName);
+			if (field.ElementType == ClrElementType.Double) return obj.ReadField<double>(fieldName);
+			// String is an object reference, handled in caller.
+			if (field.ElementType == ClrElementType.Pointer || field.ElementType == ClrElementType.NativeInt) return obj.ReadField<IntPtr>(fieldName);
+			if (field.ElementType == ClrElementType.NativeUInt) return obj.ReadField<UIntPtr>(fieldName);
+			// Structs are harder, maybe just show type name
+			if (field.ElementType == ClrElementType.Struct) return $"<struct {field.Type?.Name}>";
+
+			return null;
+		}
+	}
 }
