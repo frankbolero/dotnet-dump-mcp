@@ -79,5 +79,54 @@ namespace DotNetDump.Core.Analyzers
 
             return objects.Skip(parameters.Offset).Take(parameters.Limit);
         }
+
+        public IEnumerable<GCRootInfo> GetGCRoots(ulong targetAddress, QueryParameters parameters)
+        {
+            var runtime = _context.Runtime;
+            if (runtime == null) return Enumerable.Empty<GCRootInfo>();
+
+            var heap = GetHeap();
+            var roots = new List<GCRootInfo>();
+
+            // 1. Heap Roots (Handles, etc.)
+            foreach (var root in heap.EnumerateRoots())
+            {
+                if (root.Object.Address == targetAddress)
+                {
+                    roots.Add(new GCRootInfo
+                    {
+                        Address = root.Address,
+                        Kind = root.RootKind.ToString(),
+                        RootName = null, // ClrRoot doesn't have Name
+                        ObjectAddress = root.Object.Address,
+                        ManagedThreadId = -1,
+                        OSThreadId = 0
+                    });
+                }
+            }
+
+            // 2. Stack Roots
+            foreach (var thread in runtime.Threads)
+            {
+                foreach (var root in thread.EnumerateStackRoots())
+                {
+                    if (root.Object.Address == targetAddress)
+                    {
+                        string? name = root.StackFrame?.ToString();
+                        roots.Add(new GCRootInfo
+                        {
+                            Address = root.Address,
+                            Kind = "Stack",
+                            RootName = name,
+                            ObjectAddress = root.Object.Address,
+                            ManagedThreadId = thread.ManagedThreadId,
+                            OSThreadId = thread.OSThreadId
+                        });
+                    }
+                }
+            }
+
+            return roots.Skip(parameters.Offset).Take(parameters.Limit);
+        }
     }
 }

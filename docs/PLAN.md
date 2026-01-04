@@ -23,6 +23,62 @@ This document outlines the steps to transition from the `DotNetDumpExplorer` pro
 
 ---
 
+## Command Implementation Status
+
+### Core Commands
+| Command | Status | Tool Name | Notes |
+| :--- | :---: | :--- | :--- |
+| `load_dump` | ✅ | `LoadDump` | Loads dump context dynamically |
+
+### Stack Analysis
+| Command | Status | Tool Name | Notes |
+| :--- | :---: | :--- | :--- |
+| `clrstack` | ✅ | `ClrStack` | Grouped by call site |
+| `eestack` | ❌ | | |
+| `dumpstack` | ❌ | | |
+
+### Heap Analysis
+| Command | Status | Tool Name | Notes |
+| :--- | :---: | :--- | :--- |
+| `dumpheap` | ✅ | `DumpHeap` | Statistical summary |
+| `list_objects` | ✅ | `ListObjects` | Detailed list (pagination) |
+| `gcroot` | ✅ | `GcRoot` | Finds roots pointing to object |
+| `verifyheap` | ❌ | | |
+| `eeheap` | ❌ | | |
+| `dumpobj` | ❌ | | Use `list_objects` for now |
+| `gchandles` | ❌ | | |
+| `syncblk` | ❌ | | |
+
+### Thread Analysis
+| Command | Status | Tool Name | Notes |
+| :--- | :---: | :--- | :--- |
+| `clrthreads` | ✅ | `ClrThreads` | Lists managed threads |
+| `threadpool` | ❌ | | |
+| `threadstate` | ❌ | | Covered partially by `clrthreads` |
+
+### Module and Assembly Analysis
+| Command | Status | Tool Name | Notes |
+| :--- | :---: | :--- | :--- |
+| `clrmodules` | ✅ | `ClrModules` | Lists loaded modules |
+| `dumpmodule` | ❌ | | |
+| `dumpassembly` | ❌ | | |
+| `name2ee` | ❌ | | |
+| `ip2md` | ❌ | | |
+
+### Metadata Analysis
+| Command | Status | Tool Name | Notes |
+| :--- | :---: | :--- | :--- |
+| `dumpclass` | ❌ | | |
+| `dumpmd` | ❌ | | |
+| `dumpmt` | ❌ | | |
+
+### Exception Analysis
+| Command | Status | Tool Name | Notes |
+| :--- | :---: | :--- | :--- |
+| `pe` / `printexception` | ❌ | | |
+
+---
+
 ## Phase 1: Foundation & Core Logic (The "Core" Project)
 
 **Goal:** Create a reusable, testable library that manages the `ClrMD` state and implements the analysis logic defined in `OUTPUT_STRATEGY.md`.

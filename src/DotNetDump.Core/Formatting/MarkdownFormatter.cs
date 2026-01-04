@@ -75,5 +75,18 @@ namespace DotNetDump.Core.Formatting
             }
             return sb.ToString();
         }
+
+        public static string FormatGCRoots(IEnumerable<GCRootInfo> roots)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("| Root Addr | Kind | Thread | Name |");
+            sb.AppendLine("|-----------|------|--------|------|");
+            foreach (var item in roots)
+            {
+                string threadId = item.ManagedThreadId != -1 ? item.ManagedThreadId.ToString() : "-";
+                sb.AppendLine($"| {item.Address:X16} | {item.Kind} | {threadId} | {item.RootName} |");
+            }
+            return sb.ToString();
+        }
     }
 }
