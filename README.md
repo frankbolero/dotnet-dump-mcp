@@ -77,6 +77,26 @@ To use this with an MCP-compatible agent (like Cursor, Windsurf, or Claude Deskt
 }
 ```
 
+#### Local Configuration (Example)
+```json
+{
+  "mcpServers": {
+    "dotnet-dump": {
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project", "/absolute/path/to/src/DotNetDump.Server/DotNetDump.Server.csproj",
+        "--",
+        "/absolute/path/to/your/dump.core"
+      ],
+      "env": {
+        "DUMP_PATH": "/absolute/path/to/your/dump.core"
+      }
+    }
+  }
+}
+```
+
 ## Commands Supported
 
 The following tools are exposed to the AI Agent:
