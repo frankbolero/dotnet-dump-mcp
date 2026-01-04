@@ -36,15 +36,15 @@ namespace DotNetDumpExplorer
                         Console.WriteLine("No CLR Runtime found in dump.");
                         return;
                     }
-                    
+
                     Console.WriteLine($"Found CLR: {clrInfo.Version}");
-                    
+
                     ClrRuntime runtime = null;
-                    try 
+                    try
                     {
                         runtime = clrInfo.CreateRuntime();
                     }
-                    catch 
+                    catch
                     {
                         Console.WriteLine("Default CreateRuntime failed. Trying local DAC with ignoreMismatch...");
                         string localDac = "/usr/local/share/dotnet/shared/Microsoft.NETCore.App/9.0.11/libmscordaccore.dylib";
@@ -185,7 +185,7 @@ namespace DotNetDumpExplorer
                 int count = 0;
                 foreach (ClrObject obj in runtime.Heap.EnumerateObjects())
                 {
-                    if (count++ > 50) 
+                    if (count++ > 50)
                     {
                         Console.WriteLine("... (output truncated for verification tool)");
                         break;
@@ -240,7 +240,7 @@ namespace DotNetDumpExplorer
                 }
             }
         }
-        
+
         static void RunEeHeap(ClrRuntime runtime)
         {
             Console.WriteLine("Segment Start     End               Size");
