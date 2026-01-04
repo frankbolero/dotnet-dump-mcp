@@ -88,5 +88,23 @@ namespace DotNetDump.Core.Formatting
             }
             return sb.ToString();
         }
+
+        public static string FormatObjectDetails(ObjectDetails details)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"**Object:** {details.Address:X16}");
+            sb.AppendLine($"**Type:** {details.TypeName}");
+            sb.AppendLine($"**Size:** {details.Size:N0} bytes");
+            sb.AppendLine($"**MethodTable:** {details.MethodTable:X16}");
+            sb.AppendLine();
+            sb.AppendLine("| Offset | Name | Type | Value | Address |");
+            sb.AppendLine("|--------|------|------|-------|---------|");
+            foreach (var field in details.Fields)
+            {
+                string addr = field.Address != 0 ? field.Address.ToString("X16") : "";
+                sb.AppendLine($"| {field.Offset:X} | {field.Name} | {field.TypeName} | {field.Value} | {addr} |");
+            }
+            return sb.ToString();
+        }
     }
 }

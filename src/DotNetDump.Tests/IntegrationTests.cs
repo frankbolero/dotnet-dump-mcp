@@ -79,6 +79,22 @@ namespace DotNetDump.Tests
             Assert.NotNull(roots);
         }
 
+        [Fact]
+        public void HeapAnalyzer_GetObjectDetails_ReturnsData()
+        {
+            if (!File.Exists(_dumpPath)) return;
+
+            var analyzer = new HeapAnalyzer(_context);
+            var obj = _context.Heap.EnumerateObjects().FirstOrDefault(o => o.Type != null && o.Type.Name == "System.String");
+            if (obj.Address == 0) return;
+
+            var details = analyzer.GetObjectDetails(obj.Address);
+
+            Assert.Equal(obj.Address, details.Address);
+            Assert.Equal("System.String", details.TypeName);
+            Assert.NotEmpty(details.Fields);
+        }
+
         public void Dispose()
         {
             _context.Dispose();

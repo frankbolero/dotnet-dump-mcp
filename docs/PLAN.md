@@ -45,7 +45,7 @@ This document outlines the steps to transition from the `DotNetDumpExplorer` pro
 | `gcroot` | ✅ | `GcRoot` | Finds roots pointing to object |
 | `verifyheap` | ❌ | | |
 | `eeheap` | ❌ | | |
-| `dumpobj` | ❌ | | Use `list_objects` for now |
+| `dumpobj` | ✅ | `DumpObj` | Shallow inspection |
 | `gchandles` | ❌ | | |
 | `syncblk` | ❌ | | |
 
