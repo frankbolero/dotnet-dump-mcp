@@ -110,6 +110,23 @@ namespace DotNetDump.Server
             });
         }
 
+        [McpServerTool, Description("Finds Garbage Collection roots for a specific object.")]
+        public string GcRoot(
+            [Description("The address of the object to find roots for")] string address,
+            [Description("Number of items to return")] int limit = 50,
+            [Description("Number of items to skip")] int offset = 0)
+        {
+            return ExecuteSafe(() =>
+            {
+                if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong objAddr))
+                    throw new ArgumentException("Invalid address format");
+
+                var parameters = CreateParameters(null, null, limit, offset);
+                var roots = _heapAnalyzer.GetGCRoots(objAddr, parameters);
+                return MarkdownFormatter.FormatGCRoots(roots);
+            });
+        }
+
         private QueryParameters CreateParameters(string? sortBy, string? sortDirection, int limit, int offset)
         {
             return new QueryParameters

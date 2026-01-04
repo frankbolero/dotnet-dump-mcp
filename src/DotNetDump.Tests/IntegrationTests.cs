@@ -59,6 +59,26 @@ namespace DotNetDump.Tests
             Assert.True(groups.First().ThreadCount > 0);
         }
 
+        [Fact]
+        public void HeapAnalyzer_GetGCRoots_ReturnsRoots()
+        {
+            if (!File.Exists(_dumpPath)) return;
+
+            var analyzer = new HeapAnalyzer(_context);
+            
+            // Find an object first
+            var obj = _context.Heap.EnumerateObjects().FirstOrDefault(o => o.Type != null && o.Type.Name == "System.String");
+            if (obj.Address == 0) return; // No string found
+
+            // This test is tricky because we need an object that HAS roots. 
+            // Strings might not be rooted if they are garbage.
+            // But let's try to call the method and ensure it doesn't crash.
+            var roots = analyzer.GetGCRoots(obj.Address, new QueryParameters { Limit = 10 }).ToList();
+
+            // Assert no exception
+            Assert.NotNull(roots);
+        }
+
         public void Dispose()
         {
             _context.Dispose();

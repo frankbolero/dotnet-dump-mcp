@@ -103,6 +103,7 @@ The following tools are exposed to the AI Agent:
 - `clr_threads`: List of all managed threads and their states.
 - `clr_stack`: Stack traces grouped by identical call sites.
 - `clr_modules`: List of loaded managed modules.
+- `gc_root`: Finds garbage collection roots for a specific object.
 
 ## Project Structure
 
