@@ -10,6 +10,10 @@ An MCP Server to help you and your AI friend analyze .NET memory dumps.
   - `ModelContextProtocol` for AI agent communication.
   - `Microsoft.Extensions.Hosting` for structured application lifecycle.
 
+## Important
+
+- Always use `dotnet format` to ensure code formatting.
+
 ## Usage
 
 This server communicates via Stdio using the Model Context Protocol. It requires a path to a memory dump file to initialize.

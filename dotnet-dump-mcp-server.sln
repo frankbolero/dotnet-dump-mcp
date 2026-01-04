@@ -11,6 +11,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetDump.Server", "src\Do
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetDump.Tests", "src\DotNetDump.Tests\DotNetDump.Tests.csproj", "{24A3A968-CC90-4FD6-BA76-4470D3B5F7CC}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFolder", "SolutionFolder", "{92C95C6F-DFDC-44BA-8B60-BE933671F3D5}"
+	ProjectSection(SolutionItems) = preProject
+		AGENTS.md = AGENTS.md
+		README.md = README.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
