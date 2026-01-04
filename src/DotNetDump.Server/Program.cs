@@ -3,11 +3,6 @@ using DotNetDump.Core.Analyzers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using ModelContextProtocol.Server;
-using System;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace DotNetDump.Server
 {
