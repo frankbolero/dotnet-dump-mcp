@@ -15,6 +15,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFolder", "SolutionF
 	ProjectSection(SolutionItems) = preProject
 		AGENTS.md = AGENTS.md
 		README.md = README.md
+		docs\OUTPUT_STRATEGY.md = docs\OUTPUT_STRATEGY.md
+		docs\PLAN.md = docs\PLAN.md
+		docs\PRODUCT_ARCHITECTURE.md = docs\PRODUCT_ARCHITECTURE.md
+		docs\SECURITY_PERFORMANCE_ANALYSIS.md = docs\SECURITY_PERFORMANCE_ANALYSIS.md
 	EndProjectSection
 EndProject
 Global
