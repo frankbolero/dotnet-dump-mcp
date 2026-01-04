@@ -1,5 +1,5 @@
 # Multi-stage build
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /app
 
 # Copy source
@@ -9,7 +9,7 @@ COPY . .
 RUN dotnet publish src/DotNetDump.Server/DotNetDump.Server.csproj -c Release -o /app/out --framework net9.0
 
 # Runtime image
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS runtime
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime
 WORKDIR /app
 
 # Install dotnet-symbol tool globally
