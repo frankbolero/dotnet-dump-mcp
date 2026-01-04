@@ -108,6 +108,8 @@ The following tools are exposed to the AI Agent:
 - `clr_stack`: Stack traces grouped by identical call sites.
 - `clr_modules`: List of loaded managed modules.
 - `gc_root`: Finds garbage collection roots for a specific object.
+- `sync_blk`: Displays the sync blocks (locks) for the process.
+- `thread_pool`: Displays information about the CLR ThreadPool.
 
 ## Project Structure
 

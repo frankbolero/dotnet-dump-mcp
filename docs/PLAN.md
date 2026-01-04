@@ -44,16 +44,16 @@ This document outlines the steps to transition from the `DotNetDumpExplorer` pro
 | `list_objects` | ✅ | `ListObjects` | Detailed list (pagination) |
 | `gcroot` | ✅ | `GcRoot` | Finds roots pointing to object |
 | `verifyheap` | ❌ | | |
-| `eeheap` | ❌ | | |
+| `eeheap` | ✅ | `EeHeap` | List heap segments |
 | `dumpobj` | ✅ | `DumpObj` | Shallow inspection |
 | `gchandles` | ❌ | | |
-| `syncblk` | ❌ | | |
+| `syncblk` | ✅ | `SyncBlk` | List sync blocks (locks) |
 
 ### Thread Analysis
 | Command | Status | Tool Name | Notes |
 | :--- | :---: | :--- | :--- |
 | `clrthreads` | ✅ | `ClrThreads` | Lists managed threads |
-| `threadpool` | ❌ | | |
+| `threadpool` | ✅ | `ThreadPool` | Basic thread pool stats |
 | `threadstate` | ❌ | | Covered partially by `clrthreads` |
 
 ### Module and Assembly Analysis

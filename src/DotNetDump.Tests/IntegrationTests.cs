@@ -85,6 +85,39 @@ public class IntegrationTests : IDisposable {
 		Assert.NotEmpty(details.Fields);
 	}
 
+	[Fact]
+	public void HeapAnalyzer_GetHeapSegments_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new HeapAnalyzer(_context);
+		var segments = analyzer.GetHeapSegments().ToList();
+
+		Assert.NotEmpty(segments);
+		Assert.True(segments.First().Size > 0);
+	}
+
+	[Fact]
+	public void ThreadAnalyzer_GetThreadPoolInfo_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new ThreadAnalyzer(_context);
+		var info = analyzer.GetThreadPoolInfo();
+
+		Assert.NotNull(info);
+		Assert.True(info.TotalThreads >= 0);
+	}
+
+	[Fact]
+	public void HeapAnalyzer_GetSyncBlocks_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new HeapAnalyzer(_context);
+		var blocks = analyzer.GetSyncBlocks(new QueryParameters()).ToList();
+
+		// Might be empty, but shouldn't throw
+		Assert.NotNull(blocks);
+	}
+
 	public void Dispose() {
 		_context.Dispose();
 	}
