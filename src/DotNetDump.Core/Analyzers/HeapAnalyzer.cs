@@ -128,5 +128,96 @@ namespace DotNetDump.Core.Analyzers
 
             return roots.Skip(parameters.Offset).Take(parameters.Limit);
         }
+
+        public ObjectDetails GetObjectDetails(ulong address)
+        {
+            var heap = GetHeap();
+            var obj = heap.GetObject(address);
+
+            if (obj.IsNull)
+                throw new ArgumentException($"Object at {address:X} is null or invalid.");
+
+            var details = new ObjectDetails
+            {
+                Address = obj.Address,
+                TypeName = obj.Type?.Name ?? "<unknown>",
+                Size = obj.Size,
+                MethodTable = obj.Type?.MethodTable ?? 0
+            };
+
+            if (obj.Type != null)
+            {
+                // ClrType.Fields are instance fields in ClrMD 3.1. StaticFields are separate.
+                foreach (var field in obj.Type.Fields)
+                {
+                    string fieldName = field.Name ?? $"<field_{field.Offset:X}>";
+
+                    var fieldModel = new ObjectField
+                    {
+                        Name = fieldName,
+                        TypeName = field.Type?.Name ?? "Unknown",
+                        Offset = field.Offset,
+                        IsReference = field.IsObjectReference
+                    };
+
+                    try
+                    {
+                        if (field.IsObjectReference)
+                        {
+                            var refObj = obj.ReadObjectField(fieldName);
+                            fieldModel.Address = refObj.Address;
+                            
+                            // Enhance value for Strings
+                            if (field.ElementType == ClrElementType.String)
+                            {
+                                fieldModel.Value = !refObj.IsNull ? $"\"{refObj.AsString(100)}\"" : "null";
+                            }
+                            else
+                            {
+                                fieldModel.Value = refObj.IsNull ? "null" : $"<{refObj.Type?.Name}>";
+                            }
+                        }
+                        else
+                        {
+                            fieldModel.Value = ReadPrimitiveValue(obj, field)?.ToString() ?? "{error}";
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        fieldModel.Value = "{error reading}";
+                    }
+
+                    details.Fields.Add(fieldModel);
+                }
+            }
+
+            return details;
+        }
+
+        private object? ReadPrimitiveValue(ClrObject obj, ClrInstanceField field)
+        {
+            string fieldName = field.Name ?? "";
+            if (string.IsNullOrEmpty(fieldName)) return null;
+
+            if (field.ElementType == ClrElementType.Boolean) return obj.ReadField<bool>(fieldName);
+            if (field.ElementType == ClrElementType.UInt8) return obj.ReadField<byte>(fieldName);
+            if (field.ElementType == ClrElementType.Int8) return obj.ReadField<sbyte>(fieldName);
+            if (field.ElementType == ClrElementType.Char) return obj.ReadField<char>(fieldName);
+            if (field.ElementType == ClrElementType.Int16) return obj.ReadField<short>(fieldName);
+            if (field.ElementType == ClrElementType.UInt16) return obj.ReadField<ushort>(fieldName);
+            if (field.ElementType == ClrElementType.Int32) return obj.ReadField<int>(fieldName);
+            if (field.ElementType == ClrElementType.UInt32) return obj.ReadField<uint>(fieldName);
+            if (field.ElementType == ClrElementType.Int64) return obj.ReadField<long>(fieldName);
+            if (field.ElementType == ClrElementType.UInt64) return obj.ReadField<ulong>(fieldName);
+            if (field.ElementType == ClrElementType.Float) return obj.ReadField<float>(fieldName);
+            if (field.ElementType == ClrElementType.Double) return obj.ReadField<double>(fieldName);
+            // String is an object reference, handled in caller.
+            if (field.ElementType == ClrElementType.Pointer || field.ElementType == ClrElementType.NativeInt) return obj.ReadField<IntPtr>(fieldName);
+            if (field.ElementType == ClrElementType.NativeUInt) return obj.ReadField<UIntPtr>(fieldName);
+            // Structs are harder, maybe just show type name
+            if (field.ElementType == ClrElementType.Struct) return $"<struct {field.Type?.Name}>";
+            
+            return null;
+        }
     }
 }

@@ -127,6 +127,19 @@ namespace DotNetDump.Server
             });
         }
 
+        [McpServerTool, Description("Inspects a specific object, listing its fields and values.")]
+        public string DumpObj([Description("The hex address of the object to inspect")] string address)
+        {
+            return ExecuteSafe(() =>
+            {
+                if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong objAddr))
+                    throw new ArgumentException("Invalid address format");
+
+                var details = _heapAnalyzer.GetObjectDetails(objAddr);
+                return MarkdownFormatter.FormatObjectDetails(details);
+            });
+        }
+
         private QueryParameters CreateParameters(string? sortBy, string? sortDirection, int limit, int offset)
         {
             return new QueryParameters
