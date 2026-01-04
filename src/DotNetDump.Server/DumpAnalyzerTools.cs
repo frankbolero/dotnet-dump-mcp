@@ -81,6 +81,28 @@ public class DumpAnalyzerTools {
 		});
 	}
 
+	[McpServerTool, Description("Displays merged thread stacks grouped by common call patterns (similar to Visual Studio Parallel Stacks).")]
+	public string EeStack([Description("Maximum number of frames per thread")] int maxFrames = 30) {
+		return ExecuteSafe(() => {
+			var groups = _threadAnalyzer.GetStackTraceGroups(maxFrames);
+			return MarkdownFormatter.FormatStackGroups(groups);
+		});
+	}
+
+	[McpServerTool, Description("Displays detailed stack traces for all threads including frame types and addresses.")]
+	public string DumpStack(
+		[Description("Field to sort by (ManagedThreadId, OSThreadId)")] string? sortBy = "ManagedThreadId",
+		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
+		[Description("Maximum number of frames per thread")] int maxFrames = 100,
+		[Description("Number of threads to return")] int limit = 50,
+		[Description("Number of threads to skip")] int offset = 0) {
+		return ExecuteSafe(() => {
+			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
+			var stacks = _threadAnalyzer.GetDetailedStacks(parameters, maxFrames);
+			return MarkdownFormatter.FormatDetailedStacks(stacks);
+		});
+	}
+
 	[McpServerTool, Description("Lists the managed modules in the process.")]
 	public string ClrModules(
 		[Description("Include system modules (System.*, Microsoft.*)")] bool includeSystem = false,

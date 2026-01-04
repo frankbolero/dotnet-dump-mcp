@@ -158,5 +158,35 @@ namespace DotNetDump.Core.Formatting {
 			}
 			return sb.ToString();
 		}
+
+		public static string FormatDetailedStacks(IEnumerable<ThreadStackInfo> stacks) {
+			var sb = new StringBuilder();
+			int threadNum = 0;
+
+			foreach (var stack in stacks) {
+				threadNum++;
+				sb.AppendLine($"### Thread {threadNum}: Managed ID {stack.ManagedThreadId}, OS ID {stack.OSThreadId:X}");
+
+				if (!string.IsNullOrEmpty(stack.ExceptionType)) {
+					sb.AppendLine($"**Exception:** {stack.ExceptionType}");
+				}
+
+				sb.AppendLine();
+				sb.AppendLine("| IP | SP | Kind | Method |");
+				sb.AppendLine("|----|----| -----|--------|");
+
+				foreach (var frame in stack.Frames) {
+					string method = frame.MethodName ?? "(unknown)";
+					if (!string.IsNullOrEmpty(frame.ModuleName)) {
+						method = $"{frame.ModuleName}!{method}";
+					}
+					sb.AppendLine($"| {frame.InstructionPointer:X16} | {frame.StackPointer:X16} | {frame.FrameKind} | {method} |");
+				}
+
+				sb.AppendLine();
+			}
+
+			return sb.ToString();
+		}
 	}
 }

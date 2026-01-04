@@ -34,8 +34,8 @@ This document outlines the steps to transition from the `DotNetDumpExplorer` pro
 | Command | Status | Tool Name | Notes |
 | :--- | :---: | :--- | :--- |
 | `clrstack` | ✅ | `ClrStack` | Grouped by call site |
-| `eestack` | ❌ | | |
-| `dumpstack` | ❌ | | |
+| `eestack` | ✅ | `EeStack` | Merged stacks (Parallel Stacks view) |
+| `dumpstack` | ✅ | `DumpStack` | Detailed per-thread stacks with frame info |
 
 ### Heap Analysis
 | Command | Status | Tool Name | Notes |

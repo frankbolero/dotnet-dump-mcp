@@ -95,5 +95,37 @@ namespace DotNetDump.Core.Analyzers {
 				Type = type
 			};
 		}
+
+		public IEnumerable<ThreadStackInfo> GetDetailedStacks(QueryParameters parameters, int maxFrames = 100) {
+			var runtime = GetRuntime();
+			var stacks = runtime.Threads
+				.Where(t => t.IsAlive)
+				.Select(t => new ThreadStackInfo {
+					ManagedThreadId = t.ManagedThreadId,
+					OSThreadId = t.OSThreadId,
+					IsAlive = t.IsAlive,
+					ExceptionType = t.CurrentException?.Type?.Name,
+					Frames = t.EnumerateStackTrace()
+						.Take(maxFrames)
+						.Select(f => new StackFrameInfo {
+							InstructionPointer = f.InstructionPointer,
+							StackPointer = f.StackPointer,
+							FrameKind = f.Kind.ToString(),
+							MethodName = f.Method?.Name ?? f.ToString(),
+							ModuleName = f.Method?.Type?.Module?.Name,
+							IsManaged = f.Kind == ClrStackFrameKind.ManagedMethod
+						})
+						.ToList()
+				});
+
+			// Sort by thread ID
+			if (parameters.SortBy?.ToLower() == "osthreadid") {
+				stacks = parameters.SortDirection == SortDirection.Asc ? stacks.OrderBy(t => t.OSThreadId) : stacks.OrderByDescending(t => t.OSThreadId);
+			} else {
+				stacks = parameters.SortDirection == SortDirection.Asc ? stacks.OrderBy(t => t.ManagedThreadId) : stacks.OrderByDescending(t => t.ManagedThreadId);
+			}
+
+			return stacks.Skip(parameters.Offset).Take(parameters.Limit);
+		}
 	}
 }
