@@ -188,5 +188,96 @@ namespace DotNetDump.Core.Formatting {
 
 			return sb.ToString();
 		}
+
+		public static string FormatMethodTable(MethodTableInfo info) {
+			var sb = new StringBuilder();
+			sb.AppendLine($"**MethodTable:** {info.MethodTable:X16}");
+			sb.AppendLine($"**EEClass:** {info.EEClass:X16}");
+			sb.AppendLine($"**Type:** {info.TypeName}");
+			if (!string.IsNullOrEmpty(info.ModuleName)) {
+				sb.AppendLine($"**Module:** {info.ModuleName}");
+			}
+			sb.AppendLine($"**BaseSize:** {info.BaseSize} bytes");
+			sb.AppendLine($"**Method Count:** {info.MethodCount}");
+			sb.AppendLine();
+			sb.AppendLine("**Flags:**");
+			sb.AppendLine($"- ValueType: {info.IsValueType}");
+			sb.AppendLine($"- Interface: {info.IsInterface}");
+			sb.AppendLine($"- Abstract: {info.IsAbstract}");
+			sb.AppendLine($"- Sealed: {info.IsSealed}");
+
+			if (!string.IsNullOrEmpty(info.BaseTypeName)) {
+				sb.AppendLine();
+				sb.AppendLine($"**Base Type:** {info.BaseTypeName}");
+			}
+
+			if (info.Interfaces.Count > 0) {
+				sb.AppendLine();
+				sb.AppendLine("**Interfaces:**");
+				foreach (var iface in info.Interfaces) {
+					sb.AppendLine($"- {iface}");
+				}
+			}
+
+			return sb.ToString();
+		}
+
+		public static string FormatMethodDesc(MethodDescInfo info) {
+			var sb = new StringBuilder();
+			sb.AppendLine($"**MethodDesc:** {info.MethodDesc:X16}");
+			sb.AppendLine($"**MethodTable:** {info.MethodTable:X16}");
+			sb.AppendLine($"**Method:** {info.MethodName}");
+			if (!string.IsNullOrEmpty(info.TypeName)) {
+				sb.AppendLine($"**Type:** {info.TypeName}");
+			}
+			if (!string.IsNullOrEmpty(info.ModuleName)) {
+				sb.AppendLine($"**Module:** {info.ModuleName}");
+			}
+			if (!string.IsNullOrEmpty(info.Signature)) {
+				sb.AppendLine($"**Signature:** {info.Signature}");
+			}
+			sb.AppendLine($"**Metadata Token:** 0x{info.MetadataToken:X8}");
+			sb.AppendLine();
+			sb.AppendLine("**Code Information:**");
+			sb.AppendLine($"- Native Code: {info.NativeCode:X16}");
+			sb.AppendLine($"- Is Jitted: {info.IsJitted}");
+			sb.AppendLine($"- Is Generic: {info.IsGeneric}");
+
+			return sb.ToString();
+		}
+
+		public static string FormatClass(ClassInfo info) {
+			var sb = new StringBuilder();
+			sb.AppendLine($"**EEClass:** {info.EEClass:X16}");
+			sb.AppendLine($"**MethodTable:** {info.MethodTable:X16}");
+			sb.AppendLine($"**Type:** {info.TypeName}");
+			if (!string.IsNullOrEmpty(info.ModuleName)) {
+				sb.AppendLine($"**Module:** {info.ModuleName}");
+			}
+			sb.AppendLine();
+			sb.AppendLine($"**Field Count:** {info.FieldCount} instance, {info.StaticFieldCount} static");
+			sb.AppendLine($"**Method Count:** {info.MethodCount}");
+
+			if (info.Fields.Count > 0) {
+				sb.AppendLine();
+				sb.AppendLine("**Fields:**");
+				sb.AppendLine("| Offset | Name | Type | Size | Static |");
+				sb.AppendLine("|--------|------|------|------|--------|");
+				foreach (var field in info.Fields) {
+					string offset = field.IsStatic ? "static" : $"{field.Offset:X}";
+					sb.AppendLine($"| {offset} | {field.Name} | {field.TypeName} | {field.Size} | {field.IsStatic} |");
+				}
+			}
+
+			if (info.Methods.Count > 0) {
+				sb.AppendLine();
+				sb.AppendLine("**Methods:**");
+				foreach (var method in info.Methods) {
+					sb.AppendLine($"- {method}");
+				}
+			}
+
+			return sb.ToString();
+		}
 	}
 }

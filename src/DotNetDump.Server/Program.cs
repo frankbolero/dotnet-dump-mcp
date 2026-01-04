@@ -22,6 +22,7 @@ class Program {
 		builder.Services.AddTransient<HeapAnalyzer>();
 		builder.Services.AddTransient<ThreadAnalyzer>();
 		builder.Services.AddTransient<ModuleAnalyzer>();
+		builder.Services.AddTransient<MetadataAnalyzer>();
 
 		// Add MCP Server
 		builder.Services

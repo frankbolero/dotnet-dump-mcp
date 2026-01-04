@@ -15,12 +15,14 @@ public class DumpAnalyzerTools {
 	private readonly HeapAnalyzer _heapAnalyzer;
 	private readonly ThreadAnalyzer _threadAnalyzer;
 	private readonly ModuleAnalyzer _moduleAnalyzer;
+	private readonly MetadataAnalyzer _metadataAnalyzer;
 
-	public DumpAnalyzerTools(IDumpContext dumpContext, HeapAnalyzer heapAnalyzer, ThreadAnalyzer threadAnalyzer, ModuleAnalyzer moduleAnalyzer) {
+	public DumpAnalyzerTools(IDumpContext dumpContext, HeapAnalyzer heapAnalyzer, ThreadAnalyzer threadAnalyzer, ModuleAnalyzer moduleAnalyzer, MetadataAnalyzer metadataAnalyzer) {
 		_dumpContext = dumpContext;
 		_heapAnalyzer = heapAnalyzer;
 		_threadAnalyzer = threadAnalyzer;
 		_moduleAnalyzer = moduleAnalyzer;
+		_metadataAnalyzer = metadataAnalyzer;
 	}
 
 	[McpServerTool, Description("Loads a memory dump file for analysis. Must be called before other tools.")]
@@ -236,6 +238,72 @@ public class DumpAnalyzerTools {
 			var corruptions = _heapAnalyzer.VerifyHeap();
 
 			return MarkdownFormatter.FormatHeapVerification(corruptions);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Displays information about a MethodTable structure.")]
+
+	public string DumpMt([Description("The hex address of the MethodTable")] string address) {
+
+		return ExecuteSafe(() => {
+
+			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong mt))
+
+				throw new ArgumentException("Invalid address format");
+
+
+
+			var info = _metadataAnalyzer.GetMethodTable(mt);
+
+			return MarkdownFormatter.FormatMethodTable(info);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Displays information about a MethodDesc structure.")]
+
+	public string DumpMd([Description("The hex address of the MethodDesc")] string address) {
+
+		return ExecuteSafe(() => {
+
+			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong md))
+
+				throw new ArgumentException("Invalid address format");
+
+
+
+			var info = _metadataAnalyzer.GetMethodDesc(md);
+
+			return MarkdownFormatter.FormatMethodDesc(info);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Displays information about an EEClass structure.")]
+
+	public string DumpClass([Description("The hex address of the EEClass")] string address) {
+
+		return ExecuteSafe(() => {
+
+			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong eeClass))
+
+				throw new ArgumentException("Invalid address format");
+
+
+
+			var info = _metadataAnalyzer.GetClass(eeClass);
+
+			return MarkdownFormatter.FormatClass(info);
 
 		});
 

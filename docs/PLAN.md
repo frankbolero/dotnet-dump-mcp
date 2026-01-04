@@ -68,9 +68,9 @@ This document outlines the steps to transition from the `DotNetDumpExplorer` pro
 ### Metadata Analysis
 | Command | Status | Tool Name | Notes |
 | :--- | :---: | :--- | :--- |
-| `dumpclass` | ❌ | | |
-| `dumpmd` | ❌ | | |
-| `dumpmt` | ❌ | | |
+| `dumpclass` | ✅ | `DumpClass` | Displays EEClass information |
+| `dumpmd` | ✅ | `DumpMd` | Displays MethodDesc information |
+| `dumpmt` | ✅ | `DumpMt` | Displays MethodTable information |
 
 ### Exception Analysis
 | Command | Status | Tool Name | Notes |
