@@ -21,3 +21,19 @@ dumpheap [options]
 ```
 > dumpheap -stat
 ```
+
+## ClrMD Implementation
+Iterate over all objects on the managed heap using `ClrHeap.EnumerateObjects()`.
+
+```csharp
+using Microsoft.Diagnostics.Runtime;
+
+// ... (Setup DataTarget and ClrRuntime)
+
+foreach (ClrObject obj in runtime.Heap.EnumerateObjects())
+{
+    Console.WriteLine($"Address: {obj.Address:X}, Size: {obj.Size}, Type: {obj.Type?.Name}");
+}
+```
+
+**Link:** [ClrHeap.cs](https://github.com/microsoft/clrmd/blob/main/src/Microsoft.Diagnostics.Runtime/ClrHeap.cs)

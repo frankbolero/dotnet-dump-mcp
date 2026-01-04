@@ -18,3 +18,23 @@ clrstack [options]
 
 ## Example Output
 See [clrstack-example.md](../clrstack-example.md)
+
+## ClrMD Implementation
+To implement similar functionality using ClrMD, you can iterate over `ClrRuntime.Threads` and call `EnumerateStackTrace()` on each thread.
+
+```csharp
+using Microsoft.Diagnostics.Runtime;
+
+// ... (Setup DataTarget and ClrRuntime)
+
+foreach (ClrThread thread in runtime.Threads)
+{
+    Console.WriteLine($"Thread {thread.OSThreadId:X}:");
+    foreach (ClrStackFrame frame in thread.EnumerateStackTrace())
+    {
+        Console.WriteLine($"  {frame}");
+    }
+}
+```
+
+**Link:** [ClrThread.cs](https://github.com/microsoft/clrmd/blob/main/src/Microsoft.Diagnostics.Runtime/ClrThread.cs)
