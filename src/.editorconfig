@@ -25,6 +25,7 @@ insert_final_newline = false
 #### .NET Coding Conventions ####
 [*.{cs,vb}]
 
+csharp_style_namespace_declarations = file_scoped:error
 csharp_place_type_attribute_on_same_line = false
 csharp_place_attribute_on_same_line = false
 place_type_attribute_on_same_line = false
