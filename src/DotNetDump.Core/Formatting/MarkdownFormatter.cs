@@ -279,5 +279,71 @@ namespace DotNetDump.Core.Formatting {
 
 			return sb.ToString();
 		}
+
+		public static string FormatModuleDetails(ModuleDetails info) {
+			var sb = new StringBuilder();
+			sb.AppendLine($"**Module:** {info.Name}");
+			sb.AppendLine($"**Assembly:** {info.AssemblyName}");
+			sb.AppendLine();
+			sb.AppendLine("**Addresses:**");
+			sb.AppendLine($"- ImageBase: {info.ImageBase:X16}");
+			sb.AppendLine($"- MetadataAddress: {info.MetadataAddress:X16}");
+			sb.AppendLine($"- AssemblyId: {info.AssemblyId:X16}");
+			sb.AppendLine();
+			sb.AppendLine($"**Size:** {info.Size:N0} bytes");
+			sb.AppendLine($"**Metadata Length:** {info.MetadataLength:N0} bytes");
+			sb.AppendLine($"**Type Count (sampled):** ~{info.TypeCount}");
+			sb.AppendLine();
+			sb.AppendLine("**Flags:**");
+			sb.AppendLine($"- IsDynamic: {info.IsDynamic}");
+			sb.AppendLine($"- IsFileLayout: {info.IsFileLayout}");
+
+			return sb.ToString();
+		}
+
+		public static string FormatAssemblyDetails(AssemblyDetails info) {
+			var sb = new StringBuilder();
+			sb.AppendLine($"**Assembly:** {info.Name}");
+			sb.AppendLine($"**AssemblyId:** {info.AssemblyId:X16}");
+			sb.AppendLine($"**IsDynamic:** {info.IsDynamic}");
+			sb.AppendLine();
+			sb.AppendLine($"**Module Count:** {info.Modules.Count}");
+
+			if (info.Modules.Count > 0) {
+				sb.AppendLine();
+				sb.AppendLine("**Modules:**");
+				foreach (var module in info.Modules) {
+					sb.AppendLine($"- {module}");
+				}
+			}
+
+			return sb.ToString();
+		}
+
+		public static string FormatName2EE(Name2EEResult info) {
+			var sb = new StringBuilder();
+			sb.AppendLine($"**Module:** {info.ModuleName}");
+			sb.AppendLine($"**Type:** {info.TypeName}");
+			sb.AppendLine();
+			sb.AppendLine($"**MethodTable:** {info.MethodTable:X16}");
+			sb.AppendLine($"**EEClass:** {info.EEClass:X16}");
+
+			if (!string.IsNullOrEmpty(info.MethodName)) {
+				sb.AppendLine();
+				sb.AppendLine($"**Method:** {info.MethodName}");
+
+				if (info.Methods.Count > 0) {
+					sb.AppendLine();
+					sb.AppendLine("**Overloads:**");
+					sb.AppendLine("| MethodDesc | Signature | Jitted |");
+					sb.AppendLine("|------------|-----------|--------|");
+					foreach (var method in info.Methods) {
+						sb.AppendLine($"| {method.MethodDesc:X16} | {method.Signature} | {method.IsJitted} |");
+					}
+				}
+			}
+
+			return sb.ToString();
+		}
 	}
 }

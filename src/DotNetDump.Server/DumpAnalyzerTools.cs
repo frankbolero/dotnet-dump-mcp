@@ -311,6 +311,92 @@ public class DumpAnalyzerTools {
 
 
 
+	[McpServerTool, Description("Displays detailed information about a loaded module.")]
+
+	public string DumpModule([Description("The hex address of the module (ImageBase or MetadataAddress)")] string address) {
+
+		return ExecuteSafe(() => {
+
+			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong moduleAddr))
+
+				throw new ArgumentException("Invalid address format");
+
+
+
+			var info = _moduleAnalyzer.GetModuleDetails(moduleAddr);
+
+			return MarkdownFormatter.FormatModuleDetails(info);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Displays information about a loaded assembly.")]
+
+	public string DumpAssembly([Description("The hex address of the assembly (AssemblyId)")] string address) {
+
+		return ExecuteSafe(() => {
+
+			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong assemblyId))
+
+				throw new ArgumentException("Invalid address format");
+
+
+
+			var info = _moduleAnalyzer.GetAssemblyDetails(assemblyId);
+
+			return MarkdownFormatter.FormatAssemblyDetails(info);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Finds MethodTable and MethodDesc for a type or method by name.")]
+
+	public string Name2Ee(
+
+		[Description("The module name (e.g., 'System.Private.CoreLib' or 'MyApp')")] string moduleName,
+
+		[Description("The type or method name (e.g., 'System.String' or 'MyClass.MyMethod')")] string typeName) {
+
+		return ExecuteSafe(() => {
+
+			var info = _moduleAnalyzer.Name2EE(moduleName, typeName);
+
+			return MarkdownFormatter.FormatName2EE(info);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Gets the MethodDesc for the method at the specified instruction pointer.")]
+
+	public string Ip2Md([Description("The hex address of the instruction pointer")] string address) {
+
+		return ExecuteSafe(() => {
+
+			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong ip))
+
+				throw new ArgumentException("Invalid address format");
+
+
+
+			var info = _moduleAnalyzer.GetMethodByIP(ip);
+
+			return MarkdownFormatter.FormatMethodDesc(info);
+
+		});
+
+	}
+
+
+
 	private QueryParameters CreateParameters(string? sortBy, string? sortDirection, int limit, int offset) {
 		return new QueryParameters {
 			SortBy = sortBy,

@@ -60,10 +60,10 @@ This document outlines the steps to transition from the `DotNetDumpExplorer` pro
 | Command | Status | Tool Name | Notes |
 | :--- | :---: | :--- | :--- |
 | `clrmodules` | ✅ | `ClrModules` | Lists loaded modules |
-| `dumpmodule` | ❌ | | |
-| `dumpassembly` | ❌ | | |
-| `name2ee` | ❌ | | |
-| `ip2md` | ❌ | | |
+| `dumpmodule` | ✅ | `DumpModule` | Displays detailed module information |
+| `dumpassembly` | ✅ | `DumpAssembly` | Displays assembly details |
+| `name2ee` | ✅ | `Name2Ee` | Finds MethodTable/MethodDesc by name |
+| `ip2md` | ✅ | `Ip2Md` | Gets MethodDesc from instruction pointer |
 
 ### Metadata Analysis
 | Command | Status | Tool Name | Notes |
