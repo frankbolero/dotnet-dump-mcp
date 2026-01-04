@@ -85,13 +85,11 @@ To use this with an MCP-compatible agent (like Cursor, Windsurf, or Claude Deskt
       "command": "dotnet",
       "args": [
         "run",
-        "--project", "/absolute/path/to/src/DotNetDump.Server/DotNetDump.Server.csproj",
-        "--",
-        "/absolute/path/to/your/dump.core"
-      ],
-      "env": {
-        "DUMP_PATH": "/absolute/path/to/your/dump.core"
-      }
+        "--framework",
+        "net9.0",
+        "--project",
+        "/Users/USERNAME/src/dotnet-dump-mpc-server/src/DotNetDump.Server/DotNetDump.Server.csproj"
+      ]
     }
   }
 }
