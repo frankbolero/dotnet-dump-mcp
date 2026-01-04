@@ -15,9 +15,17 @@ namespace DotNetDump.Core.Analyzers
             _context = context;
         }
 
+        private ClrRuntime GetRuntime()
+        {
+            if (!_context.IsLoaded || _context.Runtime == null)
+                throw new InvalidOperationException("No dump loaded. Please use 'load_dump' tool first.");
+            return _context.Runtime;
+        }
+
         public IEnumerable<ThreadInfo> GetThreads(QueryParameters parameters)
         {
-            var threads = _context.Runtime.Threads.Select(t => new ThreadInfo
+            var runtime = GetRuntime();
+            var threads = runtime.Threads.Select(t => new ThreadInfo
             {
                 ManagedThreadId = t.ManagedThreadId,
                 OSThreadId = t.OSThreadId,
@@ -45,9 +53,10 @@ namespace DotNetDump.Core.Analyzers
 
         public IEnumerable<StackGroup> GetStackTraceGroups(int maxFrames = 20)
         {
+            var runtime = GetRuntime();
             var groups = new Dictionary<string, StackGroup>();
 
-            foreach (var thread in _context.Runtime.Threads)
+            foreach (var thread in runtime.Threads)
             {
                 if (!thread.IsAlive) continue;
 

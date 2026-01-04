@@ -10,14 +10,29 @@ namespace DotNetDump.Core
         private DataTarget? _dataTarget;
         private ClrRuntime? _runtime;
 
-        public DataTarget DataTarget => _dataTarget ?? throw new InvalidOperationException("Context not initialized.");
-        public ClrRuntime Runtime => _runtime ?? throw new InvalidOperationException("Context not initialized.");
-        public ClrHeap Heap => Runtime.Heap;
+        public DataTarget? DataTarget => _dataTarget;
+        public ClrRuntime? Runtime => _runtime;
+        public ClrHeap? Heap => _runtime?.Heap;
+        public bool IsLoaded => _runtime != null;
 
-        public void Initialize(string dumpPath, string? dacPath = null)
+        public void Initialize(string dumpPath, string? dacPath = null) => Load(dumpPath, dacPath); // Backwards compat if needed, but we'll prefer Load
+
+        public void Load(string dumpPath, string? dacPath = null)
         {
+            if (IsLoaded)
+            {
+                Unload();
+            }
+
             if (!File.Exists(dumpPath))
                 throw new FileNotFoundException("Dump file not found.", dumpPath);
+
+            // Attempt to fetch DAC if not provided and not found locally?
+            // For now, we assume the environment (container) has what it needs or the user provides dacPath.
+            // In the container model, 'dotnet-symbol' might need to be run *before* this method is called 
+            // if we want auto-downloading inside the C# app. 
+            // Ideally, we might want to shell out to dotnet-symbol here if it fails?
+            // For now, let's keep the core logic simple: Load what exists.
 
             _dataTarget = DataTarget.LoadDump(dumpPath);
             
@@ -39,8 +54,6 @@ namespace DotNetDump.Core
             catch (Exception)
             {
                 // Fallback logic for local development if DAC is missing
-                // In production (Docker), entrypoint.sh should have fetched it.
-                // This is a safety valve.
                 string fallbackDac = "/usr/local/share/dotnet/shared/Microsoft.NETCore.App/9.0.11/libmscordaccore.dylib";
                 if (File.Exists(fallbackDac))
                 {
@@ -53,10 +66,18 @@ namespace DotNetDump.Core
             }
         }
 
-        public void Dispose()
+        public void Unload()
         {
             _runtime?.Dispose();
+            _runtime = null;
+            
             _dataTarget?.Dispose();
+            _dataTarget = null;
+        }
+
+        public void Dispose()
+        {
+            Unload();
         }
     }
 }

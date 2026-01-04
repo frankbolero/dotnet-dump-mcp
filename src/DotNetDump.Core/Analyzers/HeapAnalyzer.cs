@@ -15,9 +15,17 @@ namespace DotNetDump.Core.Analyzers
             _context = context;
         }
 
+        private ClrHeap GetHeap()
+        {
+            if (!_context.IsLoaded || _context.Heap == null)
+                throw new InvalidOperationException("No dump loaded. Please use 'load_dump' tool first.");
+            return _context.Heap;
+        }
+
         public IEnumerable<HeapStatItem> GetHeapStatistics(QueryParameters parameters)
         {
-            var stats = from obj in _context.Heap.EnumerateObjects()
+            var heap = GetHeap();
+            var stats = from obj in heap.EnumerateObjects()
                         let type = obj.Type
                         where type != null
                         group obj by new { type.Name, type.MethodTable } into g
@@ -48,7 +56,8 @@ namespace DotNetDump.Core.Analyzers
 
         public IEnumerable<HeapObjectItem> GetObjects(QueryParameters parameters, string? typeFilter = null)
         {
-            var objects = _context.Heap.EnumerateObjects()
+            var heap = GetHeap();
+            var objects = heap.EnumerateObjects()
                 .Where(obj => typeFilter == null || (obj.Type?.Name?.Contains(typeFilter, StringComparison.OrdinalIgnoreCase) ?? false))
                 .Select(obj => new HeapObjectItem
                 {

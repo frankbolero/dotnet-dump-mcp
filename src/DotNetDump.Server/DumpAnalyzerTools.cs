@@ -1,7 +1,9 @@
+using DotNetDump.Core;
 using DotNetDump.Core.Analyzers;
 using DotNetDump.Core.Formatting;
 using DotNetDump.Core.Models;
 using ModelContextProtocol.Server;
+using System;
 using System.ComponentModel;
 
 namespace DotNetDump.Server
@@ -9,15 +11,31 @@ namespace DotNetDump.Server
     [McpServerToolType]
     public class DumpAnalyzerTools
     {
+        private readonly IDumpContext _dumpContext;
         private readonly HeapAnalyzer _heapAnalyzer;
         private readonly ThreadAnalyzer _threadAnalyzer;
         private readonly ModuleAnalyzer _moduleAnalyzer;
 
-        public DumpAnalyzerTools(HeapAnalyzer heapAnalyzer, ThreadAnalyzer threadAnalyzer, ModuleAnalyzer moduleAnalyzer)
+        public DumpAnalyzerTools(IDumpContext dumpContext, HeapAnalyzer heapAnalyzer, ThreadAnalyzer threadAnalyzer, ModuleAnalyzer moduleAnalyzer)
         {
+            _dumpContext = dumpContext;
             _heapAnalyzer = heapAnalyzer;
             _threadAnalyzer = threadAnalyzer;
             _moduleAnalyzer = moduleAnalyzer;
+        }
+
+        [McpServerTool, Description("Loads a memory dump file for analysis. Must be called before other tools.")]
+        public string LoadDump([Description("The absolute path to the .dmp or .core file")] string path)
+        {
+            try
+            {
+                _dumpContext.Load(path);
+                return $"Successfully loaded dump: {path}";
+            }
+            catch (Exception ex)
+            {
+                return $"Error loading dump: {ex.Message}";
+            }
         }
 
         [McpServerTool, Description("Analyzes managed heap objects and returns statistical summary.")]
@@ -27,9 +45,12 @@ namespace DotNetDump.Server
             [Description("Number of items to return")] int limit = 50,
             [Description("Number of items to skip")] int offset = 0)
         {
-            var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
-            var stats = _heapAnalyzer.GetHeapStatistics(parameters);
-            return MarkdownFormatter.FormatHeapStatistics(stats);
+            return ExecuteSafe(() =>
+            {
+                var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
+                var stats = _heapAnalyzer.GetHeapStatistics(parameters);
+                return MarkdownFormatter.FormatHeapStatistics(stats);
+            });
         }
 
         [McpServerTool, Description("Lists managed objects on the heap, optionally filtered by type name.")]
@@ -40,9 +61,12 @@ namespace DotNetDump.Server
             [Description("Number of items to return")] int limit = 50,
             [Description("Number of items to skip")] int offset = 0)
         {
-            var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
-            var objects = _heapAnalyzer.GetObjects(parameters, typeFilter);
-            return MarkdownFormatter.FormatHeapObjects(objects);
+            return ExecuteSafe(() =>
+            {
+                var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
+                var objects = _heapAnalyzer.GetObjects(parameters, typeFilter);
+                return MarkdownFormatter.FormatHeapObjects(objects);
+            });
         }
 
         [McpServerTool, Description("Lists all managed threads in the process.")]
@@ -52,16 +76,22 @@ namespace DotNetDump.Server
             [Description("Number of items to return")] int limit = 50,
             [Description("Number of items to skip")] int offset = 0)
         {
-            var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
-            var threads = _threadAnalyzer.GetThreads(parameters);
-            return MarkdownFormatter.FormatThreads(threads);
+            return ExecuteSafe(() =>
+            {
+                var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
+                var threads = _threadAnalyzer.GetThreads(parameters);
+                return MarkdownFormatter.FormatThreads(threads);
+            });
         }
 
         [McpServerTool, Description("Displays managed call stacks grouped by identical stacks.")]
         public string ClrStack([Description("Maximum number of frames per thread")] int maxFrames = 20)
         {
-            var groups = _threadAnalyzer.GetStackTraceGroups(maxFrames);
-            return MarkdownFormatter.FormatStackGroups(groups);
+            return ExecuteSafe(() =>
+            {
+                var groups = _threadAnalyzer.GetStackTraceGroups(maxFrames);
+                return MarkdownFormatter.FormatStackGroups(groups);
+            });
         }
 
         [McpServerTool, Description("Lists the managed modules in the process.")]
@@ -72,9 +102,12 @@ namespace DotNetDump.Server
             [Description("Number of items to return")] int limit = 50,
             [Description("Number of items to skip")] int offset = 0)
         {
-            var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
-            var modules = _moduleAnalyzer.GetModules(parameters, includeSystem);
-            return MarkdownFormatter.FormatModules(modules);
+            return ExecuteSafe(() =>
+            {
+                var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
+                var modules = _moduleAnalyzer.GetModules(parameters, includeSystem);
+                return MarkdownFormatter.FormatModules(modules);
+            });
         }
 
         private QueryParameters CreateParameters(string? sortBy, string? sortDirection, int limit, int offset)
@@ -86,6 +119,18 @@ namespace DotNetDump.Server
                 Limit = limit,
                 Offset = offset
             };
+        }
+
+        private string ExecuteSafe(Func<string> action)
+        {
+            try
+            {
+                return action();
+            }
+            catch (Exception ex)
+            {
+                return $"Error: {ex.Message}";
+            }
         }
     }
 }

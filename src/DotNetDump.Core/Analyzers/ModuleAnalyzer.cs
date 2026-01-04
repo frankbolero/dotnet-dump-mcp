@@ -15,9 +15,17 @@ namespace DotNetDump.Core.Analyzers
             _context = context;
         }
 
+        private ClrRuntime GetRuntime()
+        {
+            if (!_context.IsLoaded || _context.Runtime == null)
+                throw new InvalidOperationException("No dump loaded. Please use 'load_dump' tool first.");
+            return _context.Runtime;
+        }
+
         public IEnumerable<DotNetDump.Core.Models.ModuleInfo> GetModules(QueryParameters parameters, bool includeSystem = false)
         {
-            var modules = _context.Runtime.EnumerateModules().Select(m => new DotNetDump.Core.Models.ModuleInfo
+            var runtime = GetRuntime();
+            var modules = runtime.EnumerateModules().Select(m => new DotNetDump.Core.Models.ModuleInfo
             {
                 Name = m.Name,
                 ImageBase = m.ImageBase,
