@@ -121,77 +121,65 @@ public class DumpAnalyzerTools {
 		});
 	}
 
-	                [McpServerTool, Description("Displays information about the managed heap segments.")]
+	[McpServerTool, Description("Displays information about the managed heap segments.")]
 
-	                public string EeHeap()
+	public string EeHeap() {
 
-	                {
+		return ExecuteSafe(() => {
 
-	                    return ExecuteSafe(() =>
+			var segments = _heapAnalyzer.GetHeapSegments();
 
-	                    {
+			return MarkdownFormatter.FormatHeapSegments(segments);
 
-	                        var segments = _heapAnalyzer.GetHeapSegments();
+		});
 
-	                        return MarkdownFormatter.FormatHeapSegments(segments);
+	}
 
-	                    });
 
-	                }
 
-	        
+	[McpServerTool, Description("Displays the sync blocks (locks) for the process.")]
 
-	                [McpServerTool, Description("Displays the sync blocks (locks) for the process.")]
+	public string SyncBlk(
 
-	                public string SyncBlk(
+		 [Description("Field to sort by (Recursion, Waiting, Address)")] string? sortBy = "Address",
 
-	                    [Description("Field to sort by (Recursion, Waiting, Address)")] string? sortBy = "Address",
+		 [Description("Sort direction (Asc, Desc)")] string? sortDirection = "Desc",
 
-	                    [Description("Sort direction (Asc, Desc)")] string? sortDirection = "Desc",
+		 [Description("Number of items to return")] int limit = 50,
 
-	                    [Description("Number of items to return")] int limit = 50,
+		 [Description("Number of items to skip")] int offset = 0) {
 
-	                    [Description("Number of items to skip")] int offset = 0)
+		return ExecuteSafe(() => {
 
-	                {
+			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 
-	                    return ExecuteSafe(() =>
+			var blocks = _heapAnalyzer.GetSyncBlocks(parameters);
 
-	                    {
+			return MarkdownFormatter.FormatSyncBlocks(blocks);
 
-	                        var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
+		});
 
-	                        var blocks = _heapAnalyzer.GetSyncBlocks(parameters);
+	}
 
-	                        return MarkdownFormatter.FormatSyncBlocks(blocks);
 
-	                    });
 
-	                }
+	[McpServerTool, Description("Displays information about the CLR ThreadPool.")]
 
-	        
+	public string ThreadPool() {
 
-	                [McpServerTool, Description("Displays information about the CLR ThreadPool.")]
+		return ExecuteSafe(() => {
 
-	                public string ThreadPool()
+			var info = _threadAnalyzer.GetThreadPoolInfo();
 
-	        {
+			return MarkdownFormatter.FormatThreadPool(info);
 
-	            return ExecuteSafe(() =>
+		});
 
-	            {
+	}
 
-	                var info = _threadAnalyzer.GetThreadPoolInfo();
 
-	                return MarkdownFormatter.FormatThreadPool(info);
 
-	            });
-
-	        }
-
-	
-
-	        private QueryParameters CreateParameters(string? sortBy, string? sortDirection, int limit, int offset) {
+	private QueryParameters CreateParameters(string? sortBy, string? sortDirection, int limit, int offset) {
 		return new QueryParameters {
 			SortBy = sortBy,
 			SortDirection = sortDirection?.ToLower() == "asc" ? SortDirection.Asc : SortDirection.Desc,
