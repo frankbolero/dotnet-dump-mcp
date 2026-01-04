@@ -2,7 +2,8 @@ using DotNetDump.Core;
 using DotNetDump.Core.Analyzers;
 using DotNetDump.Core.Models;
 
-namespace DotNetDump.Tests; 
+namespace DotNetDump.Tests;
+
 public class IntegrationTests : IDisposable {
 	private readonly string _dumpPath;
 	private readonly DumpContext _context;

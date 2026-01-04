@@ -1,4 +1,5 @@
-namespace DotNetDump.Core.Models; 
+namespace DotNetDump.Core.Models;
+
 public class HeapStatItem {
 	public string? TypeName { get; set; }
 	public ulong MethodTable { get; set; }

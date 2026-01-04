@@ -1,4 +1,5 @@
-namespace DotNetDump.Core.Models; 
+namespace DotNetDump.Core.Models;
+
 public class ModuleInfo {
 	public string? Name { get; set; }
 	public ulong ImageBase { get; set; }

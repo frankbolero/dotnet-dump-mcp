@@ -1,4 +1,5 @@
-namespace DotNetDump.Core.Models; 
+namespace DotNetDump.Core.Models;
+
 public class GCRootInfo {
 	public ulong Address { get; set; }
 	public string? Kind { get; set; }

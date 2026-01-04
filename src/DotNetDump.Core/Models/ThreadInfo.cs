@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 
-namespace DotNetDump.Core.Models; 
+namespace DotNetDump.Core.Models;
+
 public class ThreadInfo {
 	public int ManagedThreadId { get; set; }
 	public uint OSThreadId { get; set; }

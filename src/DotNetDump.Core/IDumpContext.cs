@@ -2,7 +2,8 @@ using System;
 
 using Microsoft.Diagnostics.Runtime;
 
-namespace DotNetDump.Core; 
+namespace DotNetDump.Core;
+
 public interface IDumpContext : IDisposable {
 	DataTarget? DataTarget { get; }
 	ClrRuntime? Runtime { get; }

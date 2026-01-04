@@ -6,7 +6,8 @@ using DotNetDump.Core.Models;
 
 using Microsoft.Diagnostics.Runtime;
 
-namespace DotNetDump.Core.Analyzers; 
+namespace DotNetDump.Core.Analyzers;
+
 public class ThreadAnalyzer {
 	private readonly IDumpContext _context;
 

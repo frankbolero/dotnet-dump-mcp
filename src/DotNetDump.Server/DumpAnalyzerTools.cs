@@ -1,23 +1,22 @@
+using System.ComponentModel;
+
 using DotNetDump.Core;
 using DotNetDump.Core.Analyzers;
 using DotNetDump.Core.Formatting;
 using DotNetDump.Core.Models;
-using ModelContextProtocol.Server;
 
-using System.ComponentModel;
+using ModelContextProtocol.Server;
 
 namespace DotNetDump.Server;
 
 [McpServerToolType]
-public class DumpAnalyzerTools
-{
+public class DumpAnalyzerTools {
 	private readonly IDumpContext _dumpContext;
 	private readonly HeapAnalyzer _heapAnalyzer;
 	private readonly ThreadAnalyzer _threadAnalyzer;
 	private readonly ModuleAnalyzer _moduleAnalyzer;
 
-	public DumpAnalyzerTools(IDumpContext dumpContext, HeapAnalyzer heapAnalyzer, ThreadAnalyzer threadAnalyzer, ModuleAnalyzer moduleAnalyzer)
-	{
+	public DumpAnalyzerTools(IDumpContext dumpContext, HeapAnalyzer heapAnalyzer, ThreadAnalyzer threadAnalyzer, ModuleAnalyzer moduleAnalyzer) {
 		_dumpContext = dumpContext;
 		_heapAnalyzer = heapAnalyzer;
 		_threadAnalyzer = threadAnalyzer;
@@ -25,15 +24,11 @@ public class DumpAnalyzerTools
 	}
 
 	[McpServerTool, Description("Loads a memory dump file for analysis. Must be called before other tools.")]
-	public string LoadDump([Description("The absolute path to the .dmp or .core file")] string path)
-	{
-		try
-		{
+	public string LoadDump([Description("The absolute path to the .dmp or .core file")] string path) {
+		try {
 			_dumpContext.Load(path);
 			return $"Successfully loaded dump: {path}";
-		}
-		catch (Exception ex)
-		{
+		} catch (Exception ex) {
 			return $"Error loading dump: {ex.Message}";
 		}
 	}
@@ -43,10 +38,8 @@ public class DumpAnalyzerTools
 		[Description("Field to sort by (Count, TotalSize, TypeName)")] string? sortBy = "TotalSize",
 		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Desc",
 		[Description("Number of items to return")] int limit = 50,
-		[Description("Number of items to skip")] int offset = 0)
-	{
-		return ExecuteSafe(() =>
-		{
+		[Description("Number of items to skip")] int offset = 0) {
+		return ExecuteSafe(() => {
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var stats = _heapAnalyzer.GetHeapStatistics(parameters);
 			return MarkdownFormatter.FormatHeapStatistics(stats);
@@ -59,10 +52,8 @@ public class DumpAnalyzerTools
 		[Description("Field to sort by (Address, Size)")] string? sortBy = "Address",
 		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
 		[Description("Number of items to return")] int limit = 50,
-		[Description("Number of items to skip")] int offset = 0)
-	{
-		return ExecuteSafe(() =>
-		{
+		[Description("Number of items to skip")] int offset = 0) {
+		return ExecuteSafe(() => {
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var objects = _heapAnalyzer.GetObjects(parameters, typeFilter);
 			return MarkdownFormatter.FormatHeapObjects(objects);
@@ -74,10 +65,8 @@ public class DumpAnalyzerTools
 		[Description("Field to sort by (OSThreadId, ManagedThreadId, Exception)")] string? sortBy = "ManagedThreadId",
 		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
 		[Description("Number of items to return")] int limit = 50,
-		[Description("Number of items to skip")] int offset = 0)
-	{
-		return ExecuteSafe(() =>
-		{
+		[Description("Number of items to skip")] int offset = 0) {
+		return ExecuteSafe(() => {
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var threads = _threadAnalyzer.GetThreads(parameters);
 			return MarkdownFormatter.FormatThreads(threads);
@@ -85,10 +74,8 @@ public class DumpAnalyzerTools
 	}
 
 	[McpServerTool, Description("Displays managed call stacks grouped by identical stacks.")]
-	public string ClrStack([Description("Maximum number of frames per thread")] int maxFrames = 20)
-	{
-		return ExecuteSafe(() =>
-		{
+	public string ClrStack([Description("Maximum number of frames per thread")] int maxFrames = 20) {
+		return ExecuteSafe(() => {
 			var groups = _threadAnalyzer.GetStackTraceGroups(maxFrames);
 			return MarkdownFormatter.FormatStackGroups(groups);
 		});
@@ -100,10 +87,8 @@ public class DumpAnalyzerTools
 		[Description("Field to sort by (Size, Name, Address)")] string? sortBy = "Address",
 		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
 		[Description("Number of items to return")] int limit = 50,
-		[Description("Number of items to skip")] int offset = 0)
-	{
-		return ExecuteSafe(() =>
-		{
+		[Description("Number of items to skip")] int offset = 0) {
+		return ExecuteSafe(() => {
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var modules = _moduleAnalyzer.GetModules(parameters, includeSystem);
 			return MarkdownFormatter.FormatModules(modules);
@@ -114,10 +99,8 @@ public class DumpAnalyzerTools
 	public string GcRoot(
 		[Description("The address of the object to find roots for")] string address,
 		[Description("Number of items to return")] int limit = 50,
-		[Description("Number of items to skip")] int offset = 0)
-	{
-		return ExecuteSafe(() =>
-		{
+		[Description("Number of items to skip")] int offset = 0) {
+		return ExecuteSafe(() => {
 			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong objAddr))
 				throw new ArgumentException("Invalid address format");
 
@@ -128,10 +111,8 @@ public class DumpAnalyzerTools
 	}
 
 	[McpServerTool, Description("Inspects a specific object, listing its fields and values.")]
-	public string DumpObj([Description("The hex address of the object to inspect")] string address)
-	{
-		return ExecuteSafe(() =>
-		{
+	public string DumpObj([Description("The hex address of the object to inspect")] string address) {
+		return ExecuteSafe(() => {
 			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong objAddr))
 				throw new ArgumentException("Invalid address format");
 
@@ -141,19 +122,15 @@ public class DumpAnalyzerTools
 	}
 
 	[McpServerTool, Description("Displays information about the managed heap segments.")]
-	public string EeHeap()
-	{
-		return ExecuteSafe(() =>
-		{
+	public string EeHeap() {
+		return ExecuteSafe(() => {
 			var segments = _heapAnalyzer.GetHeapSegments();
 			return MarkdownFormatter.FormatHeapSegments(segments);
 		});
 	}
 
-	private QueryParameters CreateParameters(string? sortBy, string? sortDirection, int limit, int offset)
-	{
-		return new QueryParameters
-		{
+	private QueryParameters CreateParameters(string? sortBy, string? sortDirection, int limit, int offset) {
+		return new QueryParameters {
 			SortBy = sortBy,
 			SortDirection = sortDirection?.ToLower() == "asc" ? SortDirection.Asc : SortDirection.Desc,
 			Limit = limit,
@@ -161,14 +138,10 @@ public class DumpAnalyzerTools
 		};
 	}
 
-	private string ExecuteSafe(Func<string> action)
-	{
-		try
-		{
+	private string ExecuteSafe(Func<string> action) {
+		try {
 			return action();
-		}
-		catch (Exception ex)
-		{
+		} catch (Exception ex) {
 			return $"Error: {ex.Message}";
 		}
 	}

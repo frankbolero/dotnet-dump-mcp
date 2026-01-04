@@ -1,4 +1,5 @@
-namespace DotNetDump.Core.Models; 
+namespace DotNetDump.Core.Models;
+
 public class HeapObjectItem {
 	public ulong Address { get; set; }
 	public ulong MethodTable { get; set; }

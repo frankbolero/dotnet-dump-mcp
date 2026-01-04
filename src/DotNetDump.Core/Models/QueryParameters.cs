@@ -1,4 +1,5 @@
-namespace DotNetDump.Core.Models; 
+namespace DotNetDump.Core.Models;
+
 public enum SortDirection {
 	Asc,
 	Desc

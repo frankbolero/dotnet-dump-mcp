@@ -5,7 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace DotNetDump.Server; 
+namespace DotNetDump.Server;
+
 class Program {
 	static async Task Main(string[] args) {
 		var builder = Host.CreateApplicationBuilder(args);

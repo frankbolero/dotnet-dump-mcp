@@ -1,6 +1,7 @@
 using Microsoft.Diagnostics.Runtime;
 
-namespace DotNetDump.Core; 
+namespace DotNetDump.Core;
+
 public class DumpContext : IDumpContext {
 	private DataTarget? _dataTarget;
 	private ClrRuntime? _runtime;

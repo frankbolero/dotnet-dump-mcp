@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 
-namespace DotNetDump.Core.Models; 
+namespace DotNetDump.Core.Models;
+
 public class ObjectDetails {
 	public ulong Address { get; set; }
 	public string? TypeName { get; set; }
