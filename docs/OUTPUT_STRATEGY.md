@@ -8,6 +8,7 @@ To ensure the AI agent remains within context window limits while providing acti
 2.  **Strict Pagination**: All list-based outputs will default to a maximum of 50 items. Users/Agents must explicitly request `offset` or `limit` to see more.
 3.  **Markdown Formatting**: Outputs will use Markdown tables and code blocks. This balances machine readability (structure) with human readability (presentation).
 4.  **Truncation Indicators**: Output must clearly indicate when data is hidden (e.g., `... 1500 more items (use --offset 50 to view)`).
+5.  **Flexible Sorting**: Data tables must support sorting to allow agents to prioritize outliers (e.g., largest objects, most frequent exceptions).
 
 ## Command-Specific Strategies
 
@@ -15,6 +16,7 @@ To ensure the AI agent remains within context window limits while providing acti
 *   **Challenge**: High thread counts often lead to repetitive stack traces, consuming massive tokens.
 *   **Strategy**: **Stack Grouping**.
     *   Group threads that share the exact same call stack.
+    *   **Sortable By**: `ThreadCount` (descending default).
     *   Output format:
         ```markdown
         ### Group 1 (25 Threads)
@@ -28,7 +30,9 @@ To ensure the AI agent remains within context window limits while providing acti
 ### 2. Heap Analysis (`dumpheap`)
 *   **Challenge**: The managed heap can contain millions of objects.
 *   **Strategy**:
-    *   **Default**: Equivalent to `-stat` (statistical summary). Group by Type, ordered by Total Size.
+    *   **Default**: Equivalent to `-stat` (statistical summary). Group by Type.
+    *   **Sortable By**: `TotalSize` (default), `Count`, `TypeName`.
+    *   **Direction**: `Descending` (default for Size/Count), `Ascending`.
     *   **Detailed View**: Only permitted when filtering by `Type` or `MethodTable` or explicit paging.
     *   **Table Format**:
         | Count | Total Size | Type |
@@ -46,17 +50,24 @@ To ensure the AI agent remains within context window limits while providing acti
 ### 4. Thread List (`clrthreads`)
 *   **Challenge**: Hundreds of threads.
 *   **Strategy**: Compact Table.
-    | ID (OS) | ID (Mgd) | State | Exception |
-    |---------|----------|-------|-----------|
-    | 1234    | 1        | Alive | (none)    |
-    | 5678    | 2        | Dead  | System.TimeoutException |
+    *   **Sortable By**: `OSThreadId`, `ManagedThreadId`, `Exception` (group threads with exceptions to top).
+    *   **Table Format**:
+        | ID (OS) | ID (Mgd) | State | Exception |
+        |---------|----------|-------|-----------|
+        | 1234    | 1        | Alive | (none)    |
+        | 5678    | 2        | Dead  | System.TimeoutException |
 
 ### 5. Modules (`clrmodules`)
 *   **Challenge**: Hundreds of loaded modules.
 *   **Strategy**:
+    *   **Sortable By**: `Size`, `Name`, `Address`.
     *   Filter system modules by default (hide `System.*`, `Microsoft.*` unless `--all` is passed).
     *   Focus on User Code.
 
 ## Implementation Guide for MCP Server
-*   The MCP tool should accept optional `limit` and `offset` arguments for all list-returning tools.
+*   The MCP tool should accept the following standard arguments for list-returning tools:
+    *   `limit` (int, default 50)
+    *   `offset` (int, default 0)
+    *   `sort_by` (string, field name)
+    *   `sort_direction` (enum: `asc`, `desc`)
 *   The return type should be `text/markdown`.
