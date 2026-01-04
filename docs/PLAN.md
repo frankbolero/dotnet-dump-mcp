@@ -2,6 +2,27 @@
 
 This document outlines the steps to transition from the `DotNetDumpExplorer` prototype to a production-ready, containerized MCP Server.
 
+## Status Checklist
+
+- [x] **Phase 1: Foundation & Core Logic**
+    - [x] Scaffolding (Solution, Projects, NuGet)
+    - [x] State Management (`IDumpContext`, `DumpContext`)
+    - [x] Analyzers Implementation (`ThreadAnalyzer`, `HeapAnalyzer`, `ModuleAnalyzer`)
+    - [x] Output Models (Strongly typed results)
+    - [x] Formatting Layer (Markdown table generators)
+- [x] **Phase 2: MCP Server Integration**
+    - [x] Setup (`ModelContextProtocol` package)
+    - [x] Tool Definitions (`McpServerTool` attributes)
+    - [x] Request Handling (Stdio transport, Tool discovery)
+- [x] **Phase 3: Containerization & Runtime**
+    - [x] Entrypoint Script (`entrypoint.sh` with auto-DAC fetching)
+    - [x] Dockerfile (Multi-stage build)
+- [x] **Phase 4: Verification**
+    - [x] Integration Tests (Passed against sample dump)
+    - [x] Architecture Validation (Confirmed DAC fallback logic)
+
+---
+
 ## Phase 1: Foundation & Core Logic (The "Core" Project)
 
 **Goal:** Create a reusable, testable library that manages the `ClrMD` state and implements the analysis logic defined in `OUTPUT_STRATEGY.md`.
