@@ -43,10 +43,10 @@ This document outlines the steps to transition from the `DotNetDumpExplorer` pro
 | `dumpheap` | ✅ | `DumpHeap` | Statistical summary |
 | `list_objects` | ✅ | `ListObjects` | Detailed list (pagination) |
 | `gcroot` | ✅ | `GcRoot` | Finds roots pointing to object |
-| `verifyheap` | ❌ | | |
+| `verifyheap` | ✅ | `VerifyHeap` | Validates heap integrity |
 | `eeheap` | ✅ | `EeHeap` | List heap segments |
 | `dumpobj` | ✅ | `DumpObj` | Shallow inspection |
-| `gchandles` | ❌ | | |
+| `gchandles` | ✅ | `GcHandles` | Lists all GC handles |
 | `syncblk` | ✅ | `SyncBlk` | List sync blocks (locks) |
 
 ### Thread Analysis

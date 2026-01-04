@@ -179,6 +179,48 @@ public class DumpAnalyzerTools {
 
 
 
+	[McpServerTool, Description("Lists all GC handles in the process.")]
+
+	public string GcHandles(
+
+		 [Description("Field to sort by (Address, Kind, TypeName)")] string? sortBy = "Address",
+
+		 [Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
+
+		 [Description("Number of items to return")] int limit = 50,
+
+		 [Description("Number of items to skip")] int offset = 0) {
+
+		return ExecuteSafe(() => {
+
+			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
+
+			var handles = _heapAnalyzer.GetGCHandles(parameters);
+
+			return MarkdownFormatter.FormatGCHandles(handles);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Verifies the integrity of the managed heap and reports any corruption found.")]
+
+	public string VerifyHeap() {
+
+		return ExecuteSafe(() => {
+
+			var corruptions = _heapAnalyzer.VerifyHeap();
+
+			return MarkdownFormatter.FormatHeapVerification(corruptions);
+
+		});
+
+	}
+
+
+
 	private QueryParameters CreateParameters(string? sortBy, string? sortDirection, int limit, int offset) {
 		return new QueryParameters {
 			SortBy = sortBy,

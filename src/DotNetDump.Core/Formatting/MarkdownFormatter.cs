@@ -124,5 +124,39 @@ namespace DotNetDump.Core.Formatting {
 			}
 			return sb.ToString();
 		}
+
+		public static string FormatGCHandles(IEnumerable<GCHandleInfo> handles) {
+			var sb = new StringBuilder();
+			sb.AppendLine("| Handle Address | Object Address | Kind | Type |");
+			sb.AppendLine("|----------------|----------------|------|------|");
+			foreach (var handle in handles) {
+				sb.AppendLine($"| {handle.Address:X16} | {handle.Object:X16} | {handle.Kind} | {handle.TypeName} |");
+			}
+			return sb.ToString();
+		}
+
+		public static string FormatHeapVerification(IEnumerable<HeapCorruptionInfo> corruptions) {
+			var sb = new StringBuilder();
+			var corruptionList = corruptions.ToList();
+
+			if (corruptionList.Count == 0) {
+				sb.AppendLine("**Heap Verification Result:** PASSED");
+				sb.AppendLine();
+				sb.AppendLine("No corruption detected. The managed heap is valid.");
+				return sb.ToString();
+			}
+
+			sb.AppendLine($"**Heap Verification Result:** FAILED");
+			sb.AppendLine();
+			sb.AppendLine($"**Corruption Count:** {corruptionList.Count}");
+			sb.AppendLine();
+			sb.AppendLine("| Address | Object | Offset | Message |");
+			sb.AppendLine("|---------|--------|--------|---------|");
+			foreach (var corruption in corruptionList) {
+				string message = corruption.Message ?? "Unknown corruption";
+				sb.AppendLine($"| {corruption.Address:X16} | {corruption.Object:X16} | {corruption.Offset:X} | {message} |");
+			}
+			return sb.ToString();
+		}
 	}
 }
