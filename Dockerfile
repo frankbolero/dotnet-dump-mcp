@@ -6,7 +6,7 @@ WORKDIR /app
 COPY . .
 
 # Build
-RUN dotnet publish src/exploration/DotNetDumpExplorer/DotNetDumpExplorer.csproj -c Release -o /app/out
+RUN dotnet publish src/DotNetDump.Server/DotNetDump.Server.csproj -c Release -o /app/out
 
 # Runtime image
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS runtime
@@ -26,4 +26,5 @@ VOLUME /dumps
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh
 
+# The app listens on stdio for MCP
 ENTRYPOINT ["./entrypoint.sh"]
