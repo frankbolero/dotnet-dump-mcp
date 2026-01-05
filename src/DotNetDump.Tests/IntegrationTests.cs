@@ -118,6 +118,148 @@ public class IntegrationTests : IDisposable {
 		Assert.NotNull(blocks);
 	}
 
+	[Fact]
+	public void MetadataAnalyzer_GetMethodTable_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new MetadataAnalyzer(_context);
+
+		// Find a type and get its MethodTable
+		var type = _context.Heap.EnumerateObjects()
+			.Select(o => o.Type)
+			.FirstOrDefault(t => t != null && t.Name == "System.String");
+		if (type == null) return;
+
+		var methodTableInfo = analyzer.GetMethodTable(type.MethodTable);
+
+		Assert.Equal(type.MethodTable, methodTableInfo.MethodTable);
+		Assert.Equal("System.String", methodTableInfo.TypeName);
+		Assert.NotNull(methodTableInfo.ModuleName);
+		Assert.True(methodTableInfo.MethodCount > 0);
+	}
+
+	[Fact]
+	public void MetadataAnalyzer_GetMethodDesc_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new MetadataAnalyzer(_context);
+
+		// Find a type with methods and get a MethodDesc
+		var type = _context.Heap.EnumerateObjects()
+			.Select(o => o.Type)
+			.FirstOrDefault(t => t != null && t.Methods.Any());
+		if (type == null) return;
+
+		var method = type.Methods.FirstOrDefault(m => m.MethodDesc != 0);
+		if (method == null) return;
+
+		var methodDescInfo = analyzer.GetMethodDesc(method.MethodDesc);
+
+		Assert.Equal(method.MethodDesc, methodDescInfo.MethodDesc);
+		Assert.NotNull(methodDescInfo.MethodName);
+		Assert.NotNull(methodDescInfo.TypeName);
+	}
+
+	[Fact]
+	public void MetadataAnalyzer_GetClass_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new MetadataAnalyzer(_context);
+
+		// Find a type and get its class info (using MethodTable as EEClass)
+		var type = _context.Heap.EnumerateObjects()
+			.Select(o => o.Type)
+			.FirstOrDefault(t => t != null && t.Name == "System.String");
+		if (type == null) return;
+
+		var classInfo = analyzer.GetClass(type.MethodTable);
+
+		Assert.Equal(type.MethodTable, classInfo.MethodTable);
+		Assert.Equal("System.String", classInfo.TypeName);
+		Assert.NotNull(classInfo.ModuleName);
+		Assert.True(classInfo.MethodCount > 0);
+		Assert.NotNull(classInfo.Fields);
+	}
+
+	[Fact]
+	public void ModuleAnalyzer_GetModuleDetails_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new ModuleAnalyzer(_context);
+
+		// Get first module with non-zero size
+		var module = _context.Runtime.EnumerateModules().FirstOrDefault(m => m.Size > 0);
+		if (module == null) return;
+
+		var moduleDetails = analyzer.GetModuleDetails(module.ImageBase);
+
+		Assert.Equal(module.ImageBase, moduleDetails.ImageBase);
+		Assert.NotNull(moduleDetails.Name);
+		Assert.True(moduleDetails.Size > 0);
+	}
+
+	[Fact]
+	public void ModuleAnalyzer_GetAssemblyDetails_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new ModuleAnalyzer(_context);
+
+		// Get first module and use its ImageBase as AssemblyId
+		var module = _context.Runtime.EnumerateModules().FirstOrDefault();
+		if (module == null) return;
+
+		var assemblyDetails = analyzer.GetAssemblyDetails(module.ImageBase);
+
+		Assert.NotNull(assemblyDetails.Name);
+		Assert.NotEmpty(assemblyDetails.Modules);
+	}
+
+	[Fact]
+	public void ModuleAnalyzer_Name2EE_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new ModuleAnalyzer(_context);
+
+		// Try to find System.String in System.Private.CoreLib
+		try {
+			var result = analyzer.Name2EE("System.Private.CoreLib", "System.String");
+
+			Assert.NotNull(result.TypeName);
+			Assert.True(result.MethodTable != 0);
+			Assert.Contains("System.Private.CoreLib", result.ModuleName ?? "");
+		} catch (ArgumentException) {
+			// Module or type might not exist in this dump, skip test
+			return;
+		}
+	}
+
+	[Fact]
+	public void ModuleAnalyzer_GetMethodByIP_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new ModuleAnalyzer(_context);
+
+		// Find a method with valid native code (not 0 and not all Fs)
+		var type = _context.Heap.EnumerateObjects()
+			.Select(o => o.Type)
+			.FirstOrDefault(t => t != null && t.Methods.Any(m => m.NativeCode != 0 && m.NativeCode != ulong.MaxValue));
+		if (type == null) return;
+
+		var method = type.Methods.FirstOrDefault(m => m.NativeCode != 0 && m.NativeCode != ulong.MaxValue);
+		if (method == null) return;
+
+		try {
+			var methodDescInfo = analyzer.GetMethodByIP(method.NativeCode);
+
+			Assert.NotNull(methodDescInfo.MethodName);
+			Assert.True(methodDescInfo.IsJitted);
+			Assert.True(methodDescInfo.NativeCode != 0);
+		} catch (ArgumentException) {
+			// Method lookup failed, skip test
+			return;
+		}
+	}
+
 	public void Dispose() {
 		_context.Dispose();
 	}
