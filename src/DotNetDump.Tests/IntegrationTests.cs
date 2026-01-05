@@ -119,6 +119,62 @@ public class IntegrationTests : IDisposable {
 	}
 
 	[Fact]
+	public void HeapAnalyzer_GetObjects_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new HeapAnalyzer(_context);
+		var objects = analyzer.GetObjects(new QueryParameters { Limit = 10 }, null).ToList();
+
+		Assert.NotEmpty(objects);
+		Assert.All(objects, obj => Assert.True(obj.Address > 0));
+	}
+
+	[Fact]
+	public void HeapAnalyzer_GetObjects_WithFilter_ReturnsFilteredData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new HeapAnalyzer(_context);
+		var objects = analyzer.GetObjects(new QueryParameters { Limit = 10 }, "System.String").ToList();
+
+		Assert.NotEmpty(objects);
+		Assert.All(objects, obj => Assert.Contains("String", obj.TypeName ?? ""));
+	}
+
+	[Fact]
+	public void ThreadAnalyzer_GetThreads_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new ThreadAnalyzer(_context);
+		var threads = analyzer.GetThreads(new QueryParameters { Limit = 50 }).ToList();
+
+		Assert.NotEmpty(threads);
+		Assert.All(threads, thread => Assert.True(thread.OSThreadId > 0 || thread.ManagedThreadId >= 0));
+	}
+
+	[Fact]
+	public void ModuleAnalyzer_GetModules_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new ModuleAnalyzer(_context);
+		var modules = analyzer.GetModules(new QueryParameters { Limit = 50 }, includeSystem: true).ToList();
+
+		Assert.NotEmpty(modules);
+		Assert.All(modules, module => Assert.NotNull(module.Name));
+	}
+
+	[Fact]
+	public void ModuleAnalyzer_GetModules_ExcludeSystem_ReturnsUserModules() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new ModuleAnalyzer(_context);
+		var modules = analyzer.GetModules(new QueryParameters { Limit = 50 }, includeSystem: false).ToList();
+
+		// Might be empty if only system modules exist
+		Assert.NotNull(modules);
+		Assert.All(modules, module => Assert.True(module.IsUserCode));
+	}
+
+	[Fact]
 	public void MetadataAnalyzer_GetMethodTable_ReturnsData() {
 		if (!File.Exists(_dumpPath)) return;
 
