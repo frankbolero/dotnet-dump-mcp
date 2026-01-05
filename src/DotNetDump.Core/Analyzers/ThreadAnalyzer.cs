@@ -127,5 +127,93 @@ namespace DotNetDump.Core.Analyzers {
 
 			return stacks.Skip(parameters.Offset).Take(parameters.Limit);
 		}
+
+		public IEnumerable<ThreadStateInfo> GetThreadStates(QueryParameters parameters) {
+			var runtime = GetRuntime();
+			var threadStates = runtime.Threads.Select(t => new ThreadStateInfo {
+				ManagedThreadId = t.ManagedThreadId,
+				OSThreadId = t.OSThreadId,
+				IsAlive = t.IsAlive,
+				ExceptionType = t.CurrentException?.Type?.Name,
+				Address = t.Address,
+				GcMode = "Unknown", // IsGCMode not available in ClrMD v3
+				LockCount = (int)t.LockCount,
+				ApartmentState = "Unknown", // Not available in ClrMD v3
+				IsThreadPoolThread = false, // Not directly available, would need to check against ThreadPool threads
+				IsGC = false, // Not available in ClrMD v3
+				IsFinalizer = t.IsFinalizer,
+				IsBackground = false, // Not available in ClrMD v3
+				IsUnstarted = !t.IsAlive && t.Address != 0,
+				IsAborted = false // Not available in ClrMD v3
+			});
+
+			// Sorting
+			if (parameters.SortBy?.ToLower() == "osthreadid") {
+				threadStates = parameters.SortDirection == SortDirection.Asc ? threadStates.OrderBy(t => t.OSThreadId) : threadStates.OrderByDescending(t => t.OSThreadId);
+			} else if (parameters.SortBy?.ToLower() == "lockcount") {
+				threadStates = parameters.SortDirection == SortDirection.Asc ? threadStates.OrderBy(t => t.LockCount) : threadStates.OrderByDescending(t => t.LockCount);
+			} else {
+				threadStates = parameters.SortDirection == SortDirection.Asc ? threadStates.OrderBy(t => t.ManagedThreadId) : threadStates.OrderByDescending(t => t.ManagedThreadId);
+			}
+
+			return threadStates.Skip(parameters.Offset).Take(parameters.Limit);
+		}
+
+		public IEnumerable<ThreadExceptionInfo> GetThreadExceptions(QueryParameters parameters, bool onlyWithExceptions = true) {
+			var runtime = GetRuntime();
+			var threads = runtime.Threads.AsEnumerable();
+
+			if (onlyWithExceptions) {
+				threads = threads.Where(t => t.CurrentException != null);
+			}
+
+			var exceptionInfos = threads.Select(t => new ThreadExceptionInfo {
+				ManagedThreadId = t.ManagedThreadId,
+				OSThreadId = t.OSThreadId,
+				Exception = t.CurrentException != null ? BuildExceptionDetails(t.CurrentException) : null
+			});
+
+			// Sorting
+			if (parameters.SortBy?.ToLower() == "osthreadid") {
+				exceptionInfos = parameters.SortDirection == SortDirection.Asc ? exceptionInfos.OrderBy(t => t.OSThreadId) : exceptionInfos.OrderByDescending(t => t.OSThreadId);
+			} else {
+				exceptionInfos = parameters.SortDirection == SortDirection.Asc ? exceptionInfos.OrderBy(t => t.ManagedThreadId) : exceptionInfos.OrderByDescending(t => t.ManagedThreadId);
+			}
+
+			return exceptionInfos.Skip(parameters.Offset).Take(parameters.Limit);
+		}
+
+		private ExceptionDetails BuildExceptionDetails(ClrException exception, int maxDepth = 5) {
+			if (maxDepth <= 0) {
+				return new ExceptionDetails {
+					Address = exception.Address,
+					TypeName = exception.Type?.Name ?? "<unknown>",
+					Message = "(max depth reached)"
+				};
+			}
+
+			var details = new ExceptionDetails {
+				Address = exception.Address,
+				TypeName = exception.Type?.Name ?? "<unknown>",
+				Message = exception.Message,
+				HResult = exception.HResult,
+				StackTrace = new List<string>()
+			};
+
+			// Get stack trace from exception object
+			foreach (var frame in exception.StackTrace) {
+				var frameName = frame.Method?.Name ?? frame.ToString();
+				if (!string.IsNullOrEmpty(frameName)) {
+					details.StackTrace.Add(frameName);
+				}
+			}
+
+			// Get inner exception
+			if (exception.Inner != null) {
+				details.InnerExceptions.Add(BuildExceptionDetails(exception.Inner, maxDepth - 1));
+			}
+
+			return details;
+		}
 	}
 }

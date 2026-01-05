@@ -395,7 +395,32 @@ public class DumpAnalyzerTools {
 
 	}
 
+	[McpServerTool, Description("Displays detailed thread state information including GC mode, locks, and flags.")]
+	public string ThreadState(
+		[Description("Field to sort by (ManagedThreadId, OSThreadId, LockCount)")] string? sortBy = "ManagedThreadId",
+		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
+		[Description("Number of items to return")] int limit = 50,
+		[Description("Number of items to skip")] int offset = 0) {
+		return ExecuteSafe(() => {
+			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
+			var states = _threadAnalyzer.GetThreadStates(parameters);
+			return MarkdownFormatter.FormatThreadStates(states);
+		});
+	}
 
+	[McpServerTool, Description("Displays detailed exception information for threads with exceptions (similar to SOS !pe command).")]
+	public string PrintException(
+		[Description("Field to sort by (ManagedThreadId, OSThreadId)")] string? sortBy = "ManagedThreadId",
+		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
+		[Description("Only show threads with exceptions")] bool onlyWithExceptions = true,
+		[Description("Number of items to return")] int limit = 50,
+		[Description("Number of items to skip")] int offset = 0) {
+		return ExecuteSafe(() => {
+			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
+			var exceptions = _threadAnalyzer.GetThreadExceptions(parameters, onlyWithExceptions);
+			return MarkdownFormatter.FormatThreadExceptions(exceptions);
+		});
+	}
 
 	private QueryParameters CreateParameters(string? sortBy, string? sortDirection, int limit, int offset) {
 		return new QueryParameters {

@@ -54,7 +54,7 @@ This document outlines the steps to transition from the `DotNetDumpExplorer` pro
 | :--- | :---: | :--- | :--- |
 | `clrthreads` | ✅ | `ClrThreads` | Lists managed threads |
 | `threadpool` | ✅ | `ThreadPool` | Basic thread pool stats |
-| `threadstate` | ❌ | | Covered partially by `clrthreads` |
+| `threadstate` | ✅ | `ThreadState` | Detailed thread state with GC mode and flags |
 
 ### Module and Assembly Analysis
 | Command | Status | Tool Name | Notes |
@@ -75,7 +75,7 @@ This document outlines the steps to transition from the `DotNetDumpExplorer` pro
 ### Exception Analysis
 | Command | Status | Tool Name | Notes |
 | :--- | :---: | :--- | :--- |
-| `pe` / `printexception` | ❌ | | |
+| `pe` / `printexception` | ✅ | `PrintException` | Displays detailed exception info with stack traces |
 
 ---
 

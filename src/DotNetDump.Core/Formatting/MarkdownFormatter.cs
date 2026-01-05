@@ -345,5 +345,80 @@ namespace DotNetDump.Core.Formatting {
 
 			return sb.ToString();
 		}
+
+		public static string FormatThreadStates(IEnumerable<ThreadStateInfo> states) {
+			var sb = new StringBuilder();
+			sb.AppendLine("| Mgd ID | OS ID | Address | GC Mode | Locks | Flags |");
+			sb.AppendLine("|--------|-------|---------|---------|-------|-------|");
+			foreach (var state in states) {
+				var flags = new List<string>();
+				if (state.IsGC) flags.Add("GC");
+				if (state.IsFinalizer) flags.Add("Finalizer");
+				if (state.IsBackground) flags.Add("Background");
+				if (state.IsUnstarted) flags.Add("Unstarted");
+				if (state.IsAborted) flags.Add("Aborted");
+				if (state.ExceptionType != null) flags.Add("Exception");
+				string flagsStr = flags.Count > 0 ? string.Join(", ", flags) : "-";
+
+				sb.AppendLine($"| {state.ManagedThreadId} | {state.OSThreadId:X} | {state.Address:X16} | {state.GcMode} | {state.LockCount} | {flagsStr} |");
+			}
+			return sb.ToString();
+		}
+
+		public static string FormatThreadExceptions(IEnumerable<ThreadExceptionInfo> exceptionInfos) {
+			var sb = new StringBuilder();
+			var infoList = exceptionInfos.ToList();
+
+			if (infoList.Count == 0) {
+				sb.AppendLine("**No exceptions found on any threads.**");
+				return sb.ToString();
+			}
+
+			foreach (var info in infoList) {
+				sb.AppendLine($"### Thread {info.ManagedThreadId} (OS ID: {info.OSThreadId:X})");
+				sb.AppendLine();
+
+				if (info.Exception == null) {
+					sb.AppendLine("**No exception on this thread.**");
+					sb.AppendLine();
+					continue;
+				}
+
+				FormatExceptionDetails(sb, info.Exception, 0);
+				sb.AppendLine();
+			}
+
+			return sb.ToString();
+		}
+
+		private static void FormatExceptionDetails(StringBuilder sb, ExceptionDetails exception, int depth) {
+			string indent = new string(' ', depth * 2);
+			string prefix = depth == 0 ? "**Exception:**" : "**Inner Exception:**";
+
+			sb.AppendLine($"{indent}{prefix}");
+			sb.AppendLine($"{indent}- **Address:** {exception.Address:X16}");
+			sb.AppendLine($"{indent}- **Type:** {exception.TypeName}");
+			if (!string.IsNullOrEmpty(exception.Message)) {
+				sb.AppendLine($"{indent}- **Message:** {exception.Message}");
+			}
+			sb.AppendLine($"{indent}- **HResult:** 0x{exception.HResult:X8}");
+
+			if (exception.StackTrace.Count > 0) {
+				sb.AppendLine($"{indent}- **Stack Trace:**");
+				sb.AppendLine($"{indent}```text");
+				foreach (var frame in exception.StackTrace.Take(20)) {
+					sb.AppendLine($"{indent}{frame}");
+				}
+				if (exception.StackTrace.Count > 20) {
+					sb.AppendLine($"{indent}... ({exception.StackTrace.Count - 20} more frames)");
+				}
+				sb.AppendLine($"{indent}```");
+			}
+
+			foreach (var inner in exception.InnerExceptions) {
+				sb.AppendLine();
+				FormatExceptionDetails(sb, inner, depth + 1);
+			}
+		}
 	}
 }
