@@ -28,6 +28,21 @@ public class IntegrationTests : IDisposable {
 	}
 
 	[Fact]
+	public void DumpContext_Load_LoadsDumpSuccessfully() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var context = new DumpContext();
+		context.Load(_dumpPath);
+
+		Assert.True(context.IsLoaded);
+		Assert.NotNull(context.DataTarget);
+		Assert.NotNull(context.Runtime);
+		Assert.NotNull(context.Heap);
+
+		context.Dispose();
+	}
+
+	[Fact]
 	public void HeapAnalyzer_ReturnsStatistics() {
 		if (!File.Exists(_dumpPath)) return;
 
@@ -116,6 +131,28 @@ public class IntegrationTests : IDisposable {
 
 		// Might be empty, but shouldn't throw
 		Assert.NotNull(blocks);
+	}
+
+	[Fact]
+	public void HeapAnalyzer_VerifyHeap_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new HeapAnalyzer(_context);
+		var corruptions = analyzer.VerifyHeap().ToList();
+
+		// Should not throw, corruptions list might be empty (which is good)
+		Assert.NotNull(corruptions);
+	}
+
+	[Fact]
+	public void HeapAnalyzer_GetGCHandles_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new HeapAnalyzer(_context);
+		var handles = analyzer.GetGCHandles(new QueryParameters { Limit = 50 }).ToList();
+
+		// Might be empty, but shouldn't throw
+		Assert.NotNull(handles);
 	}
 
 	[Fact]
