@@ -15,12 +15,14 @@ public class DumpAnalyzerTools {
 	private readonly HeapAnalyzer _heapAnalyzer;
 	private readonly ThreadAnalyzer _threadAnalyzer;
 	private readonly ModuleAnalyzer _moduleAnalyzer;
+	private readonly MetadataAnalyzer _metadataAnalyzer;
 
-	public DumpAnalyzerTools(IDumpContext dumpContext, HeapAnalyzer heapAnalyzer, ThreadAnalyzer threadAnalyzer, ModuleAnalyzer moduleAnalyzer) {
+	public DumpAnalyzerTools(IDumpContext dumpContext, HeapAnalyzer heapAnalyzer, ThreadAnalyzer threadAnalyzer, ModuleAnalyzer moduleAnalyzer, MetadataAnalyzer metadataAnalyzer) {
 		_dumpContext = dumpContext;
 		_heapAnalyzer = heapAnalyzer;
 		_threadAnalyzer = threadAnalyzer;
 		_moduleAnalyzer = moduleAnalyzer;
+		_metadataAnalyzer = metadataAnalyzer;
 	}
 
 	[McpServerTool, Description("Loads a memory dump file for analysis. Must be called before other tools.")]
@@ -78,6 +80,28 @@ public class DumpAnalyzerTools {
 		return ExecuteSafe(() => {
 			var groups = _threadAnalyzer.GetStackTraceGroups(maxFrames);
 			return MarkdownFormatter.FormatStackGroups(groups);
+		});
+	}
+
+	[McpServerTool, Description("Displays merged thread stacks grouped by common call patterns (similar to Visual Studio Parallel Stacks).")]
+	public string EeStack([Description("Maximum number of frames per thread")] int maxFrames = 30) {
+		return ExecuteSafe(() => {
+			var groups = _threadAnalyzer.GetStackTraceGroups(maxFrames);
+			return MarkdownFormatter.FormatStackGroups(groups);
+		});
+	}
+
+	[McpServerTool, Description("Displays detailed stack traces for all threads including frame types and addresses.")]
+	public string DumpStack(
+		[Description("Field to sort by (ManagedThreadId, OSThreadId)")] string? sortBy = "ManagedThreadId",
+		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
+		[Description("Maximum number of frames per thread")] int maxFrames = 100,
+		[Description("Number of threads to return")] int limit = 50,
+		[Description("Number of threads to skip")] int offset = 0) {
+		return ExecuteSafe(() => {
+			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
+			var stacks = _threadAnalyzer.GetDetailedStacks(parameters, maxFrames);
+			return MarkdownFormatter.FormatDetailedStacks(stacks);
 		});
 	}
 
@@ -178,6 +202,225 @@ public class DumpAnalyzerTools {
 	}
 
 
+
+	[McpServerTool, Description("Lists all GC handles in the process.")]
+
+	public string GcHandles(
+
+		 [Description("Field to sort by (Address, Kind, TypeName)")] string? sortBy = "Address",
+
+		 [Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
+
+		 [Description("Number of items to return")] int limit = 50,
+
+		 [Description("Number of items to skip")] int offset = 0) {
+
+		return ExecuteSafe(() => {
+
+			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
+
+			var handles = _heapAnalyzer.GetGCHandles(parameters);
+
+			return MarkdownFormatter.FormatGCHandles(handles);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Verifies the integrity of the managed heap and reports any corruption found.")]
+
+	public string VerifyHeap() {
+
+		return ExecuteSafe(() => {
+
+			var corruptions = _heapAnalyzer.VerifyHeap();
+
+			return MarkdownFormatter.FormatHeapVerification(corruptions);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Displays information about a MethodTable structure.")]
+
+	public string DumpMt([Description("The hex address of the MethodTable")] string address) {
+
+		return ExecuteSafe(() => {
+
+			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong mt))
+
+				throw new ArgumentException("Invalid address format");
+
+
+
+			var info = _metadataAnalyzer.GetMethodTable(mt);
+
+			return MarkdownFormatter.FormatMethodTable(info);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Displays information about a MethodDesc structure.")]
+
+	public string DumpMd([Description("The hex address of the MethodDesc")] string address) {
+
+		return ExecuteSafe(() => {
+
+			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong md))
+
+				throw new ArgumentException("Invalid address format");
+
+
+
+			var info = _metadataAnalyzer.GetMethodDesc(md);
+
+			return MarkdownFormatter.FormatMethodDesc(info);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Displays information about an EEClass structure.")]
+
+	public string DumpClass([Description("The hex address of the EEClass")] string address) {
+
+		return ExecuteSafe(() => {
+
+			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong eeClass))
+
+				throw new ArgumentException("Invalid address format");
+
+
+
+			var info = _metadataAnalyzer.GetClass(eeClass);
+
+			return MarkdownFormatter.FormatClass(info);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Displays detailed information about a loaded module.")]
+
+	public string DumpModule([Description("The hex address of the module (ImageBase or MetadataAddress)")] string address) {
+
+		return ExecuteSafe(() => {
+
+			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong moduleAddr))
+
+				throw new ArgumentException("Invalid address format");
+
+
+
+			var info = _moduleAnalyzer.GetModuleDetails(moduleAddr);
+
+			return MarkdownFormatter.FormatModuleDetails(info);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Displays information about a loaded assembly.")]
+
+	public string DumpAssembly([Description("The hex address of the assembly (AssemblyId)")] string address) {
+
+		return ExecuteSafe(() => {
+
+			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong assemblyId))
+
+				throw new ArgumentException("Invalid address format");
+
+
+
+			var info = _moduleAnalyzer.GetAssemblyDetails(assemblyId);
+
+			return MarkdownFormatter.FormatAssemblyDetails(info);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Finds MethodTable and MethodDesc for a type or method by name.")]
+
+	public string Name2Ee(
+
+		[Description("The module name (e.g., 'System.Private.CoreLib' or 'MyApp')")] string moduleName,
+
+		[Description("The type or method name (e.g., 'System.String' or 'MyClass.MyMethod')")] string typeName) {
+
+		return ExecuteSafe(() => {
+
+			var info = _moduleAnalyzer.Name2EE(moduleName, typeName);
+
+			return MarkdownFormatter.FormatName2EE(info);
+
+		});
+
+	}
+
+
+
+	[McpServerTool, Description("Gets the MethodDesc for the method at the specified instruction pointer.")]
+
+	public string Ip2Md([Description("The hex address of the instruction pointer")] string address) {
+
+		return ExecuteSafe(() => {
+
+			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong ip))
+
+				throw new ArgumentException("Invalid address format");
+
+
+
+			var info = _moduleAnalyzer.GetMethodByIP(ip);
+
+			return MarkdownFormatter.FormatMethodDesc(info);
+
+		});
+
+	}
+
+	[McpServerTool, Description("Displays detailed thread state information including GC mode, locks, and flags.")]
+	public string ThreadState(
+		[Description("Field to sort by (ManagedThreadId, OSThreadId, LockCount)")] string? sortBy = "ManagedThreadId",
+		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
+		[Description("Number of items to return")] int limit = 50,
+		[Description("Number of items to skip")] int offset = 0) {
+		return ExecuteSafe(() => {
+			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
+			var states = _threadAnalyzer.GetThreadStates(parameters);
+			return MarkdownFormatter.FormatThreadStates(states);
+		});
+	}
+
+	[McpServerTool, Description("Displays detailed exception information for threads with exceptions (similar to SOS !pe command).")]
+	public string PrintException(
+		[Description("Field to sort by (ManagedThreadId, OSThreadId)")] string? sortBy = "ManagedThreadId",
+		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
+		[Description("Only show threads with exceptions")] bool onlyWithExceptions = true,
+		[Description("Number of items to return")] int limit = 50,
+		[Description("Number of items to skip")] int offset = 0) {
+		return ExecuteSafe(() => {
+			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
+			var exceptions = _threadAnalyzer.GetThreadExceptions(parameters, onlyWithExceptions);
+			return MarkdownFormatter.FormatThreadExceptions(exceptions);
+		});
+	}
 
 	private QueryParameters CreateParameters(string? sortBy, string? sortDirection, int limit, int offset) {
 		return new QueryParameters {

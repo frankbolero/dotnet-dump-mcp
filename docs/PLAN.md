@@ -34,8 +34,8 @@ This document outlines the steps to transition from the `DotNetDumpExplorer` pro
 | Command | Status | Tool Name | Notes |
 | :--- | :---: | :--- | :--- |
 | `clrstack` | ✅ | `ClrStack` | Grouped by call site |
-| `eestack` | ❌ | | |
-| `dumpstack` | ❌ | | |
+| `eestack` | ✅ | `EeStack` | Merged stacks (Parallel Stacks view) |
+| `dumpstack` | ✅ | `DumpStack` | Detailed per-thread stacks with frame info |
 
 ### Heap Analysis
 | Command | Status | Tool Name | Notes |
@@ -43,10 +43,10 @@ This document outlines the steps to transition from the `DotNetDumpExplorer` pro
 | `dumpheap` | ✅ | `DumpHeap` | Statistical summary |
 | `list_objects` | ✅ | `ListObjects` | Detailed list (pagination) |
 | `gcroot` | ✅ | `GcRoot` | Finds roots pointing to object |
-| `verifyheap` | ❌ | | |
+| `verifyheap` | ✅ | `VerifyHeap` | Validates heap integrity |
 | `eeheap` | ✅ | `EeHeap` | List heap segments |
 | `dumpobj` | ✅ | `DumpObj` | Shallow inspection |
-| `gchandles` | ❌ | | |
+| `gchandles` | ✅ | `GcHandles` | Lists all GC handles |
 | `syncblk` | ✅ | `SyncBlk` | List sync blocks (locks) |
 
 ### Thread Analysis
@@ -54,28 +54,28 @@ This document outlines the steps to transition from the `DotNetDumpExplorer` pro
 | :--- | :---: | :--- | :--- |
 | `clrthreads` | ✅ | `ClrThreads` | Lists managed threads |
 | `threadpool` | ✅ | `ThreadPool` | Basic thread pool stats |
-| `threadstate` | ❌ | | Covered partially by `clrthreads` |
+| `threadstate` | ✅ | `ThreadState` | Detailed thread state with GC mode and flags |
 
 ### Module and Assembly Analysis
 | Command | Status | Tool Name | Notes |
 | :--- | :---: | :--- | :--- |
 | `clrmodules` | ✅ | `ClrModules` | Lists loaded modules |
-| `dumpmodule` | ❌ | | |
-| `dumpassembly` | ❌ | | |
-| `name2ee` | ❌ | | |
-| `ip2md` | ❌ | | |
+| `dumpmodule` | ✅ | `DumpModule` | Displays detailed module information |
+| `dumpassembly` | ✅ | `DumpAssembly` | Displays assembly details |
+| `name2ee` | ✅ | `Name2Ee` | Finds MethodTable/MethodDesc by name |
+| `ip2md` | ✅ | `Ip2Md` | Gets MethodDesc from instruction pointer |
 
 ### Metadata Analysis
 | Command | Status | Tool Name | Notes |
 | :--- | :---: | :--- | :--- |
-| `dumpclass` | ❌ | | |
-| `dumpmd` | ❌ | | |
-| `dumpmt` | ❌ | | |
+| `dumpclass` | ✅ | `DumpClass` | Displays EEClass information |
+| `dumpmd` | ✅ | `DumpMd` | Displays MethodDesc information |
+| `dumpmt` | ✅ | `DumpMt` | Displays MethodTable information |
 
 ### Exception Analysis
 | Command | Status | Tool Name | Notes |
 | :--- | :---: | :--- | :--- |
-| `pe` / `printexception` | ❌ | | |
+| `pe` / `printexception` | ✅ | `PrintException` | Displays detailed exception info with stack traces |
 
 ---
 

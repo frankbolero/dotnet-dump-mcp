@@ -124,5 +124,301 @@ namespace DotNetDump.Core.Formatting {
 			}
 			return sb.ToString();
 		}
+
+		public static string FormatGCHandles(IEnumerable<GCHandleInfo> handles) {
+			var sb = new StringBuilder();
+			sb.AppendLine("| Handle Address | Object Address | Kind | Type |");
+			sb.AppendLine("|----------------|----------------|------|------|");
+			foreach (var handle in handles) {
+				sb.AppendLine($"| {handle.Address:X16} | {handle.Object:X16} | {handle.Kind} | {handle.TypeName} |");
+			}
+			return sb.ToString();
+		}
+
+		public static string FormatHeapVerification(IEnumerable<HeapCorruptionInfo> corruptions) {
+			var sb = new StringBuilder();
+			var corruptionList = corruptions.ToList();
+
+			if (corruptionList.Count == 0) {
+				sb.AppendLine("**Heap Verification Result:** PASSED");
+				sb.AppendLine();
+				sb.AppendLine("No corruption detected. The managed heap is valid.");
+				return sb.ToString();
+			}
+
+			sb.AppendLine($"**Heap Verification Result:** FAILED");
+			sb.AppendLine();
+			sb.AppendLine($"**Corruption Count:** {corruptionList.Count}");
+			sb.AppendLine();
+			sb.AppendLine("| Address | Object | Offset | Message |");
+			sb.AppendLine("|---------|--------|--------|---------|");
+			foreach (var corruption in corruptionList) {
+				string message = corruption.Message ?? "Unknown corruption";
+				sb.AppendLine($"| {corruption.Address:X16} | {corruption.Object:X16} | {corruption.Offset:X} | {message} |");
+			}
+			return sb.ToString();
+		}
+
+		public static string FormatDetailedStacks(IEnumerable<ThreadStackInfo> stacks) {
+			var sb = new StringBuilder();
+			int threadNum = 0;
+
+			foreach (var stack in stacks) {
+				threadNum++;
+				sb.AppendLine($"### Thread {threadNum}: Managed ID {stack.ManagedThreadId}, OS ID {stack.OSThreadId:X}");
+
+				if (!string.IsNullOrEmpty(stack.ExceptionType)) {
+					sb.AppendLine($"**Exception:** {stack.ExceptionType}");
+				}
+
+				sb.AppendLine();
+				sb.AppendLine("| IP | SP | Kind | Method |");
+				sb.AppendLine("|----|----| -----|--------|");
+
+				foreach (var frame in stack.Frames) {
+					string method = frame.MethodName ?? "(unknown)";
+					if (!string.IsNullOrEmpty(frame.ModuleName)) {
+						method = $"{frame.ModuleName}!{method}";
+					}
+					sb.AppendLine($"| {frame.InstructionPointer:X16} | {frame.StackPointer:X16} | {frame.FrameKind} | {method} |");
+				}
+
+				sb.AppendLine();
+			}
+
+			return sb.ToString();
+		}
+
+		public static string FormatMethodTable(MethodTableInfo info) {
+			var sb = new StringBuilder();
+			sb.AppendLine($"**MethodTable:** {info.MethodTable:X16}");
+			sb.AppendLine($"**EEClass:** {info.EEClass:X16}");
+			sb.AppendLine($"**Type:** {info.TypeName}");
+			if (!string.IsNullOrEmpty(info.ModuleName)) {
+				sb.AppendLine($"**Module:** {info.ModuleName}");
+			}
+			sb.AppendLine($"**BaseSize:** {info.BaseSize} bytes");
+			sb.AppendLine($"**Method Count:** {info.MethodCount}");
+			sb.AppendLine();
+			sb.AppendLine("**Flags:**");
+			sb.AppendLine($"- ValueType: {info.IsValueType}");
+			sb.AppendLine($"- Interface: {info.IsInterface}");
+			sb.AppendLine($"- Abstract: {info.IsAbstract}");
+			sb.AppendLine($"- Sealed: {info.IsSealed}");
+
+			if (!string.IsNullOrEmpty(info.BaseTypeName)) {
+				sb.AppendLine();
+				sb.AppendLine($"**Base Type:** {info.BaseTypeName}");
+			}
+
+			if (info.Interfaces.Count > 0) {
+				sb.AppendLine();
+				sb.AppendLine("**Interfaces:**");
+				foreach (var iface in info.Interfaces) {
+					sb.AppendLine($"- {iface}");
+				}
+			}
+
+			return sb.ToString();
+		}
+
+		public static string FormatMethodDesc(MethodDescInfo info) {
+			var sb = new StringBuilder();
+			sb.AppendLine($"**MethodDesc:** {info.MethodDesc:X16}");
+			sb.AppendLine($"**MethodTable:** {info.MethodTable:X16}");
+			sb.AppendLine($"**Method:** {info.MethodName}");
+			if (!string.IsNullOrEmpty(info.TypeName)) {
+				sb.AppendLine($"**Type:** {info.TypeName}");
+			}
+			if (!string.IsNullOrEmpty(info.ModuleName)) {
+				sb.AppendLine($"**Module:** {info.ModuleName}");
+			}
+			if (!string.IsNullOrEmpty(info.Signature)) {
+				sb.AppendLine($"**Signature:** {info.Signature}");
+			}
+			sb.AppendLine($"**Metadata Token:** 0x{info.MetadataToken:X8}");
+			sb.AppendLine();
+			sb.AppendLine("**Code Information:**");
+			sb.AppendLine($"- Native Code: {info.NativeCode:X16}");
+			sb.AppendLine($"- Is Jitted: {info.IsJitted}");
+			sb.AppendLine($"- Is Generic: {info.IsGeneric}");
+
+			return sb.ToString();
+		}
+
+		public static string FormatClass(ClassInfo info) {
+			var sb = new StringBuilder();
+			sb.AppendLine($"**EEClass:** {info.EEClass:X16}");
+			sb.AppendLine($"**MethodTable:** {info.MethodTable:X16}");
+			sb.AppendLine($"**Type:** {info.TypeName}");
+			if (!string.IsNullOrEmpty(info.ModuleName)) {
+				sb.AppendLine($"**Module:** {info.ModuleName}");
+			}
+			sb.AppendLine();
+			sb.AppendLine($"**Field Count:** {info.FieldCount} instance, {info.StaticFieldCount} static");
+			sb.AppendLine($"**Method Count:** {info.MethodCount}");
+
+			if (info.Fields.Count > 0) {
+				sb.AppendLine();
+				sb.AppendLine("**Fields:**");
+				sb.AppendLine("| Offset | Name | Type | Size | Static |");
+				sb.AppendLine("|--------|------|------|------|--------|");
+				foreach (var field in info.Fields) {
+					string offset = field.IsStatic ? "static" : $"{field.Offset:X}";
+					sb.AppendLine($"| {offset} | {field.Name} | {field.TypeName} | {field.Size} | {field.IsStatic} |");
+				}
+			}
+
+			if (info.Methods.Count > 0) {
+				sb.AppendLine();
+				sb.AppendLine("**Methods:**");
+				foreach (var method in info.Methods) {
+					sb.AppendLine($"- {method}");
+				}
+			}
+
+			return sb.ToString();
+		}
+
+		public static string FormatModuleDetails(ModuleDetails info) {
+			var sb = new StringBuilder();
+			sb.AppendLine($"**Module:** {info.Name}");
+			sb.AppendLine($"**Assembly:** {info.AssemblyName}");
+			sb.AppendLine();
+			sb.AppendLine("**Addresses:**");
+			sb.AppendLine($"- ImageBase: {info.ImageBase:X16}");
+			sb.AppendLine($"- MetadataAddress: {info.MetadataAddress:X16}");
+			sb.AppendLine($"- AssemblyId: {info.AssemblyId:X16}");
+			sb.AppendLine();
+			sb.AppendLine($"**Size:** {info.Size:N0} bytes");
+			sb.AppendLine($"**Metadata Length:** {info.MetadataLength:N0} bytes");
+			sb.AppendLine($"**Type Count (sampled):** ~{info.TypeCount}");
+			sb.AppendLine();
+			sb.AppendLine("**Flags:**");
+			sb.AppendLine($"- IsDynamic: {info.IsDynamic}");
+			sb.AppendLine($"- IsFileLayout: {info.IsFileLayout}");
+
+			return sb.ToString();
+		}
+
+		public static string FormatAssemblyDetails(AssemblyDetails info) {
+			var sb = new StringBuilder();
+			sb.AppendLine($"**Assembly:** {info.Name}");
+			sb.AppendLine($"**AssemblyId:** {info.AssemblyId:X16}");
+			sb.AppendLine($"**IsDynamic:** {info.IsDynamic}");
+			sb.AppendLine();
+			sb.AppendLine($"**Module Count:** {info.Modules.Count}");
+
+			if (info.Modules.Count > 0) {
+				sb.AppendLine();
+				sb.AppendLine("**Modules:**");
+				foreach (var module in info.Modules) {
+					sb.AppendLine($"- {module}");
+				}
+			}
+
+			return sb.ToString();
+		}
+
+		public static string FormatName2EE(Name2EEResult info) {
+			var sb = new StringBuilder();
+			sb.AppendLine($"**Module:** {info.ModuleName}");
+			sb.AppendLine($"**Type:** {info.TypeName}");
+			sb.AppendLine();
+			sb.AppendLine($"**MethodTable:** {info.MethodTable:X16}");
+			sb.AppendLine($"**EEClass:** {info.EEClass:X16}");
+
+			if (!string.IsNullOrEmpty(info.MethodName)) {
+				sb.AppendLine();
+				sb.AppendLine($"**Method:** {info.MethodName}");
+
+				if (info.Methods.Count > 0) {
+					sb.AppendLine();
+					sb.AppendLine("**Overloads:**");
+					sb.AppendLine("| MethodDesc | Signature | Jitted |");
+					sb.AppendLine("|------------|-----------|--------|");
+					foreach (var method in info.Methods) {
+						sb.AppendLine($"| {method.MethodDesc:X16} | {method.Signature} | {method.IsJitted} |");
+					}
+				}
+			}
+
+			return sb.ToString();
+		}
+
+		public static string FormatThreadStates(IEnumerable<ThreadStateInfo> states) {
+			var sb = new StringBuilder();
+			sb.AppendLine("| Mgd ID | OS ID | Address | GC Mode | Locks | Flags |");
+			sb.AppendLine("|--------|-------|---------|---------|-------|-------|");
+			foreach (var state in states) {
+				var flags = new List<string>();
+				if (state.IsGC) flags.Add("GC");
+				if (state.IsFinalizer) flags.Add("Finalizer");
+				if (state.IsBackground) flags.Add("Background");
+				if (state.IsUnstarted) flags.Add("Unstarted");
+				if (state.IsAborted) flags.Add("Aborted");
+				if (state.ExceptionType != null) flags.Add("Exception");
+				string flagsStr = flags.Count > 0 ? string.Join(", ", flags) : "-";
+
+				sb.AppendLine($"| {state.ManagedThreadId} | {state.OSThreadId:X} | {state.Address:X16} | {state.GcMode} | {state.LockCount} | {flagsStr} |");
+			}
+			return sb.ToString();
+		}
+
+		public static string FormatThreadExceptions(IEnumerable<ThreadExceptionInfo> exceptionInfos) {
+			var sb = new StringBuilder();
+			var infoList = exceptionInfos.ToList();
+
+			if (infoList.Count == 0) {
+				sb.AppendLine("**No exceptions found on any threads.**");
+				return sb.ToString();
+			}
+
+			foreach (var info in infoList) {
+				sb.AppendLine($"### Thread {info.ManagedThreadId} (OS ID: {info.OSThreadId:X})");
+				sb.AppendLine();
+
+				if (info.Exception == null) {
+					sb.AppendLine("**No exception on this thread.**");
+					sb.AppendLine();
+					continue;
+				}
+
+				FormatExceptionDetails(sb, info.Exception, 0);
+				sb.AppendLine();
+			}
+
+			return sb.ToString();
+		}
+
+		private static void FormatExceptionDetails(StringBuilder sb, ExceptionDetails exception, int depth) {
+			string indent = new string(' ', depth * 2);
+			string prefix = depth == 0 ? "**Exception:**" : "**Inner Exception:**";
+
+			sb.AppendLine($"{indent}{prefix}");
+			sb.AppendLine($"{indent}- **Address:** {exception.Address:X16}");
+			sb.AppendLine($"{indent}- **Type:** {exception.TypeName}");
+			if (!string.IsNullOrEmpty(exception.Message)) {
+				sb.AppendLine($"{indent}- **Message:** {exception.Message}");
+			}
+			sb.AppendLine($"{indent}- **HResult:** 0x{exception.HResult:X8}");
+
+			if (exception.StackTrace.Count > 0) {
+				sb.AppendLine($"{indent}- **Stack Trace:**");
+				sb.AppendLine($"{indent}```text");
+				foreach (var frame in exception.StackTrace.Take(20)) {
+					sb.AppendLine($"{indent}{frame}");
+				}
+				if (exception.StackTrace.Count > 20) {
+					sb.AppendLine($"{indent}... ({exception.StackTrace.Count - 20} more frames)");
+				}
+				sb.AppendLine($"{indent}```");
+			}
+
+			foreach (var inner in exception.InnerExceptions) {
+				sb.AppendLine();
+				FormatExceptionDetails(sb, inner, depth + 1);
+			}
+		}
 	}
 }

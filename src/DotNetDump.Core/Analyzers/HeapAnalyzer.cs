@@ -9,6 +9,7 @@ using Microsoft.Diagnostics.Runtime;
 namespace DotNetDump.Core.Analyzers {
 	public class HeapAnalyzer {
 		private readonly IDumpContext _context;
+		private IEnumerable<HeapStatItem>? _cachedStats;
 
 		public HeapAnalyzer(IDumpContext context) {
 			_context = context;
@@ -21,17 +22,23 @@ namespace DotNetDump.Core.Analyzers {
 		}
 
 		public IEnumerable<HeapStatItem> GetHeapStatistics(QueryParameters parameters) {
-			var heap = GetHeap();
-			var stats = from obj in heap.EnumerateObjects()
-							let type = obj.Type
-							where type != null
-							group obj by new { type.Name, type.MethodTable } into g
-							select new HeapStatItem {
-								TypeName = g.Key.Name,
-								MethodTable = g.Key.MethodTable,
-								Count = g.Count(),
-								TotalSize = g.Sum(p => (long)p.Size)
-							};
+			// Build cache on first call
+			if (_cachedStats == null) {
+				var heap = GetHeap();
+				_cachedStats = (from obj in heap.EnumerateObjects()
+									 let type = obj.Type
+									 where type != null
+									 group obj by new { type.Name, type.MethodTable } into g
+									 select new HeapStatItem {
+										 TypeName = g.Key.Name,
+										 MethodTable = g.Key.MethodTable,
+										 Count = g.Count(),
+										 TotalSize = g.Sum(p => (long)p.Size)
+									 }).ToList(); // Materialize once
+			}
+
+			// Sort and page from cache
+			var stats = _cachedStats;
 
 			if (parameters.SortBy?.ToLower() == "count") {
 				stats = parameters.SortDirection == SortDirection.Asc ? stats.OrderBy(s => s.Count) : stats.OrderByDescending(s => s.Count);
@@ -136,7 +143,7 @@ namespace DotNetDump.Core.Analyzers {
 							if (field.ElementType == ClrElementType.String) {
 								fieldModel.Value = !refObj.IsNull ? $"\"{refObj.AsString(100)}\"" : "null";
 							} else {
-								fieldModel.Value = refObj.IsNull ? "null" : $"<<{refObj.Type?.Name}>>";
+								fieldModel.Value = refObj.IsNull ? "null" : $"<{refObj.Type?.Name}>";
 							}
 						} else {
 							fieldModel.Value = ReadPrimitiveValue(obj, field)?.ToString() ?? "{error}";
@@ -216,6 +223,38 @@ namespace DotNetDump.Core.Analyzers {
 			}
 
 			return blocks.Skip(parameters.Offset).Take(parameters.Limit);
+		}
+
+		public IEnumerable<GCHandleInfo> GetGCHandles(QueryParameters parameters) {
+			var runtime = _context.Runtime;
+			if (runtime == null) return Enumerable.Empty<GCHandleInfo>();
+
+			var handles = runtime.EnumerateHandles().Select(h => new GCHandleInfo {
+				Address = h.Address,
+				Object = h.Object.Address,
+				Kind = h.HandleKind.ToString(),
+				TypeName = h.Object.Type?.Name ?? "<unknown>"
+			});
+
+			if (parameters.SortBy?.ToLower() == "kind") {
+				handles = parameters.SortDirection == SortDirection.Asc ? handles.OrderBy(h => h.Kind) : handles.OrderByDescending(h => h.Kind);
+			} else if (parameters.SortBy?.ToLower() == "typename") {
+				handles = parameters.SortDirection == SortDirection.Asc ? handles.OrderBy(h => h.TypeName) : handles.OrderByDescending(h => h.TypeName);
+			} else {
+				handles = parameters.SortDirection == SortDirection.Asc ? handles.OrderBy(h => h.Address) : handles.OrderByDescending(h => h.Address);
+			}
+
+			return handles.Skip(parameters.Offset).Take(parameters.Limit);
+		}
+
+		public IEnumerable<HeapCorruptionInfo> VerifyHeap() {
+			var heap = GetHeap();
+			return heap.VerifyHeap().Select(c => new HeapCorruptionInfo {
+				Address = c.Object.Address,
+				Object = c.Object.Address,
+				Message = c.ToString(), // ClrMD ObjectCorruption.ToString() usually gives a good message
+				Offset = 0
+			});
 		}
 	}
 }
