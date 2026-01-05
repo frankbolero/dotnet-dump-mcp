@@ -9,6 +9,7 @@ using Microsoft.Diagnostics.Runtime;
 namespace DotNetDump.Core.Analyzers {
 	public class HeapAnalyzer {
 		private readonly IDumpContext _context;
+		private IEnumerable<HeapStatItem>? _cachedStats;
 
 		public HeapAnalyzer(IDumpContext context) {
 			_context = context;
@@ -21,17 +22,23 @@ namespace DotNetDump.Core.Analyzers {
 		}
 
 		public IEnumerable<HeapStatItem> GetHeapStatistics(QueryParameters parameters) {
-			var heap = GetHeap();
-			var stats = from obj in heap.EnumerateObjects()
-							let type = obj.Type
-							where type != null
-							group obj by new { type.Name, type.MethodTable } into g
-							select new HeapStatItem {
-								TypeName = g.Key.Name,
-								MethodTable = g.Key.MethodTable,
-								Count = g.Count(),
-								TotalSize = g.Sum(p => (long)p.Size)
-							};
+			// Build cache on first call
+			if (_cachedStats == null) {
+				var heap = GetHeap();
+				_cachedStats = (from obj in heap.EnumerateObjects()
+									 let type = obj.Type
+									 where type != null
+									 group obj by new { type.Name, type.MethodTable } into g
+									 select new HeapStatItem {
+										 TypeName = g.Key.Name,
+										 MethodTable = g.Key.MethodTable,
+										 Count = g.Count(),
+										 TotalSize = g.Sum(p => (long)p.Size)
+									 }).ToList(); // Materialize once
+			}
+
+			// Sort and page from cache
+			var stats = _cachedStats;
 
 			if (parameters.SortBy?.ToLower() == "count") {
 				stats = parameters.SortDirection == SortDirection.Asc ? stats.OrderBy(s => s.Count) : stats.OrderByDescending(s => s.Count);
