@@ -110,53 +110,111 @@ namespace DotNetDump.Core.Analyzers {
 			return roots.Skip(parameters.Offset).Take(parameters.Limit);
 		}
 
-		public ObjectDetails GetObjectDetails(ulong address) {
+		public ObjectDetails GetObjectDetails(ulong address)
+		{
 			var heap = GetHeap();
 			var obj = heap.GetObject(address);
-
 			if (obj.IsNull)
 				throw new ArgumentException($"Object at {address:X} is null or invalid.");
-
-			var details = new ObjectDetails {
+			var details = new ObjectDetails
+			{
 				Address = obj.Address,
 				TypeName = obj.Type?.Name ?? "<unknown>",
 				Size = obj.Size,
 				MethodTable = obj.Type?.MethodTable ?? 0
 			};
-
-			if (obj.Type != null) {
-				foreach (var field in obj.Type.Fields) {
+			// Handle strings
+			if (obj.Type?.Name == "System.String")
+			{
+				var s = obj.AsString(201); // Read up to 201 chars
+				if (s?.Length > 200)
+				{
+					details.Value = $"\"{s.Substring(0, 200)}...\" (truncated)";
+				}
+				else
+				{
+					details.Value = $"\"{s}\"";
+				}
+				return details;
+			}
+			// Handle collections
+			if (obj.Type != null && obj.Type.IsArray)
+			{
+				details.Value = $"Array of {obj.Type.ComponentType?.Name}, Count: {obj.AsArray().Length}";
+				var array = obj.AsArray();
+				var limit = Math.Min(array.Length, 10);
+				for (int i = 0; i < limit; i++)
+				{
+					var element = array.GetObjectValue(i);
+					details.Fields.Add(new ObjectField
+					{
+						Name = $"[{i}]",
+						TypeName = element.Type?.Name ?? "<unknown>",
+						Value = GetObjectValue(element),
+						Address = element.Address,
+						IsReference = element.Type?.IsObjectReference ?? false,
+						Offset = -1
+					});
+				}
+				if (array.Length > 10)
+				{
+					details.Fields.Add(new ObjectField { Name = $"... ({array.Length - 10} more items)" });
+				}
+				return details;
+			}
+			// Handle regular objects
+			if (obj.Type != null)
+			{
+				foreach (var field in obj.Type.Fields)
+				{
 					string fieldName = field.Name ?? $"<field_{field.Offset:X}>";
-
-					var fieldModel = new ObjectField {
+					var fieldModel = new ObjectField
+					{
 						Name = fieldName,
 						TypeName = field.Type?.Name ?? "Unknown",
 						Offset = field.Offset,
 						IsReference = field.IsObjectReference
 					};
-
-					try {
-						if (field.IsObjectReference) {
+					try
+					{
+						if (field.IsObjectReference)
+						{
 							var refObj = obj.ReadObjectField(fieldName);
 							fieldModel.Address = refObj.Address;
-
-							if (field.ElementType == ClrElementType.String) {
-								fieldModel.Value = !refObj.IsNull ? $"\"{refObj.AsString(100)}\"" : "null";
-							} else {
-								fieldModel.Value = refObj.IsNull ? "null" : $"<{refObj.Type?.Name}>";
-							}
-						} else {
+							fieldModel.Value = GetObjectValue(refObj);
+						}
+						else
+						{
 							fieldModel.Value = ReadPrimitiveValue(obj, field)?.ToString() ?? "{error}";
 						}
-					} catch (Exception) {
+					}
+					catch (Exception)
+					{
 						fieldModel.Value = "{error reading}";
 					}
-
 					details.Fields.Add(fieldModel);
 				}
 			}
-
 			return details;
+		}
+
+		private string GetObjectValue(ClrObject obj)
+		{
+			if (obj.IsNull) return "null";
+
+			// For strings, show truncated value
+			if (obj.Type?.Name == "System.String")
+			{
+				var s = obj.AsString(201);
+				if (s?.Length > 200)
+				{
+					return $"\"{s.Substring(0, 200)}...\"";
+				}
+				return $"\"{s}\"";
+			}
+
+			// For other objects, show type
+			return $"<{obj.Type?.Name}>";
 		}
 
 		private object? ReadPrimitiveValue(ClrObject obj, ClrInstanceField field) {

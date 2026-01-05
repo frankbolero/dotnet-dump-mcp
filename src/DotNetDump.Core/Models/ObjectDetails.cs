@@ -7,6 +7,7 @@ public class ObjectDetails {
 	public string? TypeName { get; set; }
 	public ulong Size { get; set; }
 	public ulong MethodTable { get; set; }
+	public string? Value { get; set; }
 	public List<ObjectField> Fields { get; set; } = new();
 }
 
