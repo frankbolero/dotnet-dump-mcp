@@ -152,6 +152,20 @@ public class IntegrationTests : IDisposable {
 	}
 
 	[Fact]
+	public void ThreadAnalyzer_GetDetailedStacks_ReturnsData() {
+		if (!File.Exists(_dumpPath)) return;
+
+		var analyzer = new ThreadAnalyzer(_context);
+		var stacks = analyzer.GetDetailedStacks(new QueryParameters { Limit = 10 }, maxFrames: 20).ToList();
+
+		Assert.NotEmpty(stacks);
+		Assert.All(stacks, stack => {
+			Assert.True(stack.OSThreadId > 0 || stack.ManagedThreadId >= 0);
+			Assert.NotNull(stack.Frames);
+		});
+	}
+
+	[Fact]
 	public void ModuleAnalyzer_GetModules_ReturnsData() {
 		if (!File.Exists(_dumpPath)) return;
 
