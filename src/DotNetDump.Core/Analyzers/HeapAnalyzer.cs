@@ -8,6 +8,8 @@ using Microsoft.Diagnostics.Runtime;
 
 namespace DotNetDump.Core.Analyzers {
 	public class HeapAnalyzer {
+		private const int MaxStringPreviewLength = 200;
+		private const int MaxArrayPreviewSize = 10;
 		private readonly IDumpContext _context;
 		private IEnumerable<HeapStatItem>? _cachedStats;
 
@@ -126,15 +128,7 @@ namespace DotNetDump.Core.Analyzers {
 			// Handle strings
 			if (obj.Type?.Name == "System.String")
 			{
-				var s = obj.AsString(201); // Read up to 201 chars
-				if (s?.Length > 200)
-				{
-					details.Value = $"\"{s.Substring(0, 200)}...\" (truncated)";
-				}
-				else
-				{
-					details.Value = $"\"{s}\"";
-				}
+				details.Value = GetObjectValue(obj);
 				return details;
 			}
 			// Handle collections
@@ -142,7 +136,7 @@ namespace DotNetDump.Core.Analyzers {
 			{
 				details.Value = $"Array of {obj.Type.ComponentType?.Name}, Count: {obj.AsArray().Length}";
 				var array = obj.AsArray();
-				var limit = Math.Min(array.Length, 10);
+				var limit = Math.Min(array.Length, MaxArrayPreviewSize);
 				for (int i = 0; i < limit; i++)
 				{
 					var element = array.GetObjectValue(i);
@@ -156,9 +150,9 @@ namespace DotNetDump.Core.Analyzers {
 						Offset = -1
 					});
 				}
-				if (array.Length > 10)
+				if (array.Length > MaxArrayPreviewSize)
 				{
-					details.Fields.Add(new ObjectField { Name = $"... ({array.Length - 10} more items)" });
+					details.Fields.Add(new ObjectField { Name = $"... ({array.Length - MaxArrayPreviewSize} more items)" });
 				}
 				return details;
 			}
@@ -205,10 +199,10 @@ namespace DotNetDump.Core.Analyzers {
 			// For strings, show truncated value
 			if (obj.Type?.Name == "System.String")
 			{
-				var s = obj.AsString(201);
-				if (s?.Length > 200)
+				var s = obj.AsString(MaxStringPreviewLength + 1);
+				if (s?.Length > MaxStringPreviewLength)
 				{
-					return $"\"{s.Substring(0, 200)}...\"";
+					return $"\"{s.Substring(0, MaxStringPreviewLength)}...\" (truncated)";
 				}
 				return $"\"{s}\"";
 			}
