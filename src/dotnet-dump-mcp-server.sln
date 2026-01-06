@@ -3,22 +3,20 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetDump.Core", "DotNetDump.Core\DotNetDump.Core.csproj", "{C82DACE6-370E-4663-AFEB-DB53854C3F11}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetDump.Core", "src\DotNetDump.Core\DotNetDump.Core.csproj", "{C82DACE6-370E-4663-AFEB-DB53854C3F11}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetDump.Server", "DotNetDump.Server\DotNetDump.Server.csproj", "{CCD97608-DA77-4872-AD8B-88059D8C26F3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetDump.Server", "src\DotNetDump.Server\DotNetDump.Server.csproj", "{CCD97608-DA77-4872-AD8B-88059D8C26F3}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetDump.Tests", "src\DotNetDump.Tests\DotNetDump.Tests.csproj", "{24A3A968-CC90-4FD6-BA76-4470D3B5F7CC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetDump.Tests", "DotNetDump.Tests\DotNetDump.Tests.csproj", "{24A3A968-CC90-4FD6-BA76-4470D3B5F7CC}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFolder", "SolutionFolder", "{92C95C6F-DFDC-44BA-8B60-BE933671F3D5}"
 	ProjectSection(SolutionItems) = preProject
-		AGENTS.md = AGENTS.md
-		README.md = README.md
-		docs\OUTPUT_STRATEGY.md = docs\OUTPUT_STRATEGY.md
-		docs\PLAN.md = docs\PLAN.md
-		docs\PRODUCT_ARCHITECTURE.md = docs\PRODUCT_ARCHITECTURE.md
-		docs\SECURITY_PERFORMANCE_ANALYSIS.md = docs\SECURITY_PERFORMANCE_ANALYSIS.md
+		AGENTS.md = ../AGENTS.md
+		README.md = ../README.md
+		OUTPUT_STRATEGY.md = ../docs/misc/OUTPUT_STRATEGY.md
+		PLAN.md = ../docs/PLAN.md
+		PRODUCT_ARCHITECTURE.md = ../docs/misc/PRODUCT_ARCHITECTURE.md
+		SECURITY_PERFORMANCE_ANALYSIS.md = ../docs/misc/SECURITY_PERFORMANCE_ANALYSIS.md
 	EndProjectSection
 EndProject
 Global
