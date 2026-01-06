@@ -75,7 +75,7 @@ public class IntegrationTests : IDisposable {
 			.FirstOrDefault(o => o.Type != null && o.Type.Name == "System.String");
 		if (obj.Address == 0) return; // No string found
 
-		// This test is tricky because we need an object that HAS roots. 
+		// This test is tricky because we need an object that HAS roots.
 		// Strings might not be rooted if they are garbage.
 		// But let's try to call the method and ensure it doesn't crash.
 		var roots = analyzer.GetGCRoots(obj.Address, new QueryParameters { Limit = 10 }).ToList();

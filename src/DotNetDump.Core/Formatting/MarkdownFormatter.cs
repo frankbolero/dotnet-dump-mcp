@@ -76,26 +76,22 @@ namespace DotNetDump.Core.Formatting {
 			return sb.ToString();
 		}
 
-		public static string FormatObjectDetails(ObjectDetails details)
-		{
+		public static string FormatObjectDetails(ObjectDetails details) {
 			var sb = new StringBuilder();
 			sb.AppendLine($"**Object:** `{details.Address:X16}`");
 			sb.AppendLine($"**Type:** `{details.TypeName}`");
 			sb.AppendLine($"**Size:** {details.Size:N0} bytes");
 			sb.AppendLine($"**MethodTable:** `{details.MethodTable:X16}`");
 
-			if (!string.IsNullOrEmpty(details.Value))
-			{
+			if (!string.IsNullOrEmpty(details.Value)) {
 				sb.AppendLine($"**Value:** {details.Value}");
 			}
 
-			if (details.Fields.Count > 0)
-			{
+			if (details.Fields.Count > 0) {
 				sb.AppendLine();
 				sb.AppendLine("| Offset | Name | Type | Value | Address |");
 				sb.AppendLine("|--------|------|------|-------|---------|");
-				foreach (var field in details.Fields)
-				{
+				foreach (var field in details.Fields) {
 					string addr = field.Address != 0 ? $"`{field.Address:X16}`" : "";
 					string offset = field.Offset != -1 ? $"{field.Offset:X}" : "-";
 					sb.AppendLine($"| {offset} | `{field.Name}` | `{field.TypeName}` | {field.Value} | {addr} |");
