@@ -25,6 +25,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install GitVersion
+        uses: gittools/actions/gitversion/setup@v0.10.2
+        with:
+          versionSpec: '5.x'
+
+      - name: Determine Version
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v0.10.2
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -48,12 +59,17 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}}
             type=sha
+            type=raw,value=${{ steps.gitversion.outputs.semVer }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: ./src
+          context: .
+          file: src/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=${{ steps.gitversion.outputs.semVer }}
+            ASSEMBLY_VERSION=${{ steps.gitversion.outputs.assemblySemVer }}
