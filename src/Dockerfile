@@ -6,7 +6,7 @@ WORKDIR /app
 COPY . .
 
 # Build
-RUN dotnet publish src/DotNetDump.Server/DotNetDump.Server.csproj -c Release -o /app/out --framework net9.0
+RUN dotnet publish DotNetDump.Server/DotNetDump.Server.csproj -c Release -o /app/out --framework net9.0
 
 # Runtime image
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime
