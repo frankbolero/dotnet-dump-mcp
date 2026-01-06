@@ -25,15 +25,17 @@ This is the easiest way to run the server, especially if you are on a Mac analyz
       dotnet-dump-mcp-server
     ```
 
+    > **Tip**: The `DUMP_PATH` variable is optional. If omitted, the server will start without a dump, and your AI agent can use the `load_dump` tool to select one later.
+
     > **Note for Mac users with Linux dumps**: Add `--platform linux/amd64` to the run command if you are analyzing an x64 Linux dump on Apple Silicon.
 
 ### Option 2: Running Locally
 
-If you have the .NET SDK 8, 9 or 20 installed and your OS matches the dump's OS (e.g., Windows dump on Windows, Linux on Linux).
+If you have the .NET SDK 8, 9 or 10 installed and your OS matches the dump's OS (e.g., Windows dump on Windows, Linux on Linux).
 
 **MacOS / Linux**:
 ```bash
-# Set the dump path and run
+# Set the dump path (optional) and run
 export DUMP_PATH="/path/to/your/dump.core"
 dotnet run --project src/DotNetDump.Server/DotNetDump.Server.csproj --framework net9.0
 ```
