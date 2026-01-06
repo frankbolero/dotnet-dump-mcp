@@ -1,70 +1,80 @@
 # dotnet-dump-mcp-server
 
-An MCP Server to help you and your AI friend analyze .NET memory dumps.
+**Analyze .NET memory dumps with the help of your AI Assistant.**
 
-## Technology
-
-- **Framework**: .NET 8 / 9
-- **Libraries**:
-  - `Microsoft.Diagnostics.Runtime` (ClrMD) for dump analysis.
-  - `ModelContextProtocol` for AI agent communication.
-  - `Microsoft.Extensions.Hosting` for structured application lifecycle.
-
-## Important
-
-- Always use `dotnet format` to ensure code formatting.
-
-## Usage
-
-This server communicates via Stdio using the Model Context Protocol. It requires a path to a memory dump file to initialize.
-
-### 1. Using Docker (Recommended for Cross-Platform)
-
-Docker is the preferred method because it solves the "Architecture Mismatch" problem (e.g., analyzing an AMD64 Linux dump on an ARM64 Mac) and automatically handles the Data Access Component (DAC) fetching.
-
-#### Build the image
-```bash
-docker build -t dotnet-dump-mcp-server .
-```
-
-#### Run the server
-You must mount the directory containing your dump file and provide the path via the `DUMP_PATH` environment variable.
-
-```bash
-docker run --rm -i \
-  -v "/path/to/your/dumps:/dumps" \
-  -e DUMP_PATH=/dumps/your_dump.core \
-  dotnet-dump-mcp-server
-```
-
-*Note: Use `--platform linux/amd64` if your dump was generated on an AMD64 Linux system and you are running on an ARM64 machine.*
+This project is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that wraps the powerful `Microsoft.Diagnostics.Runtime` (ClrMD) library. It allows AI agents (like Claude CLI, Gemini CLI, Zed Agent or Cursor) to inspect .NET core dumps, analyze the heap, check threads, and diagnose memory leaks or deadlocks directly.
 
 ---
 
-### 2. Running Locally (Native)
+## 🚀 Quick Start
 
-Use this method if your local machine architecture matches the dump file's architecture.
+### Option 1: Using Docker (Recommended)
+This is the easiest way to run the server, especially if you are on a Mac analyzing Linux dumps (fixes architecture mismatches).
 
-#### Prerequisites
-- .NET 8 or 9 SDK installed.
-- `dotnet-symbol` tool (optional, but recommended for fetching DACs):
-  ```bash
-  dotnet tool install --global dotnet-symbol
-  ```
+1.  **Build the image**:
+    ```bash
+    docker build -t dotnet-dump-mcp-server .
+    ```
 
-#### Run the server
+2.  **Run the server**:
+    Mount the folder containing your dump files to `/dumps` inside the container.
+    ```bash
+    docker run --rm -i \
+      -v "/path/to/your/dumps:/dumps" \
+      -e DUMP_PATH=/dumps/your_dump.core \
+      dotnet-dump-mcp-server
+    ```
+
+    > **Tip**: The `DUMP_PATH` variable is optional. If omitted, the server will start without a dump, and your AI agent can use the `load_dump` tool to select one later.
+
+    > **Note for Mac users with Linux dumps**: Add `--platform linux/amd64` to the run command if you are analyzing an x64 Linux dump on Apple Silicon.
+
+### Option 2: Running Locally
+
+If you have the .NET SDK 8, 9 or 10 installed and your OS matches the dump's OS (e.g., Windows dump on Windows, Linux on Linux).
+
+**MacOS / Linux**:
 ```bash
+# Set the dump path (optional) and run
 export DUMP_PATH="/path/to/your/dump.core"
 dotnet run --project src/DotNetDump.Server/DotNetDump.Server.csproj --framework net9.0
 ```
 
+**Windows (PowerShell)**:
+```powershell
+$env:DUMP_PATH = "C:\path\to\your\dump.dmp"
+dotnet run --project src\DotNetDump.Server\DotNetDump.Server.csproj --framework net9.0
+```
+
 ---
 
-### 3. Integration with AI Agents
+## ✨ Features
 
-To use this with an MCP-compatible agent (like Cursor, Windsurf, or Claude Desktop), add the following to your configuration:
+The server exposes the following tools to your AI agent:
 
-#### Docker Configuration (Example)
+*   **Heap Analysis**:
+    *   `dump_heap`: Get a statistical summary of the managed heap (top objects by size/count).
+    *   `list_objects`: List specific objects with filtering and pagination.
+    *   `ee_heap`: View internal CLR heap segments.
+*   **Object Inspection**:
+    *   `dump_obj`: detailed view of an object's fields and values.
+    *   `gc_root`: Find why an object is being kept in memory (reference chains).
+    *   `gchandles`: List Garbage Collector handles.
+*   **Thread & Stack Analysis**:
+    *   `clr_threads`: List all managed threads and their states (Live, Dead, etc.).
+    *   `clr_stack`: Get stack traces, optionally grouped by unique frames.
+    *   `thread_pool`: View CLR ThreadPool status (completion ports, workers).
+*   **System & Modules**:
+    *   `clr_modules`: List loaded assemblies and modules.
+    *   `sync_blk`: Analyze synchronization blocks to find locked objects (deadlock detection).
+
+---
+
+## 🤖 Agent Configuration
+
+Add this server to your MCP client configuration (e.g., `claude_desktop_config.json` or Cursor Settings).
+
+### Docker Config (Example)
 ```json
 {
   "mcpServers": {
@@ -72,8 +82,8 @@ To use this with an MCP-compatible agent (like Cursor, Windsurf, or Claude Deskt
       "command": "docker",
       "args": [
         "run", "--rm", "-i",
-        "-v", "/Users/path/to/dumps:/dumps",
-        "-e", "DUMP_PATH=/dumps/my_app.core",
+        "-v", "/Users/yourname/dumps:/dumps",
+        "-e", "DUMP_PATH=/dumps/crash.core",
         "dotnet-dump-mcp-server"
       ]
     }
@@ -81,7 +91,7 @@ To use this with an MCP-compatible agent (like Cursor, Windsurf, or Claude Deskt
 }
 ```
 
-#### Local Configuration (Example)
+### Local Config (Example)
 ```json
 {
   "mcpServers": {
@@ -89,30 +99,43 @@ To use this with an MCP-compatible agent (like Cursor, Windsurf, or Claude Deskt
       "command": "dotnet",
       "args": [
         "run",
-        "--framework",
-        "net9.0",
         "--project",
-        "/Users/USERNAME/src/dotnet-dump-mpc-server/src/DotNetDump.Server/DotNetDump.Server.csproj"
-      ]
+        "/absolute/path/to/dotnet-dump-mcp-server/src/DotNetDump.Server/DotNetDump.Server.csproj",
+        "--framework", "net9.0"
+      ],
+      "env": {
+        "DUMP_PATH": "/path/to/your/dump.core"
+      }
     }
   }
 }
 ```
 
-## Commands Supported
+---
 
-The following tools are exposed to the AI Agent:
-- `dump_heap`: Statistical summary of the managed heap.
-- `list_objects`: Detailed list of objects (with filtering and pagination).
-- `clr_threads`: List of all managed threads and their states.
-- `clr_stack`: Stack traces grouped by identical call sites.
-- `clr_modules`: List of loaded managed modules.
-- `gc_root`: Finds garbage collection roots for a specific object.
-- `sync_blk`: Displays the sync blocks (locks) for the process.
-- `thread_pool`: Displays information about the CLR ThreadPool.
+## 🛠️ Development
 
-## Project Structure
+To contribute or test the server locally, you can use the MCP Inspector.
 
-- `DotNetDump.Core`: Class library containing the analyzer logic and formatting.
-- `DotNetDump.Server`: The MCP Server host handling transport and tool registration.
-- `DotNetDump.Tests`: Integration tests against sample dumps.
+1.  **Clone the repo**:
+    ```bash
+    git clone https://github.com/yourusername/dotnet-dump-mcp-server.git
+    cd dotnet-dump-mcp-server
+    ```
+
+2.  **Run with MCP Inspector**:
+    This launches a web UI to interact with the server directly, allowing you to call tools and see the output.
+    
+    ```bash
+    export DUMP_PATH="/path/to/sample.core"
+    npx @modelcontextprotocol/inspector \
+      dotnet run --project src/DotNetDump.Server/DotNetDump.Server.csproj --framework net9.0
+    ```
+
+### Project Structure
+*   `src/DotNetDump.Core`: The analysis logic (ClrMD wrappers).
+*   `src/DotNetDump.Server`: The MCP Server implementation.
+*   `tests`: Integration tests.
+
+### Code Style
+*   Run `dotnet format` before committing to ensure code style consistency.

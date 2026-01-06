@@ -85,5 +85,5 @@ MCP Clients usually run a command (stdio). To use the Docker approach, the confi
 
 ## Summary
 *   **Build**: Standard `dotnet build`.
-*   **Run**: Always inside Docker.
+*   **Run**: Inside Docker or locally when CPU architecture and platform matches dump.
 *   **Cross-Platform**: Solved via Docker Desktop's QEMU/Rosetta emulation.
