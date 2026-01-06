@@ -48,6 +48,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}}
             type=sha
+            type=raw,value=${{ steps.gitversion.outputs.semVer }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -57,3 +58,5 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=${{ steps.gitversion.outputs.semVer }}

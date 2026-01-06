@@ -1,12 +1,13 @@
 # Multi-stage build
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /app
+ARG VERSION=0.0.0-local.0
 
 # Copy source
 COPY . .
 
 # Build
-RUN dotnet publish DotNetDump.Server/DotNetDump.Server.csproj -c Release -o /app/out --framework net9.0
+RUN dotnet publish DotNetDump.Server/DotNetDump.Server.csproj -c Release -o /app/out --framework net9.0 /p:Version=$VERSION /p:AssemblyVersion=$VERSION /p:FileVersion=$VERSION /p:InformationalVersion=$VERSION
 
 # Runtime image
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime
