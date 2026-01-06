@@ -24,8 +24,8 @@ public class DumpContext : IDumpContext {
 
 		// Attempt to fetch DAC if not provided and not found locally?
 		// For now, we assume the environment (container) has what it needs or the user provides dacPath.
-		// In the container model, 'dotnet-symbol' might need to be run *before* this method is called 
-		// if we want auto-downloading inside the C# app. 
+		// In the container model, 'dotnet-symbol' might need to be run *before* this method is called
+		// if we want auto-downloading inside the C# app.
 		// Ideally, we might want to shell out to dotnet-symbol here if it fails?
 		// For now, let's keep the core logic simple: Load what exists.
 
