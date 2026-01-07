@@ -75,6 +75,8 @@ The server exposes the following tools to your AI agent:
 Add this server to your MCP client configuration (e.g., `claude_desktop_config.json` or Cursor Settings).
 
 ### Docker Config (Example)
+
+Note that we set a timeout to 10 minutes (600000 ms) due to that some requests might take a large amount of time (dump_heap as an example).
 ```json
 {
   "mcpServers": {
@@ -85,7 +87,8 @@ Add this server to your MCP client configuration (e.g., `claude_desktop_config.j
         "-v", "/Users/yourname/dumps:/dumps",
         "-e", "DUMP_PATH=/dumps/crash.core",
         "dotnet-dump-mcp-server"
-      ]
+      ],
+      "timeout": 600000
     }
   }
 }
