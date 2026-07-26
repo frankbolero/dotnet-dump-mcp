@@ -3,6 +3,19 @@ using Microsoft.Diagnostics.Runtime;
 namespace DotNetDump.Core;
 
 public class DumpContext : IDumpContext {
+	/// <summary>
+	/// Semicolon-separated symbol server URLs. When unset, dump loading stays offline.
+	/// </summary>
+	public const string SymbolPathsVariable = "DOTNETDUMP_SYMBOL_PATHS";
+
+	/// <summary>
+	/// Directory used to cache downloaded symbols. Only consulted when
+	/// <see cref="SymbolPathsVariable"/> is set.
+	/// </summary>
+	public const string SymbolCacheVariable = "DOTNETDUMP_SYMBOL_CACHE";
+
+	private const string DefaultSymbolCachePath = "/dumps/.symcache";
+
 	private DataTarget? _dataTarget;
 	private ClrRuntime? _runtime;
 
@@ -29,7 +42,7 @@ public class DumpContext : IDumpContext {
 		// Ideally, we might want to shell out to dotnet-symbol here if it fails?
 		// For now, let's keep the core logic simple: Load what exists.
 
-		_dataTarget = DataTarget.LoadDump(dumpPath);
+		_dataTarget = DataTarget.LoadDump(dumpPath, CreateOptions());
 
 		ClrInfo? clrInfo = _dataTarget.ClrVersions.FirstOrDefault();
 		if (clrInfo == null)
@@ -50,6 +63,32 @@ public class DumpContext : IDumpContext {
 				throw;
 			}
 		}
+	}
+
+	/// <summary>
+	/// Builds the ClrMD options used to open a dump.
+	/// </summary>
+	/// <remarks>
+	/// ClrMD 4 changed two defaults that matter to us: it no longer reads
+	/// <c>_NT_SYMBOL_PATH</c>, and it contacts https://msdl.microsoft.com on demand unless
+	/// told otherwise. The container fetches the DAC up front via <c>dotnet-symbol</c>
+	/// (see entrypoint.sh), so we stay offline by default rather than adding an unbounded
+	/// network round-trip to every dump load. Set DOTNETDUMP_SYMBOL_PATHS to opt back in.
+	/// </remarks>
+	private static DataTargetOptions CreateOptions() {
+		string? symbolPaths = Environment.GetEnvironmentVariable(SymbolPathsVariable);
+
+		if (string.IsNullOrWhiteSpace(symbolPaths))
+			return new DataTargetOptions { SymbolPaths = [] };
+
+		string? cachePath = Environment.GetEnvironmentVariable(SymbolCacheVariable);
+
+		return new DataTargetOptions {
+			SymbolPaths = symbolPaths.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+			// The ClrMD default lands in the system temp directory, which is ephemeral in a
+			// container and re-downloads on every restart.
+			SymbolCachePath = string.IsNullOrWhiteSpace(cachePath) ? DefaultSymbolCachePath : cachePath
+		};
 	}
 
 	public void Unload() {

@@ -116,6 +116,34 @@ Note that we set a timeout to 10 minutes (600000 ms) due to that some requests m
 
 ---
 
+## 🔣 Symbol Resolution
+
+The server ships with ClrMD 4.x. **Dump loading is offline by default** — no symbol server is
+contacted. In the Docker image, `entrypoint.sh` already fetches the matching DAC with
+`dotnet-symbol --dac-only` before the server starts, so the common path needs no network
+access at all.
+
+If you need ClrMD to fetch binaries itself, opt in with these environment variables:
+
+| Variable | Description |
+| :--- | :--- |
+| `DOTNETDUMP_SYMBOL_PATHS` | Semicolon-separated symbol server URLs. Unset (the default) keeps dump loading fully offline. |
+| `DOTNETDUMP_SYMBOL_CACHE` | Directory for downloaded symbols. Defaults to `/dumps/.symcache`, which is on the mounted volume so it survives container restarts. |
+
+```json
+"env": {
+  "DUMP_PATH": "/dumps/crash.core",
+  "DOTNETDUMP_SYMBOL_PATHS": "https://msdl.microsoft.com/download/symbols"
+}
+```
+
+> **Upgrading from an older build?** ClrMD 4 no longer reads the `_NT_SYMBOL_PATH`
+> environment variable. If you previously relied on it, switch to `DOTNETDUMP_SYMBOL_PATHS`.
+> Enabling a symbol server means dump loading may block on network I/O, which is worth
+> keeping in mind alongside the 10-minute client timeout noted above.
+
+---
+
 ## 🛠️ Development
 
 To contribute or test the server locally, you can use the MCP Inspector.

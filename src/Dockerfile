@@ -8,7 +8,7 @@ ARG ASSEMBLY_VERSION=0.0.0.0
 COPY . .
 
 # Build
-RUN dotnet publish src/DotNetDump.Server/DotNetDump.Server.csproj -c Release -o /app/out --framework net9.0 /p:Version=$VERSION /p:AssemblyVersion=$ASSEMBLY_VERSION /p:FileVersion=$ASSEMBLY_VERSION /p:InformationalVersion=$VERSION
+RUN dotnet publish src/DotNetDump.Server/DotNetDump.Server.csproj -c Release -o /app/out --framework net10.0 /p:Version=$VERSION /p:AssemblyVersion=$ASSEMBLY_VERSION /p:FileVersion=$ASSEMBLY_VERSION /p:InformationalVersion=$VERSION
 
 # Runtime image
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime

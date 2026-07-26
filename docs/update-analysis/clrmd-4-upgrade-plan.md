@@ -1,8 +1,57 @@
 # ClrMD 3.1.512801 → 4.0.732401 upgrade plan
 
-**Status:** analysis complete, no code changed yet.
+**Status:** ✅ **upgrade applied and verified.** See [§0](#0-what-was-done) for what shipped.
 **Date:** 2026-07-26
 **Companion document:** [`api-diff.md`](./api-diff.md) — full generated public API diff.
+
+---
+
+## 0. What was done
+
+Steps 4.1, 4.2, 4.3 and the README update were applied. Sections 4.4 and 4.5 were
+deliberately left out of scope and remain open tickets.
+
+| File | Change |
+|---|---|
+| `src/DotNetDump.Core/DotNetDump.Core.csproj` | ClrMD `3.1.512801` → `4.0.732401` |
+| `src/exploration/DotNetDumpExplorer/DotNetDumpExplorer.csproj` | ClrMD `3.1.512801` → `4.0.732401` |
+| `src/DotNetDump.Core/DumpContext.cs` | Added `CreateOptions()`; `LoadDump` now takes explicit `DataTargetOptions`. Offline by default, opt in via `DOTNETDUMP_SYMBOL_PATHS` / `DOTNETDUMP_SYMBOL_CACHE` |
+| `src/Dockerfile` | Publish framework `net9.0` → `net10.0` |
+| `README.md` | New "Symbol Resolution" section; documents the env vars and the `_NT_SYMBOL_PATH` removal |
+
+### Verification performed
+
+A real dump was generated for this purpose (`dotnet-dump collect --type Full`, 6.0 GB, from
+a .NET 10 target process allocating 50k strings + 50k `StringBuilder`s, with a held lock, a
+background thread and a caught nested exception).
+
+1. **Build** — all 4 projects, all 3 TFMs: 0 errors. Warning counts identical to the
+   3.1.512801 baseline (4× `CS8600`, 48× `CS8602`, all pre-existing).
+2. **Behavioural diff** — a harness exercised all 20 analyzer entry points across
+   `HeapAnalyzer`, `ThreadAnalyzer`, `ModuleAnalyzer` and `MetadataAnalyzer` against the same
+   dump on old-code/v3 and new-code/v4. Output was **byte-identical** apart from the load
+   timing line. Zero exceptions on either version.
+3. **Performance** — v4 is faster, not slower: dump load `1017 ms → 260 ms`, full analyzer
+   sweep `1787 ms → 1165 ms`.
+4. **Offline load** — confirmed the new default resolves the DAC locally with
+   `SymbolPaths = []`, i.e. no symbol server contacted. This was the primary risk in §3.1.
+5. **Symbol opt-in** — all four config permutations verified: unset → offline;
+   `DOTNETDUMP_SYMBOL_PATHS` set → paths parsed and trimmed with cache at `/dumps/.symcache`;
+   `DOTNETDUMP_SYMBOL_CACHE` set → honoured; whitespace-only → falls back to offline.
+6. **Test suite** — `dotnet test` on net8.0, net9.0 and net10.0: **24/24 passed** on each,
+   with the generated dump temporarily linked in as the fixture (see the caveat below).
+
+### Caveat that still stands
+
+The dump used for verification was generated ad hoc and is **not committed** — the temporary
+fixture link was removed afterwards, so the repository is unchanged in that respect. That
+means §5 is still open: on a clean checkout those 24 tests go back to passing without
+asserting anything. The upgrade itself is verified; the *ongoing* regression safety is not.
+Steps 5.1 and 5.2 remain worth doing.
+
+Not re-verified, because it needs a Linux container build: the offline behaviour inside the
+actual Docker image with egress blocked (§5.4). The mechanism is confirmed on macOS and the
+code path is platform-independent, but the containerised run is untested.
 
 ---
 
@@ -361,16 +410,18 @@ Treat `api-diff.md` as the source of truth over the guide.
 
 ## 7. Suggested sequencing
 
-| # | Step | Blocking? |
+| # | Step | Status |
 |---|---|---|
-| 1 | Land the test-fixture work from §5.1–5.2 so there is a real baseline | **Yes** — nothing else is verifiable without it |
-| 2 | Capture analyzer output baseline on 3.1.512801 (§5.3) | Yes |
-| 3 | Bump the package in both csproj files (§4.1) | — |
-| 4 | Add explicit `DataTargetOptions` to `DumpContext` (§4.2) | Yes — do not ship the implicit-network default |
-| 5 | Switch the Dockerfile publish to net10.0 (§4.3) | No |
-| 6 | Diff analyzer output vs. baseline; run the offline-container and heap-timing checks (§5.3–5.5) | Yes |
-| 7 | Update README: new symbol env vars, `_NT_SYMBOL_PATH` no longer honoured | No |
-| 8 | Separate tickets: `EnumerateAdditionalRoots` (§4.4), the fabricated thread/type fields (§4.5), the `MSB5009` solution file (§1) | No |
+| 1 | Capture analyzer output baseline on 3.1.512801 (§5.3) | ✅ done — ad hoc dump, see §0 |
+| 2 | Bump the package in both csproj files (§4.1) | ✅ done |
+| 3 | Add explicit `DataTargetOptions` to `DumpContext` (§4.2) | ✅ done — offline by default |
+| 4 | Switch the Dockerfile publish to net10.0 (§4.3) | ✅ done |
+| 5 | Diff analyzer output vs. baseline; heap-timing check (§5.3, §5.5) | ✅ done — identical output, v4 faster |
+| 6 | Update README: symbol env vars, `_NT_SYMBOL_PATH` no longer honoured | ✅ done |
+| 7 | Commit a permanent test fixture + `Assert.Skip` (§5.1–5.2) | ⬜ **open** — the tests still self-skip on a clean checkout |
+| 8 | Offline check inside the real container with egress blocked (§5.4) | ⬜ open — needs a Linux image build |
+| 9 | Separate tickets: `EnumerateAdditionalRoots` (§4.4), the fabricated thread/type fields (§4.5), the `MSB5009` solution file (§1) | ⬜ open |
 
-Steps 3 and 5 are a few minutes of work. The real cost of this upgrade is steps 1, 2, and 6
-— building the test coverage that should exist regardless, and which currently does not.
+The upgrade itself turned out to be cheap and is fully verified. What remains is the test
+coverage that should exist regardless of this change — step 7 is the one worth prioritising,
+since without it the next ClrMD bump gets no safety net either.
