@@ -7,6 +7,14 @@ actually returns, plus the new-capability opportunities in
 **Companion documents:** [`PLAN.md`](./PLAN.md) (claims all commands ✅),
 [`update-analysis/clrmd-4-upgrade-plan.md`](./update-analysis/clrmd-4-upgrade-plan.md).
 
+> **Status update — 2026-07-26, after this review:** Blocks 1–3 of [§7](#7-recommended-order-of-work)
+> have been implemented, along with the test layer that makes them stick. All six ❌ commands and all
+> ten ⚠️ commands listed below are fixed, verified against a real dump. The findings are kept in the
+> past tense where they describe what *was* wrong, because they document why the code now looks the
+> way it does. What remains open: the committed dump fixture (Block 2, step 8 — the integration tests
+> still skip on a clean checkout), and Block 4's new commands. See
+> [§8](#8-what-was-implemented) for the change summary.
+
 ---
 
 ## 0. Headline
@@ -476,3 +484,84 @@ Grouped so that each block leaves the tree in a coherent state.
 Blocks 1 and 2 together are the difference between a tool surface that looks complete and one
 that is. Nothing in Block 1 needs an API that ClrMD 4 introduced — six of the seven items were
 fixable before the upgrade too.
+
+---
+
+## 8. What was implemented
+
+Applied 2026-07-26. Everything here was verified against a real `--type Heap` dump of a purpose-built
+target app; the tool output quoted in [§3](#3-the-six-broken-commands-with-evidence) was re-run and
+now produces correct results.
+
+### New pure helpers (`Core/Utilities/`)
+
+The logic behind most of the ❌ findings turned out to be pure functions over enums and primitives,
+embedded inside analyzer methods where nothing could reach them. Extracting them made the fixes
+unit-testable with no dump, no fakes, and no abstraction layer over ClrMD:
+
+| Helper | Replaces |
+|---|---|
+| `AddressParser` | Eight hand-rolled `ulong.TryParse(NumberStyles.HexNumber)` call sites that rejected `0x` |
+| `ThreadStateDecoder` | Six hardcoded `false`/`"Unknown"` constants in `ThreadAnalyzer`, plus the `0xFFFFFFFF` lock count |
+| `SegmentClassifier` | The `GCSegmentKind` switch that mapped every modern segment to `-1` |
+| `TypeFlagsDecoder` | Three hardcoded `false` flags in `MetadataAnalyzer` |
+| `ModuleClassifier` | The substring-over-full-path system-module test |
+| `RootPathFinder` | The direct-match root loop — this is the gcroot rewrite |
+| `ExceptionMapper` | `ThreadAnalyzer.BuildExceptionDetails`, now shared with heap and by-address lookup |
+
+`RootPathFinder` is expressed over `Func<ulong, IEnumerable<ulong>>` rather than ClrMD types, so the
+search is tested against hand-built graphs — including a cycle, an unrooted target, an unreadable
+object, and a traversal-budget cutoff, none of which a healthy fixture dump can produce.
+
+### Behaviour now verified on a real dump
+
+| Command | Before | After |
+|---|---|---|
+| `gcroot` | 0 rows for both a statically-held and a transitively-held object | Full chain: `List<Leaf> → Leaf[] → Leaf`, with root kind, owning thread and depth. 27 ms |
+| `printexception` | Found 0 of 5 exceptions present | Finds all 5, including `outer-boom` with its `inner-boom` inner exception; takes an address; labels in-flight vs heap |
+| `threadstate` | GC Mode `Unknown`, Locks `-1`, six fabricated flags | `Preemptive`, Locks `unknown` (honestly), and real `Background` / `ThreadPool` / `Finalizer` flags per thread |
+| `eeheap` | `Gen -1` for every segment | Real kinds (Frozen/Ephemeral/LOH/POH), committed vs reserved, per-generation bytes, GC flavour, DATAS state |
+| `dumpmd` | Threw for `Program.Main` after a 44 ms heap scan | Resolves via `GetMethodByHandle` in 0 ms |
+| `dumpassembly` | Threw on the real `AssemblyAddress` | Resolves it, and still accepts an ImageBase |
+| `syncblk` | Empty table while a lock was held | Reports the thin lock, its owning thread, and explains what a thin lock is |
+| `dumpmodule` | Fabricated `AssemblyId`, sampled type count (~4 vs 6) | Real assembly address, exact count of 6, real `Layout`, plus static-field-bearing type count |
+| `dumpmt` | Interface/Abstract/Sealed hardcoded false; interfaces list unreachable | Real `TypeAttributes` flags, visibility, component size, finalizability, and interfaces |
+| `dumpclass` | Static values never read; bogus field counts | Reads static values (`12B611F30 <Holder>`); true instance/static/thread-static counts |
+| `name2ee` | `target!Program.Main` threw; namespaced types emitted a spurious method | Both forms correct |
+| `dumpstack` | `<absolute-path>.dll!Sleep` | `System.Private.CoreLib.dll!System.Threading.Thread.Sleep`, header names the real thread, runtime frames keep SOS brackets |
+| `dumpheap` | No MethodTable column | MethodTable included, so a row feeds straight into `dump_mt` |
+| `gchandles` | Kind and type only | Adds strength, ref count, dependent target |
+| `verifyheap` | `Offset` always 0, kind discarded | Real `ObjectCorruptionKind` and offset; new `verify_obj` for a single object |
+| all address tools | `0x13A611F10` → "Invalid address format" | `0x`, WinDbg backticks and padding all accepted |
+
+### Tests
+
+155 tests, green on net8.0/net9.0/net10.0.
+
+- **131 new unit tests** requiring no dump, covering every helper and every formatter.
+- **24 integration tests** now report as **Skipped** rather than passing while asserting nothing.
+  Point `DOTNETDUMP_TEST_DUMP` at a dump to run them — all 155 pass that way, confirmed.
+
+Two bugs were caught by the new tests rather than by inspection, which is the point of them:
+
+1. `ModuleClassifier` mishandled Windows paths, because `Path.GetFileName` ignores `\` on Unix. This
+   server exists to analyse dumps captured on another OS, so a Windows path arriving on Linux is the
+   normal case, not an edge case. Path splitting is now explicit about both separators.
+2. `RootPathFinder` returned the same retention path twice for a depth-1 chain — banning only
+   *interior* nodes between passes leaves nothing banned when there are no interior nodes.
+
+### Still open
+
+- **A committed dump fixture** (§4.5). The integration tests skip visibly now, which is honest, but
+  they still assert nothing on a clean checkout. Measured for reference: `--type Heap` is
+  analytically identical to `--type Full` (all 18 probes matched) at 302 MB raw / **17 MB zstd**,
+  versus 5,726 MB for Full. `--type Mini` (21 MB) keeps threads, stacks and modules but has no heap
+  at all, so it only suits graceful-degradation tests.
+- **Block 4's new commands** — `finalizequeue`, `dso`, `gcwhere`, `gcheapstat`, `objsize`/`pathto`
+  (the last two now cheap, since they reuse `RootPathFinder`), then `dumpasync`, `maddress`, `dumplog`.
+- **`eestack` is still identical to `clrstack`** (§2 row 8). Making it a real parallel-stacks tree, or
+  dropping it, is a design decision rather than a bug fix.
+- **The heap-statistics cache still cannot survive a tool call** (§4.2), so paging `dump_heap`
+  re-walks the heap. Moving it onto `IDumpContext` needs load-time invalidation wired in.
+- **`dotnet format` cannot load the repo workspace** (MSB5009, pre-existing). Per-project invocation
+  works and was used here.
