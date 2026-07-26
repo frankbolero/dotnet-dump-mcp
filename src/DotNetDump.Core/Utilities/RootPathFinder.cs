@@ -59,8 +59,9 @@ public static class RootPathFinder {
 
 		var results = new List<RootPath>();
 
-		// Interior nodes already used by a returned path. Roots and the target itself are never
-		// banned, so several roots can legitimately reach the same target.
+		// Every node a returned path already used, excluding the target itself. The root object is
+		// banned along with the interior nodes: leaving it available lets a later pass re-discover the
+		// identical chain, which is what happens for a depth-1 path (it has no interior nodes at all).
 		var banned = new HashSet<ulong>();
 
 		for (int pass = 0; pass < maxPaths; pass++) {
@@ -70,8 +71,7 @@ public static class RootPathFinder {
 
 			results.Add(found);
 
-			// Ban everything strictly between the root object and the target.
-			for (int i = 1; i < found.Path.Count - 1; i++)
+			for (int i = 0; i < found.Path.Count - 1; i++)
 				banned.Add(found.Path[i]);
 		}
 

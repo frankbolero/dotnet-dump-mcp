@@ -123,11 +123,7 @@ namespace DotNetDump.Core.Analyzers {
 							InstructionPointer = f.InstructionPointer,
 							StackPointer = f.StackPointer,
 							FrameKind = f.Kind.ToString(),
-							// Qualify with the declaring type: a bare method name ("Sleep") is not
-							// identifiable, and the module's absolute path is noise, not information.
-							MethodName = f.Method?.Type?.Name is { Length: > 0 } typeName
-								? $"{typeName}.{f.Method.Name}"
-								: f.Method?.Name ?? f.FrameName ?? f.ToString(),
+							MethodName = DescribeFrame(f),
 							ModuleName = SimpleModuleName(f.Method?.Type?.Module?.Name),
 							IsManaged = f.Kind == ClrStackFrameKind.ManagedMethod
 						})
@@ -142,6 +138,24 @@ namespace DotNetDump.Core.Analyzers {
 			}
 
 			return stacks.Skip(parameters.Offset).Take(parameters.Limit);
+		}
+
+		/// <summary>
+		/// Names a stack frame. Managed frames are qualified with their declaring type — a bare method
+		/// name such as "Sleep" identifies nothing, and the module's absolute path is noise rather than
+		/// information. Runtime frames keep the bracketed form SOS uses, so they stay visually distinct
+		/// from real managed calls.
+		/// </summary>
+		private static string DescribeFrame(ClrStackFrame frame) {
+			if (frame.Method != null) {
+				string? typeName = frame.Method.Type?.Name;
+				return string.IsNullOrEmpty(typeName)
+					? frame.Method.Name ?? "(unknown)"
+					: $"{typeName}.{frame.Method.Name}";
+			}
+
+			string name = frame.FrameName ?? frame.ToString() ?? "(unknown)";
+			return name.StartsWith('[') ? name : $"[{name}]";
 		}
 
 		/// <summary>

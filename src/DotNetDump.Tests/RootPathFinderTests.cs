@@ -122,6 +122,40 @@ public class RootPathFinderTests {
 	}
 
 	[Fact]
+	public void NeverReturnsTheSamePathTwice() {
+		// Two roots pointing at the same object produce one chain, not two copies of it. A depth-1
+		// path has no interior nodes, so banning only interior nodes let the second pass re-find it.
+		var paths = RootPathFinder.FindPaths(
+			target: 0x99,
+			roots: new[] {
+				new RootCandidate(0x10, "StrongHandle", 0xAA),
+				new RootCandidate(0x10, "StrongHandle", 0xAA)
+			},
+			successors: Graph((0x10, new ulong[] { 0x99 })),
+			maxPaths: 4);
+
+		Assert.Single(paths);
+	}
+
+	[Fact]
+	public void DistinctPathsShareNoIntermediateNodes() {
+		var paths = RootPathFinder.FindPaths(
+			target: 0x99,
+			roots: new[] {
+				new RootCandidate(0x10, "StaticVar", 0xAA),
+				new RootCandidate(0x20, "Stack", 0xBB)
+			},
+			successors: Graph(
+				(0x10, new ulong[] { 0x30 }),
+				(0x20, new ulong[] { 0x30 }),   // both routes converge on 0x30
+				(0x30, new ulong[] { 0x99 })),
+			maxPaths: 4);
+
+		// Only one chain exists once the shared node is accounted for.
+		Assert.Single(paths);
+	}
+
+	[Fact]
 	public void ReturnsOnlyOnePathByDefault() {
 		var paths = RootPathFinder.FindPaths(
 			target: 0x99,
