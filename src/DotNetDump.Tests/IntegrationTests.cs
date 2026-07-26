@@ -1,7 +1,8 @@
-using Xunit;
 using DotNetDump.Core;
 using DotNetDump.Core.Analyzers;
 using DotNetDump.Core.Models;
+
+using Xunit;
 
 namespace DotNetDump.Tests;
 
