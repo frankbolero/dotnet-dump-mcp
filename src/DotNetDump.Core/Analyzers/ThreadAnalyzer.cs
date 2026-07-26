@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using DotNetDump.Core.Models;
+using DotNetDump.Core.Utilities;
 
 using Microsoft.Diagnostics.Runtime;
 
@@ -49,7 +50,10 @@ namespace DotNetDump.Core.Analyzers {
 			foreach (var thread in runtime.Threads) {
 				if (!thread.IsAlive) continue;
 
-				var frames = thread.EnumerateStackTrace().Take(maxFrames).Select(f => f.ToString() ?? "").ToList();
+				// Push the frame limit into the DAC rather than over-walking and truncating here.
+				var frames = thread.EnumerateStackTrace(includeContext: false, maxFrames: maxFrames)
+					.Select(f => f.ToString() ?? "")
+					.ToList();
 				var stackKey = string.Join("\n", frames);
 
 				if (!groups.TryGetValue(stackKey, out var group)) {
@@ -90,9 +94,18 @@ namespace DotNetDump.Core.Analyzers {
 				TotalThreads = total,
 				ActiveThreads = pool.ActiveWorkerThreads,
 				IdleThreads = pool.IdleWorkerThreads,
+				RetiredThreads = pool.RetiredWorkerThreads,
 				MinThreads = pool.MinThreads,
 				MaxThreads = pool.MaxThreads,
-				Type = type
+				Type = type,
+				CpuUtilization = pool.CpuUtilization,
+				HasCompletionPortData = pool.HasLegacyData,
+				TotalCompletionPorts = pool.TotalCompletionPorts,
+				FreeCompletionPorts = pool.FreeCompletionPorts,
+				MaxFreeCompletionPorts = pool.MaxFreeCompletionPorts,
+				CompletionPortCurrentLimit = pool.CompletionPortCurrentLimit,
+				MinCompletionPorts = pool.MinCompletionPorts,
+				MaxCompletionPorts = pool.MaxCompletionPorts
 			};
 		}
 
@@ -105,14 +118,17 @@ namespace DotNetDump.Core.Analyzers {
 					OSThreadId = t.OSThreadId,
 					IsAlive = t.IsAlive,
 					ExceptionType = t.CurrentException?.Type?.Name,
-					Frames = t.EnumerateStackTrace()
-						.Take(maxFrames)
+					Frames = t.EnumerateStackTrace(includeContext: false, maxFrames: maxFrames)
 						.Select(f => new StackFrameInfo {
 							InstructionPointer = f.InstructionPointer,
 							StackPointer = f.StackPointer,
 							FrameKind = f.Kind.ToString(),
-							MethodName = f.Method?.Name ?? f.ToString(),
-							ModuleName = f.Method?.Type?.Module?.Name,
+							// Qualify with the declaring type: a bare method name ("Sleep") is not
+							// identifiable, and the module's absolute path is noise, not information.
+							MethodName = f.Method?.Type?.Name is { Length: > 0 } typeName
+								? $"{typeName}.{f.Method.Name}"
+								: f.Method?.Name ?? f.FrameName ?? f.ToString(),
+							ModuleName = SimpleModuleName(f.Method?.Type?.Module?.Name),
 							IsManaged = f.Kind == ClrStackFrameKind.ManagedMethod
 						})
 						.ToList()
@@ -128,6 +144,18 @@ namespace DotNetDump.Core.Analyzers {
 			return stacks.Skip(parameters.Offset).Take(parameters.Limit);
 		}
 
+		/// <summary>
+		/// Module file name without its directory. Stack output repeats the module on every frame, so a
+		/// full path costs a great deal and identifies nothing extra.
+		/// </summary>
+		private static string? SimpleModuleName(string? path) {
+			if (string.IsNullOrEmpty(path))
+				return path;
+
+			int slash = path.LastIndexOfAny(new[] { '/', '\\' });
+			return slash >= 0 && slash < path.Length - 1 ? path.Substring(slash + 1) : path;
+		}
+
 		public IEnumerable<ThreadStateInfo> GetThreadStates(QueryParameters parameters) {
 			var runtime = GetRuntime();
 			var threadStates = runtime.Threads.Select(t => new ThreadStateInfo {
@@ -136,22 +164,25 @@ namespace DotNetDump.Core.Analyzers {
 				IsAlive = t.IsAlive,
 				ExceptionType = t.CurrentException?.Type?.Name,
 				Address = t.Address,
-				GcMode = "Unknown", // IsGCMode not available in ClrMD v3
-				LockCount = (int)t.LockCount,
-				ApartmentState = "Unknown", // Not available in ClrMD v3
-				IsThreadPoolThread = false, // Not directly available, would need to check against ThreadPool threads
-				IsGC = false, // Not available in ClrMD v3
+				GcMode = t.GCMode.ToString(),
+				LockCount = ThreadStateDecoder.NormalizeLockCount(t.LockCount),
+				ApartmentState = ThreadStateDecoder.ApartmentState(t.State),
+				IsThreadPoolThread = ThreadStateDecoder.IsThreadPoolThread(t.State),
+				IsGC = t.IsGc,
 				IsFinalizer = t.IsFinalizer,
-				IsBackground = false, // Not available in ClrMD v3
-				IsUnstarted = !t.IsAlive && t.Address != 0,
-				IsAborted = false // Not available in ClrMD v3
+				IsBackground = ThreadStateDecoder.IsBackground(t.State),
+				IsUnstarted = ThreadStateDecoder.IsUnstarted(t.State),
+				IsDead = ThreadStateDecoder.IsDead(t.State),
+				IsAborted = ThreadStateDecoder.IsAborted(t.State),
+				IsSuspendPending = ThreadStateDecoder.IsSuspendPending(t.State),
+				StateFlags = ThreadStateDecoder.FlagNames(t.State).ToList()
 			});
 
 			// Sorting
 			if (parameters.SortBy?.ToLower() == "osthreadid") {
 				threadStates = parameters.SortDirection == SortDirection.Asc ? threadStates.OrderBy(t => t.OSThreadId) : threadStates.OrderByDescending(t => t.OSThreadId);
 			} else if (parameters.SortBy?.ToLower() == "lockcount") {
-				threadStates = parameters.SortDirection == SortDirection.Asc ? threadStates.OrderBy(t => t.LockCount) : threadStates.OrderByDescending(t => t.LockCount);
+				threadStates = parameters.SortDirection == SortDirection.Asc ? threadStates.OrderBy(t => t.LockCount ?? 0) : threadStates.OrderByDescending(t => t.LockCount ?? 0);
 			} else {
 				threadStates = parameters.SortDirection == SortDirection.Asc ? threadStates.OrderBy(t => t.ManagedThreadId) : threadStates.OrderByDescending(t => t.ManagedThreadId);
 			}
@@ -159,7 +190,17 @@ namespace DotNetDump.Core.Analyzers {
 			return threadStates.Skip(parameters.Offset).Take(parameters.Limit);
 		}
 
-		public IEnumerable<ThreadExceptionInfo> GetThreadExceptions(QueryParameters parameters, bool onlyWithExceptions = true) {
+		/// <summary>
+		/// Exceptions in flight on a thread. Note that a dump collected after the fact usually has
+		/// none: once an exception is caught, <c>CurrentException</c> is null and the exception object
+		/// survives only on the heap. Use <paramref name="includeHeapExceptions"/> (or
+		/// <see cref="GetExceptionByAddress"/>) to find those.
+		/// </summary>
+		public IEnumerable<ThreadExceptionInfo> GetThreadExceptions(
+			QueryParameters parameters,
+			bool onlyWithExceptions = true,
+			bool includeHeapExceptions = true) {
+
 			var runtime = GetRuntime();
 			var threads = runtime.Threads.AsEnumerable();
 
@@ -170,7 +211,8 @@ namespace DotNetDump.Core.Analyzers {
 			var exceptionInfos = threads.Select(t => new ThreadExceptionInfo {
 				ManagedThreadId = t.ManagedThreadId,
 				OSThreadId = t.OSThreadId,
-				Exception = t.CurrentException != null ? BuildExceptionDetails(t.CurrentException) : null
+				Source = ExceptionSource.ThreadCurrentException,
+				Exception = t.CurrentException != null ? ExceptionMapper.Map(t.CurrentException) : null
 			});
 
 			// Sorting
@@ -180,40 +222,72 @@ namespace DotNetDump.Core.Analyzers {
 				exceptionInfos = parameters.SortDirection == SortDirection.Asc ? exceptionInfos.OrderBy(t => t.ManagedThreadId) : exceptionInfos.OrderByDescending(t => t.ManagedThreadId);
 			}
 
-			return exceptionInfos.Skip(parameters.Offset).Take(parameters.Limit);
-		}
+			var results = exceptionInfos.ToList();
 
-		private ExceptionDetails BuildExceptionDetails(ClrException exception, int maxDepth = 5) {
-			if (maxDepth <= 0) {
-				return new ExceptionDetails {
-					Address = exception.Address,
-					TypeName = exception.Type?.Name ?? "<unknown>",
-					Message = "(max depth reached)"
-				};
-			}
+			if (includeHeapExceptions) {
+				// Exclude anything already reported as a thread's current exception.
+				var seen = results
+					.Where(r => r.Exception != null)
+					.Select(r => r.Exception!.Address)
+					.ToHashSet();
 
-			var details = new ExceptionDetails {
-				Address = exception.Address,
-				TypeName = exception.Type?.Name ?? "<unknown>",
-				Message = exception.Message,
-				HResult = exception.HResult,
-				StackTrace = new List<string>()
-			};
-
-			// Get stack trace from exception object
-			foreach (var frame in exception.StackTrace) {
-				var frameName = frame.Method?.Name ?? frame.ToString();
-				if (!string.IsNullOrEmpty(frameName)) {
-					details.StackTrace.Add(frameName);
+				foreach (var details in EnumerateHeapExceptions()) {
+					if (seen.Add(details.Address)) {
+						results.Add(new ThreadExceptionInfo {
+							Source = ExceptionSource.Heap,
+							Exception = details
+						});
+					}
 				}
 			}
 
-			// Get inner exception
-			if (exception.Inner != null) {
-				details.InnerExceptions.Add(BuildExceptionDetails(exception.Inner, maxDepth - 1));
-			}
+			return results.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+		}
 
-			return details;
+		/// <summary>Reads a specific exception object by address, as SOS's <c>pe &lt;address&gt;</c> does.</summary>
+		public ThreadExceptionInfo GetExceptionByAddress(ulong address) {
+			var runtime = GetRuntime();
+			var heap = runtime.Heap;
+
+			var obj = heap.GetObject(address);
+			if (obj.IsNull)
+				throw new ArgumentException($"No object found at {address:X}.");
+
+			if (obj.Type?.IsException != true)
+				throw new ArgumentException($"Object at {address:X} is a {obj.Type?.Name ?? "<unknown type>"}, not an exception.");
+
+			var exception = obj.AsException();
+			if (exception == null)
+				throw new ArgumentException($"Object at {address:X} could not be read as an exception.");
+
+			// Attribute it to a thread if it happens to be that thread's in-flight exception.
+			var owner = runtime.Threads.FirstOrDefault(t => t.CurrentException?.Address == address);
+
+			return new ThreadExceptionInfo {
+				ManagedThreadId = owner?.ManagedThreadId,
+				OSThreadId = owner?.OSThreadId,
+				Source = owner != null ? ExceptionSource.ThreadCurrentException : ExceptionSource.Address,
+				Exception = ExceptionMapper.Map(exception)
+			};
+		}
+
+		private IEnumerable<ExceptionDetails> EnumerateHeapExceptions() {
+			var heap = GetRuntime().Heap;
+
+			foreach (var obj in heap.EnumerateObjects()) {
+				if (obj.Type?.IsException != true)
+					continue;
+
+				ClrException? exception;
+				try {
+					exception = obj.AsException();
+				} catch (Exception) {
+					continue;
+				}
+
+				if (exception != null)
+					yield return ExceptionMapper.Map(exception);
+			}
 		}
 	}
 }
