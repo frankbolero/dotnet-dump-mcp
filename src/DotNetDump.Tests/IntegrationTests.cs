@@ -8,9 +8,14 @@ public class IntegrationTests : IDisposable {
 	private readonly string _dumpPath;
 	private readonly DumpContext _context;
 
+	/// <summary>
+	/// Overrides the fixture location, so CI can point at a generated dump without editing this file.
+	/// </summary>
+	public const string DumpPathVariable = "DOTNETDUMP_TEST_DUMP";
+
 	public IntegrationTests() {
-		// Use the provided sample dump
-		_dumpPath = Path.GetFullPath("../../../../../dumps/core_20251212_112511");
+		_dumpPath = Environment.GetEnvironmentVariable(DumpPathVariable)
+			?? Path.GetFullPath("../../../../../dumps/core_20251212_112511");
 		_context = new DumpContext();
 
 		if (File.Exists(_dumpPath)) {
@@ -18,9 +23,23 @@ public class IntegrationTests : IDisposable {
 		}
 	}
 
+	/// <summary>
+	/// Skips visibly when there is no dump to analyse.
+	/// <para>
+	/// These tests previously returned early instead, so a run with no fixture reported every one of
+	/// them as <em>passing</em> while asserting nothing — a green suite that guaranteed nothing about
+	/// the analyzers. Set <see cref="DumpPathVariable"/> to a real dump to actually exercise them.
+	/// </para>
+	/// </summary>
+	private void SkipIfNoDump() {
+		if (!File.Exists(_dumpPath)) {
+			Assert.Skip($"No dump fixture at '{_dumpPath}'. Set {DumpPathVariable} to a dump file to run integration tests.");
+		}
+	}
+
 	[Fact]
 	public void DumpContext_InitializesCorrecty() {
-		if (!File.Exists(_dumpPath)) return; // Skip if dump missing
+		SkipIfNoDump();
 
 		Assert.NotNull(_context.DataTarget);
 		Assert.NotNull(_context.Runtime);
@@ -29,7 +48,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void DumpContext_Load_LoadsDumpSuccessfully() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var context = new DumpContext();
 		context.Load(_dumpPath);
@@ -44,7 +63,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void HeapAnalyzer_ReturnsStatistics() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
 		var stats = analyzer.GetHeapStatistics(new QueryParameters { Limit = 10 }).ToList();
@@ -55,7 +74,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void ThreadAnalyzer_GroupsStacks() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new ThreadAnalyzer(_context);
 		var groups = analyzer.GetStackTraceGroups().ToList();
@@ -66,14 +85,14 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void HeapAnalyzer_GetGCRoots_ReturnsRoots() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
 
 		// Find an object first
 		var obj = _context.Heap.EnumerateObjects()
 			.FirstOrDefault(o => o.Type != null && o.Type.Name == "System.String");
-		if (obj.Address == 0) return; // No string found
+		if (obj.Address == 0) Assert.Skip("No suitable object found in the dump.");
 
 		// This test is tricky because we need an object that HAS roots.
 		// Strings might not be rooted if they are garbage.
@@ -86,12 +105,12 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void HeapAnalyzer_GetObjectDetails_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
 		var obj = _context.Heap.EnumerateObjects()
 			.FirstOrDefault(o => o.Type != null && o.Type.Name == "System.String");
-		if (obj.Address == 0) return;
+		if (obj.Address == 0) Assert.Skip("No suitable object found in the dump.");
 
 		var details = analyzer.GetObjectDetails(obj.Address);
 
@@ -102,7 +121,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void HeapAnalyzer_GetHeapSegments_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
 		var segments = analyzer.GetHeapSegments().ToList();
@@ -113,7 +132,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void ThreadAnalyzer_GetThreadPoolInfo_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new ThreadAnalyzer(_context);
 		var info = analyzer.GetThreadPoolInfo();
@@ -124,7 +143,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void HeapAnalyzer_GetSyncBlocks_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
 		var blocks = analyzer.GetSyncBlocks(new QueryParameters()).ToList();
@@ -135,7 +154,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void HeapAnalyzer_VerifyHeap_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
 		var corruptions = analyzer.VerifyHeap().ToList();
@@ -146,7 +165,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void HeapAnalyzer_GetGCHandles_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
 		var handles = analyzer.GetGCHandles(new QueryParameters { Limit = 50 }).ToList();
@@ -157,7 +176,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void HeapAnalyzer_GetObjects_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
 		var objects = analyzer.GetObjects(new QueryParameters { Limit = 10 }, null).ToList();
@@ -168,7 +187,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void HeapAnalyzer_GetObjects_WithFilter_ReturnsFilteredData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
 		var objects = analyzer.GetObjects(new QueryParameters { Limit = 10 }, "System.String").ToList();
@@ -179,7 +198,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void ThreadAnalyzer_GetThreads_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new ThreadAnalyzer(_context);
 		var threads = analyzer.GetThreads(new QueryParameters { Limit = 50 }).ToList();
@@ -190,7 +209,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void ThreadAnalyzer_GetDetailedStacks_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new ThreadAnalyzer(_context);
 		var stacks = analyzer.GetDetailedStacks(new QueryParameters { Limit = 10 }, maxFrames: 20).ToList();
@@ -204,7 +223,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void ModuleAnalyzer_GetModules_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new ModuleAnalyzer(_context);
 		var modules = analyzer.GetModules(new QueryParameters { Limit = 50 }, includeSystem: true).ToList();
@@ -215,7 +234,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void ModuleAnalyzer_GetModules_ExcludeSystem_ReturnsUserModules() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new ModuleAnalyzer(_context);
 		var modules = analyzer.GetModules(new QueryParameters { Limit = 50 }, includeSystem: false).ToList();
@@ -227,7 +246,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void MetadataAnalyzer_GetMethodTable_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new MetadataAnalyzer(_context);
 
@@ -235,7 +254,7 @@ public class IntegrationTests : IDisposable {
 		var type = _context.Heap.EnumerateObjects()
 			.Select(o => o.Type)
 			.FirstOrDefault(t => t != null && t.Name == "System.String");
-		if (type == null) return;
+		if (type == null) Assert.Skip("No suitable type found in the dump.");
 
 		var methodTableInfo = analyzer.GetMethodTable(type.MethodTable);
 
@@ -247,7 +266,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void MetadataAnalyzer_GetMethodDesc_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new MetadataAnalyzer(_context);
 
@@ -255,10 +274,10 @@ public class IntegrationTests : IDisposable {
 		var type = _context.Heap.EnumerateObjects()
 			.Select(o => o.Type)
 			.FirstOrDefault(t => t != null && t.Methods.Any());
-		if (type == null) return;
+		if (type == null) Assert.Skip("No suitable type found in the dump.");
 
 		var method = type.Methods.FirstOrDefault(m => m.MethodDesc != 0);
-		if (method == null) return;
+		if (method == null) Assert.Skip("No suitable method found in the dump.");
 
 		var methodDescInfo = analyzer.GetMethodDesc(method.MethodDesc);
 
@@ -269,7 +288,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void MetadataAnalyzer_GetClass_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new MetadataAnalyzer(_context);
 
@@ -277,7 +296,7 @@ public class IntegrationTests : IDisposable {
 		var type = _context.Heap.EnumerateObjects()
 			.Select(o => o.Type)
 			.FirstOrDefault(t => t != null && t.Name == "System.String");
-		if (type == null) return;
+		if (type == null) Assert.Skip("No suitable type found in the dump.");
 
 		var classInfo = analyzer.GetClass(type.MethodTable);
 
@@ -290,7 +309,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void ModuleAnalyzer_GetModuleDetails_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new ModuleAnalyzer(_context);
 
@@ -307,7 +326,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void ModuleAnalyzer_GetAssemblyDetails_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new ModuleAnalyzer(_context);
 
@@ -323,7 +342,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void ModuleAnalyzer_Name2EE_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new ModuleAnalyzer(_context);
 
@@ -342,7 +361,7 @@ public class IntegrationTests : IDisposable {
 
 	[Fact]
 	public void ModuleAnalyzer_GetMethodByIP_ReturnsData() {
-		if (!File.Exists(_dumpPath)) return;
+		SkipIfNoDump();
 
 		var analyzer = new ModuleAnalyzer(_context);
 
@@ -350,10 +369,10 @@ public class IntegrationTests : IDisposable {
 		var type = _context.Heap.EnumerateObjects()
 			.Select(o => o.Type)
 			.FirstOrDefault(t => t != null && t.Methods.Any(m => m.NativeCode != 0 && m.NativeCode != ulong.MaxValue));
-		if (type == null) return;
+		if (type == null) Assert.Skip("No suitable type found in the dump.");
 
 		var method = type.Methods.FirstOrDefault(m => m.NativeCode != 0 && m.NativeCode != ulong.MaxValue);
-		if (method == null) return;
+		if (method == null) Assert.Skip("No suitable method found in the dump.");
 
 		try {
 			var methodDescInfo = analyzer.GetMethodByIP(method.NativeCode);
