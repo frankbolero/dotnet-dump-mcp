@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 
@@ -9,9 +10,14 @@ namespace DotNetDump.Core.Formatting {
 		/// <summary>Addresses render bare and uppercase so they can be pasted straight back into a tool call.</summary>
 		private static string Addr(ulong value) => value.ToString("X16");
 
-		private static string Bytes(ulong value) => value.ToString("N0");
+		// Invariant culture: output must be stable regardless of the host's locale (e.g. some locales use
+		// "." or " " as the thousands separator instead of ",", which would break these tests intermittently
+		// depending on the runner's culture).
+		private static string Bytes(ulong value) => value.ToString("N0", CultureInfo.InvariantCulture);
 
-		private static string Bytes(long value) => value.ToString("N0");
+		private static string Bytes(long value) => value.ToString("N0", CultureInfo.InvariantCulture);
+
+		private static string Num(int value) => value.ToString("N0", CultureInfo.InvariantCulture);
 
 		public static string FormatHeapStatistics(IEnumerable<HeapStatItem> stats) {
 			var sb = new StringBuilder();
@@ -19,7 +25,7 @@ namespace DotNetDump.Core.Formatting {
 			sb.AppendLine("| MethodTable | Count | Total Size | Type |");
 			sb.AppendLine("|-------------|-------|------------|------|");
 			foreach (var item in stats) {
-				sb.AppendLine($"| {Addr(item.MethodTable)} | {item.Count:N0} | {Bytes(item.TotalSize)} | {item.TypeName} |");
+				sb.AppendLine($"| {Addr(item.MethodTable)} | {Num(item.Count)} | {Bytes(item.TotalSize)} | {item.TypeName} |");
 			}
 			return sb.ToString();
 		}
@@ -251,7 +257,7 @@ namespace DotNetDump.Core.Formatting {
 			sb.AppendLine("| Kind | Count | Strong | Total Size of Targets |");
 			sb.AppendLine("|------|-------|--------|-----------------------|");
 			foreach (var item in stats) {
-				sb.AppendLine($"| {item.Kind} | {item.Count:N0} | {item.StrongCount:N0} | {Bytes(item.TotalSize)} |");
+				sb.AppendLine($"| {item.Kind} | {Num(item.Count)} | {Num(item.StrongCount)} | {Bytes(item.TotalSize)} |");
 			}
 			return sb.ToString();
 		}
@@ -432,9 +438,9 @@ namespace DotNetDump.Core.Formatting {
 			sb.AppendLine($"- Assembly: {Addr(info.AssemblyAddress)}");
 			sb.AppendLine();
 			sb.AppendLine($"**Size:** {Bytes(info.Size)} bytes");
-			sb.AppendLine($"**Metadata Length:** {info.MetadataLength:N0} bytes");
-			sb.AppendLine($"**Type Count:** {info.TypeCount:N0}");
-			sb.AppendLine($"**Types With Static Fields:** {info.TypesWithStaticFieldsCount:N0}");
+			sb.AppendLine($"**Metadata Length:** {Num(info.MetadataLength)} bytes");
+			sb.AppendLine($"**Type Count:** {Num(info.TypeCount)}");
+			sb.AppendLine($"**Types With Static Fields:** {Num(info.TypesWithStaticFieldsCount)}");
 			sb.AppendLine();
 			sb.AppendLine("**Flags:**");
 			sb.AppendLine($"- IsDynamic: {info.IsDynamic}");
