@@ -1,3 +1,4 @@
+using Xunit;
 using DotNetDump.Core;
 using DotNetDump.Core.Analyzers;
 using DotNetDump.Core.Models;
@@ -32,12 +33,11 @@ public class IntegrationTests : IDisposable {
 	/// </para>
 	/// </summary>
 	private void SkipIfNoDump() {
-		if (!File.Exists(_dumpPath)) {
-			Assert.Skip($"No dump fixture at '{_dumpPath}'. Set {DumpPathVariable} to a dump file to run integration tests.");
-		}
+		Skip.IfNot(File.Exists(_dumpPath),
+			$"No dump fixture at '{_dumpPath}'. Set {DumpPathVariable} to a dump file to run integration tests.");
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void DumpContext_InitializesCorrecty() {
 		SkipIfNoDump();
 
@@ -46,7 +46,7 @@ public class IntegrationTests : IDisposable {
 		Assert.NotNull(_context.Heap);
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void DumpContext_Load_LoadsDumpSuccessfully() {
 		SkipIfNoDump();
 
@@ -61,7 +61,7 @@ public class IntegrationTests : IDisposable {
 		context.Dispose();
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void HeapAnalyzer_ReturnsStatistics() {
 		SkipIfNoDump();
 
@@ -72,7 +72,7 @@ public class IntegrationTests : IDisposable {
 		Assert.Contains(stats, s => s.TypeName == "System.String");
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void ThreadAnalyzer_GroupsStacks() {
 		SkipIfNoDump();
 
@@ -83,7 +83,7 @@ public class IntegrationTests : IDisposable {
 		Assert.True(groups.First().ThreadCount > 0);
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void HeapAnalyzer_GetGCRoots_ReturnsRoots() {
 		SkipIfNoDump();
 
@@ -92,7 +92,7 @@ public class IntegrationTests : IDisposable {
 		// Find an object first
 		var obj = _context.Heap.EnumerateObjects()
 			.FirstOrDefault(o => o.Type != null && o.Type.Name == "System.String");
-		if (obj.Address == 0) Assert.Skip("No suitable object found in the dump.");
+		Skip.If(obj.Address == 0, "No suitable object found in the dump.");
 
 		// This test is tricky because we need an object that HAS roots.
 		// Strings might not be rooted if they are garbage.
@@ -103,14 +103,14 @@ public class IntegrationTests : IDisposable {
 		Assert.NotNull(roots);
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void HeapAnalyzer_GetObjectDetails_ReturnsData() {
 		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
 		var obj = _context.Heap.EnumerateObjects()
 			.FirstOrDefault(o => o.Type != null && o.Type.Name == "System.String");
-		if (obj.Address == 0) Assert.Skip("No suitable object found in the dump.");
+		Skip.If(obj.Address == 0, "No suitable object found in the dump.");
 
 		var details = analyzer.GetObjectDetails(obj.Address);
 
@@ -119,18 +119,20 @@ public class IntegrationTests : IDisposable {
 		Assert.NotEmpty(details.Fields);
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void HeapAnalyzer_GetHeapSegments_ReturnsData() {
 		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
-		var segments = analyzer.GetHeapSegments().ToList();
+		var summary = analyzer.GetHeapSegments();
 
-		Assert.NotEmpty(segments);
-		Assert.True(segments.First().Size > 0);
+		Assert.NotEmpty(summary.Segments);
+		Assert.True(summary.Segments.First().Size > 0);
+		// Every segment must carry a real kind label, including Frozen/Ephemeral on a regions GC.
+		Assert.All(summary.Segments, s => Assert.False(string.IsNullOrWhiteSpace(s.Kind)));
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void ThreadAnalyzer_GetThreadPoolInfo_ReturnsData() {
 		SkipIfNoDump();
 
@@ -141,7 +143,7 @@ public class IntegrationTests : IDisposable {
 		Assert.True(info.TotalThreads >= 0);
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void HeapAnalyzer_GetSyncBlocks_ReturnsData() {
 		SkipIfNoDump();
 
@@ -152,7 +154,7 @@ public class IntegrationTests : IDisposable {
 		Assert.NotNull(blocks);
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void HeapAnalyzer_VerifyHeap_ReturnsData() {
 		SkipIfNoDump();
 
@@ -163,7 +165,7 @@ public class IntegrationTests : IDisposable {
 		Assert.NotNull(corruptions);
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void HeapAnalyzer_GetGCHandles_ReturnsData() {
 		SkipIfNoDump();
 
@@ -174,7 +176,7 @@ public class IntegrationTests : IDisposable {
 		Assert.NotNull(handles);
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void HeapAnalyzer_GetObjects_ReturnsData() {
 		SkipIfNoDump();
 
@@ -185,7 +187,7 @@ public class IntegrationTests : IDisposable {
 		Assert.All(objects, obj => Assert.True(obj.Address > 0));
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void HeapAnalyzer_GetObjects_WithFilter_ReturnsFilteredData() {
 		SkipIfNoDump();
 
@@ -196,7 +198,7 @@ public class IntegrationTests : IDisposable {
 		Assert.All(objects, obj => Assert.Contains("String", obj.TypeName ?? ""));
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void ThreadAnalyzer_GetThreads_ReturnsData() {
 		SkipIfNoDump();
 
@@ -207,7 +209,7 @@ public class IntegrationTests : IDisposable {
 		Assert.All(threads, thread => Assert.True(thread.OSThreadId > 0 || thread.ManagedThreadId >= 0));
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void ThreadAnalyzer_GetDetailedStacks_ReturnsData() {
 		SkipIfNoDump();
 
@@ -221,7 +223,7 @@ public class IntegrationTests : IDisposable {
 		});
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void ModuleAnalyzer_GetModules_ReturnsData() {
 		SkipIfNoDump();
 
@@ -232,7 +234,7 @@ public class IntegrationTests : IDisposable {
 		Assert.All(modules, module => Assert.NotNull(module.Name));
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void ModuleAnalyzer_GetModules_ExcludeSystem_ReturnsUserModules() {
 		SkipIfNoDump();
 
@@ -244,7 +246,7 @@ public class IntegrationTests : IDisposable {
 		Assert.All(modules, module => Assert.True(module.IsUserCode));
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void MetadataAnalyzer_GetMethodTable_ReturnsData() {
 		SkipIfNoDump();
 
@@ -254,7 +256,7 @@ public class IntegrationTests : IDisposable {
 		var type = _context.Heap.EnumerateObjects()
 			.Select(o => o.Type)
 			.FirstOrDefault(t => t != null && t.Name == "System.String");
-		if (type == null) Assert.Skip("No suitable type found in the dump.");
+		Skip.If(type == null, "No suitable type found in the dump.");
 
 		var methodTableInfo = analyzer.GetMethodTable(type.MethodTable);
 
@@ -264,7 +266,7 @@ public class IntegrationTests : IDisposable {
 		Assert.True(methodTableInfo.MethodCount > 0);
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void MetadataAnalyzer_GetMethodDesc_ReturnsData() {
 		SkipIfNoDump();
 
@@ -274,10 +276,10 @@ public class IntegrationTests : IDisposable {
 		var type = _context.Heap.EnumerateObjects()
 			.Select(o => o.Type)
 			.FirstOrDefault(t => t != null && t.Methods.Any());
-		if (type == null) Assert.Skip("No suitable type found in the dump.");
+		Skip.If(type == null, "No suitable type found in the dump.");
 
 		var method = type.Methods.FirstOrDefault(m => m.MethodDesc != 0);
-		if (method == null) Assert.Skip("No suitable method found in the dump.");
+		Skip.If(method == null, "No suitable method found in the dump.");
 
 		var methodDescInfo = analyzer.GetMethodDesc(method.MethodDesc);
 
@@ -286,7 +288,7 @@ public class IntegrationTests : IDisposable {
 		Assert.NotNull(methodDescInfo.TypeName);
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void MetadataAnalyzer_GetClass_ReturnsData() {
 		SkipIfNoDump();
 
@@ -296,7 +298,7 @@ public class IntegrationTests : IDisposable {
 		var type = _context.Heap.EnumerateObjects()
 			.Select(o => o.Type)
 			.FirstOrDefault(t => t != null && t.Name == "System.String");
-		if (type == null) Assert.Skip("No suitable type found in the dump.");
+		Skip.If(type == null, "No suitable type found in the dump.");
 
 		var classInfo = analyzer.GetClass(type.MethodTable);
 
@@ -307,7 +309,7 @@ public class IntegrationTests : IDisposable {
 		Assert.NotNull(classInfo.Fields);
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void ModuleAnalyzer_GetModuleDetails_ReturnsData() {
 		SkipIfNoDump();
 
@@ -324,7 +326,7 @@ public class IntegrationTests : IDisposable {
 		Assert.True(moduleDetails.Size > 0);
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void ModuleAnalyzer_GetAssemblyDetails_ReturnsData() {
 		SkipIfNoDump();
 
@@ -340,7 +342,7 @@ public class IntegrationTests : IDisposable {
 		Assert.NotEmpty(assemblyDetails.Modules);
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void ModuleAnalyzer_Name2EE_ReturnsData() {
 		SkipIfNoDump();
 
@@ -359,7 +361,7 @@ public class IntegrationTests : IDisposable {
 		}
 	}
 
-	[Fact]
+	[SkippableFact]
 	public void ModuleAnalyzer_GetMethodByIP_ReturnsData() {
 		SkipIfNoDump();
 
@@ -369,10 +371,10 @@ public class IntegrationTests : IDisposable {
 		var type = _context.Heap.EnumerateObjects()
 			.Select(o => o.Type)
 			.FirstOrDefault(t => t != null && t.Methods.Any(m => m.NativeCode != 0 && m.NativeCode != ulong.MaxValue));
-		if (type == null) Assert.Skip("No suitable type found in the dump.");
+		Skip.If(type == null, "No suitable type found in the dump.");
 
 		var method = type.Methods.FirstOrDefault(m => m.NativeCode != 0 && m.NativeCode != ulong.MaxValue);
-		if (method == null) Assert.Skip("No suitable method found in the dump.");
+		Skip.If(method == null, "No suitable method found in the dump.");
 
 		try {
 			var methodDescInfo = analyzer.GetMethodByIP(method.NativeCode);
