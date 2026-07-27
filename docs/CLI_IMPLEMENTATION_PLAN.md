@@ -25,8 +25,8 @@ Per-command init is **well under the 3 s threshold**, so:
 * **Phase 7 is descoped** to keeping Docker working for architecture mismatch, plus the DAC cache
   volume. The `docker exec` wrapper becomes optional, not the default.
 
-Caveat on the heap-walk figure — see §0.3. This dump's managed heap is 26.7 MB, so the walk is
-effectively free and that number does **not** generalize.
+Caveat on the heap-walk figure — see §0.2. This dump's managed heap is 26.7 MB and holds only 22,733
+objects, so its walk is effectively free and that number does **not** generalize.
 
 ### 0.2 Decision gate: is the cache justified? — **RESOLVED, build tier 1**
 
@@ -76,7 +76,7 @@ again by every agent and every re-run.
 repeat — modest but real; at the 50–100 M objects a production leak dump can reach, it is 6–13 s per
 walk and decisive. Tier 1 is also the cheap half of §6: small JSON entries, no bespoke binary format.
 
-**Tier 2 (object index) stays deferred** per §10.4. At ~24 bytes/object it would be 240 MB for dump 3
+**Tier 2 (object index) stays deferred** per §11.4. At ~24 bytes/object it would be 240 MB for dump 3
 alone and GB-scale for the dumps that motivate it, to save a walk now measured at ~1.3 s. Revisit
 only if `listobj`/`gcroot` prove painful in real use.
 
@@ -144,14 +144,27 @@ Requirements beyond the interface sketch:
 Tests: key composition and stability, hit/miss, tier promotion, atomicity under concurrent writers,
 `NullAnalysisCache` always computing. No dump file required — these are pure unit tests.
 
-Out of scope: tier 2 binary index (§10.4 is unresolved), and any analyzer changes.
+Out of scope: tier 2 binary index (§11.4 is unresolved), and any analyzer changes.
 
 ### Phase 2 — JSON and TSV formatters · Haiku 4.5
 
 Add `JsonFormatter` and `TsvFormatter` to `src/DotNetDump.Core/Formatting/`, mirroring the public
-surface of the existing `MarkdownFormatter` method-for-method. Mechanical: the models and the method
-list already exist; serialize the same inputs in a different shape. `MarkdownFormatter` is not to be
-modified. TSV emits a header row then tab-separated values, no padding or alignment.
+surface of the existing `MarkdownFormatter` method-for-method. The models and the method list already
+exist; serialize the same inputs in a different shape. `MarkdownFormatter` is not to be modified.
+TSV emits a header row then tab-separated values, no padding or alignment.
+
+**Build the JSON output as an API contract, not a `jq` convenience** (§10.3). A web front end is a
+recorded future direction and would consume this as its API, so:
+
+* Stable, explicit field names — do not rely on incidental property-name defaults that a rename
+  would silently change.
+* A consistent envelope across every command, rather than a bare array in some and an object in
+  others.
+* Pagination metadata travelling *with* the rows — total available, offset, limit, and whether more
+  remains. A short page must be distinguishable from the end of the data.
+
+This is the same amount of work as the naive version and much cheaper than retrofitting it later.
+TSV stays deliberately dumb: rows only, for `grep`/`awk`.
 
 ### Phase 3 — Dump identity · Haiku 4.5
 

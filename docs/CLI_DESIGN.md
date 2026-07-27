@@ -468,17 +468,101 @@ the process count but collide with the singleton `DumpContext` — two clients l
 dumps would clobber each other, and fixing that means per-session contexts, which puts N dumps
 back inside one process. Real work, no better outcome, and the tool-manifest context cost remains.
 
-## 10. Open questions
+## 10. Future direction: web frontend
+
+**Status: not planned work.** Recorded so that decisions taken now do not foreclose it, and so the
+one thing it genuinely constrains today (§10.3) is visible to whoever implements the JSON formatter.
+
+The idea: `dndump serve` launches a local web UI for interactive investigation of a loaded dump —
+a third consumer of Core alongside the CLI and the MCP server.
+
+### 10.1 Why it fits
+
+* Core is already front-end agnostic. Analyzers return strongly-typed models and formatting is a
+  separate layer, so a web front end is mostly assembly rather than new analysis work.
+* **The cache economics favour it more than the CLI's.** §6 saves ~1.8 s per repeated walk across
+  maybe four walks in a CLI triage session. Interactive browsing issues dozens of queries, and
+  §6.2's "cache the model, sort and page afterwards" design is exactly what a UI wants — one cached
+  heap-stat set backing all subsequent interaction.
+* A long-lived server process also keeps ClrMD's **in-memory** type cache warm across queries. That
+  is the one layer a per-invocation CLI must always discard, so this is the only delivery model that
+  gets both halves of the caching story.
+
+### 10.2 Deliberately unspecified
+
+The interface is expected to be designed separately — as a component library authored in Claude
+Design and synced into the repo via `/design-sync`. This spec therefore takes **no position** on:
+
+* framework or rendering model (Blazor, SPA, server-rendered, htmx — all open);
+* view inventory, layout, navigation or visual design;
+* whether it ships inside the `dndump` binary or as a separate host;
+* how much runs client-side versus server-side.
+
+Those are design decisions, and pinning them here would only get in the way.
+
+### 10.3 What the backend must provide — the part that constrains work now
+
+One decision does need making early, because Phase 2 implements it: **`--format json` should be
+built as an API contract, not merely a convenience for `jq` pipelines.** Concretely that means
+stable field names, a consistent envelope, and pagination metadata (total, offset, limit, whether
+more remains) travelling alongside the rows rather than being implied by their absence.
+
+Retrofitting that later means designing the serialization layer twice. Doing it now costs nothing —
+it is the same formatter either way.
+
+It also settles §11.3 in the affirmative: with a web front end in view, the Core model shapes are a
+public contract.
+
+### 10.4 Constraints any design will have to respect
+
+Recorded as constraints rather than requirements, so they inform a design without dictating one.
+
+* **Data volume.** Heap statistics are ~1,500 rows and fine to render. Object lists are not — a
+  measured dump holds 10.2 M objects. Server-side pagination and virtualized rendering are
+  mandatory; "load it all and filter client-side" is not available at this scale.
+* **Cold-start latency is seconds, not milliseconds.** A first walk costs roughly
+  `object-count / 8M` seconds (§0.2 of the implementation plan). The cache makes repeats instant, but
+  the first view of a cold dump genuinely takes time. That needs a real pending state, not a spinner
+  that implies imminence.
+* **Dumps contain secrets.** Connection strings, tokens and PII live in heap strings, and object
+  inspection renders string values. Bind to `127.0.0.1` only — never `0.0.0.0` by default — and
+  decide deliberately whether the Docker path exposes a port at all. This is much easier to get
+  right at the start than to retrofit.
+* **It reintroduces a long-lived process holding a dump** — the MCP server's resource profile with a
+  different protocol. Acceptable because it is explicitly launched and closed rather than
+  auto-spawned per agent and left idling, but it is a real cost, not a free addition.
+* **The stack must be able to consume a plain HTML/CSS component library,** since that is what a
+  Claude Design project produces. This is a mild argument against frameworks with strongly bespoke
+  component models, but not a decision — noted so it is weighed rather than discovered.
+
+### 10.5 Capabilities worth having
+
+Listed as capabilities rather than screens, to leave the design open. These are the things the CLI
+and the agent path structurally cannot do well:
+
+* Navigating object references interactively, with history — `gcroot` output is hard to follow as
+  text and natural as a tree.
+* Rendering retention paths as graphs. `RootPathFinder` already computes node-disjoint paths; that
+  is graph-shaped data currently flattened into a table.
+* Seeing heap composition at a glance rather than reading a sorted table.
+* Re-sorting and filtering without re-querying, which §6.2 already supports.
+
+### 10.6 Sequencing
+
+After Phases 1, 2 and 6 of the implementation plan. The command surface *is* the API surface, so
+building this once those exist means consuming a settled contract rather than designing it twice.
+
+## 11. Open questions
 
 1. **Startup cost** — §1.1. Decides native-per-command vs. persistent-container delivery.
 2. **Should `use` validate eagerly?** Opening the dump to verify catches a bad path immediately but
    makes `use` as slow as any other command. Leaning yes: a clear failure at session start beats a
    confusing one on the first real query.
-3. **Do the Core models become a public contract?** Two pressures now point the same way:
-   `--format json` invites agents to depend on field names in `jq` filters, and §6 persists those
-   same shapes to disk. `SchemaVersion` in the cache key handles the storage half safely, but the
-   `jq` half is a real compatibility commitment. Worth deciding deliberately rather than drifting
-   into it.
+3. **Do the Core models become a public contract?** — **yes, settled by §10.3.** Three pressures
+   point the same way: `--format json` invites agents to depend on field names in `jq` filters, §6
+   persists those same shapes to disk, and a future web front end would consume them as an API.
+   `SchemaVersion` in the cache key handles the storage half safely; the other two are a real
+   compatibility commitment, now accepted deliberately rather than drifted into.
 4. **Is tier 2 worth building?** The object index is the difference between "repeat queries are
    fast" and "the first query on a dump is the only slow one". It is also GB-scale and needs a
    bespoke binary format. Defer until tier 1 is measured in real use.
