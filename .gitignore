@@ -5,6 +5,7 @@
 
 # local files
 dumps/*
+core_*
 
 # dotenv files
 .env
