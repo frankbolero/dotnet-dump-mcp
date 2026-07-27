@@ -1,6 +1,9 @@
 # CLI Implementation Plan
 
-Execution plan for [CLI_DESIGN.md](CLI_DESIGN.md). Status: **not started**.
+Execution plan for [CLI_DESIGN.md](CLI_DESIGN.md).
+
+**Status: Phases 1 and 2 complete** (commits `ca7274a`, `f05b5c2`). Both §0 gates resolved. Phase 4
+and Phase 5 are unblocked and not started; Phases 6–10 sit behind Phase 5.
 
 The work is broken into phases sized for delegation to subagents. Model assignments are chosen to
 keep token cost down: mechanical work with an established pattern goes to Haiku 4.5, work requiring
@@ -76,7 +79,7 @@ again by every agent and every re-run.
 repeat — modest but real; at the 50–100 M objects a production leak dump can reach, it is 6–13 s per
 walk and decisive. Tier 1 is also the cheap half of §6: small JSON entries, no bespoke binary format.
 
-**Tier 2 (object index) stays deferred** per §11.4. At ~24 bytes/object it would be 240 MB for dump 3
+**Tier 2 (object index) stays deferred** per §12.4. At ~24 bytes/object it would be 240 MB for dump 3
 alone and GB-scale for the dumps that motivate it, to save a walk now measured at ~1.3 s. Revisit
 only if `listobj`/`gcroot` prove painful in real use.
 
@@ -120,6 +123,7 @@ Both gates in §0 are resolved: native per-command delivery, and tier 1 caching 
 | 1 | Cache abstraction + providers, tier 1 only, incl. `DumpIdentity` on `IDumpContext` (§6.4) | Sonnet 5 | — | 2 |
 | 2 | JSON + TSV formatters (§3.3, §10.3) | Haiku 4.5 | — | 1 |
 | ~~3~~ | ~~`DumpIdentity` on `IDumpContext`~~ — folded into Phase 1 | — | — | — |
+| 3b | Fix `gcroot` truncation reporting; make the node budget settable | Sonnet 5 | — | 1, 2, 4 |
 | 4 | Wire cache into analyzers; delete `_cachedStats` (§6.3) | Sonnet 5 | 1 | 5 |
 | 5 | CLI scaffold: project, global options, dump resolution, exit codes (§2, §3) | Sonnet 5 | 2 | 4 |
 | 6 | The 25 command wirings (§4) | Haiku 4.5 | 5 | 7 |
@@ -162,7 +166,7 @@ Requirements beyond the interface sketch:
 Tests: key composition and stability, hit/miss, tier promotion, atomicity under concurrent writers,
 `NullAnalysisCache` always computing. No dump file required — these are pure unit tests.
 
-Out of scope: tier 2 binary index (§11.4 is unresolved), and any analyzer changes.
+Out of scope: tier 2 binary index (§12.4 is unresolved), and any analyzer changes.
 
 ### Phase 2 — JSON and TSV formatters · Haiku 4.5
 
@@ -207,6 +211,34 @@ Add `DumpIdentity Identity { get; }` to `IDumpContext`, computed once in `DumpCo
 dump `size + mtime + inode` plus the resolved DAC path/build id. Must not read the whole file.
 Throws or returns a sentinel when no dump is loaded, consistent with the existing `IsLoaded`
 pattern.
+
+### Phase 3b — `gcroot` truncation reporting and settable budget · Sonnet 5
+
+Full write-up, defect chain and proposed fix: **[GCROOT_TRUNCATION.md](GCROOT_TRUNCATION.md)**.
+
+A correctness bug, not CLI work — `gcroot` reports a truncated search as "the object is unrooted and
+eligible for collection", which on a heap above ~2M objects can be flatly false. Independent of every
+other phase; can run at any time.
+
+Two parts:
+
+1. **Never report a truncated search as complete.** `FindOnePath` returns `null` both when it
+   exhausts its budget (`RootPathFinder.cs:111`) and when it legitimately finds nothing
+   (`RootPathFinder.cs:141`). Distinguish them, thread the distinction through `FindPaths` →
+   `GetGCRoots` → `GCRootPathInfo` → all three formatters, and report nodes visited plus completion
+   status on every result. Note `maxPaths` gives each pass a fresh budget, so *partial* results are
+   possible too and must be flagged.
+2. **Make the budget settable**, `--max-nodes <n>` with `0` meaning unlimited, plus a `maxNodes` MCP
+   tool parameter and a `DNDUMP_GCROOT_MAX_NODES` default. Settle and document whether the budget is
+   per-pass or total — the current per-pass behaviour is undocumented and surprising.
+
+Unlimited must be available but is not free: `parent` retains every visited node, so peak memory is
+roughly 40 bytes × nodes visited (~4 GB at 100M). Say so in the help text, and have the truncation
+message point at `--max-nodes 0` as the way to get a conclusive answer.
+
+`RootPathFinder` is expressed over an abstract successor function so it can be tested against a
+hand-built graph with no dump — see `src/DotNetDump.Tests/RootPathFinderTests.cs`. All the tests
+listed in the write-up are cheap unit tests.
 
 ### Phase 4 — Wire the cache into analyzers, and split compute from pagination · Sonnet 5
 

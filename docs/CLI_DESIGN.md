@@ -171,7 +171,7 @@ entry point, and it doubles as the diagnostic when DAC resolution goes wrong.
 | `dumpheap` | — | `--limit`, `--offset`, `--sort`, `--order` | `TotalSize` (default), `Count`, `TypeName` |
 | `listobj` | — | `--type <substring>`, `--limit`, `--offset`, `--sort`, `--order` | `Address` (default), `Size` |
 | `dumpobj` | `<address>` | — | — |
-| `gcroot` | `<address>` | `--max-paths <n>` (default 4), `--limit`, `--offset` | — |
+| `gcroot` | `<address>` | `--max-paths <n>` (default 4), `--max-nodes <n>` (`0` = unlimited), `--limit`, `--offset` | — |
 | `eeheap` | — | — | — |
 | `gchandles` | — | `--limit`, `--offset`, `--sort`, `--order` | `Address` (default), `Kind`, `TypeName` |
 | `verifyheap` | — | — | — |
@@ -555,7 +555,96 @@ and the agent path structurally cannot do well:
 After Phases 1, 2 and 6 of the implementation plan. The command surface *is* the API surface, so
 building this once those exist means consuming a settled contract rather than designing it twice.
 
-## 11. Open questions
+## 11. Future direction: analysis index and storage substrate
+
+**Status: not planned work.** Records the answer to "would Core be better served by an external
+service, or by a different in-memory structure, once a UI (§10) exists?" — and, more usefully, what
+the trigger for that work actually is.
+
+### 11.1 External services
+
+**No, with one exception.** Redis, a daemon, anything with a port: this is a single-developer local
+tool, the filesystem cache (§6) already handles cross-process sharing, and a service dependency
+wrecks the "just run it" property the CLI argument was built on. That would re-import the MCP
+server's operational weight through a side door.
+
+**SQLite is the defensible middle**, and is not really a service — an embedded file, no daemon, no
+port. It buys indexed queries by type, size range or address, with `LIMIT`/`OFFSET` paging that never
+materialises millions of rows. That is precisely what a UI needs and what a flat memory-mapped index
+does not give for free. The cost is a real dependency in a Core that currently has exactly one, and
+§5's minimal-dependency rule treats that as a principle. Worth breaking **if** the object index gets
+built at all — hand-rolling indexed paging over a mapped file is reinventing a database badly.
+
+### 11.2 The structure, if it is ever needed
+
+ClrMD's object model is the wrong shape for interactive use. The CLI hides this by exiting; a UI
+cannot. The shape memory profilers converge on is struct-of-arrays plus **CSR** (compressed sparse
+row) for the object graph:
+
+| Structure | Contents | Size at 10.2 M objects |
+| :--- | :--- | ---: |
+| Object table | address, MethodTable, size — parallel arrays | ~200 MB |
+| Forward edges (CSR) | offsets array + target *indices*, not addresses | ~120 MB |
+| Reverse edges (CSR transposed) | the same, inverted | ~120 MB |
+
+~450 MB for a 2.9 GB heap, memory-mappable, built once per dump. This supersedes the much smaller
+tier-2 sketch in §6.3, which only proposed `address → (MethodTable, size)`.
+
+The reverse edge map is the one that changes what is *possible* rather than merely what is fast.
+"What holds this object?" becomes an exact O(1) lookup instead of a bounded forward search that can
+miss (§11.4). And once CSR exists, a **dominator tree** becomes computable, which yields retained
+size — the single most useful number in leak analysis, and something neither the CLI nor the MCP
+server can offer today at any latency.
+
+### 11.3 The trigger is features, not performance
+
+Measured walk cost is ~1.25 s at ~8 M objects/sec (implementation plan §0.2). That is cheap enough
+that per-query walking is fine for the CLI and tolerable as a UI's first load. **Performance alone
+does not justify this work** until object counts reach 50–100 M, where a walk is 6–13 s.
+
+What justifies it is wanting retained size, dominators, or reliable reverse lookup — none of which
+are achievable without the graph at *any* latency. That is a decision about what the tool is for,
+not an optimisation. It should be taken on those terms.
+
+### 11.4 A present-day limitation this exposes
+
+`gcroot` performs a forward breadth-first search from roots with a budget of
+`RootPathFinder.DefaultMaxNodesVisited = 2_000_000` (`RootPathFinder.cs:33`). On a heap of 10.2 M
+objects that budget covers under 20% of the graph, so **`gcroot` can report no retention path for an
+object that demonstrably has one**, with no indication that the search was truncated rather than
+exhaustive. This is a correctness-of-reporting bug independent of any UI work.
+
+Written up in full, with the defect chain and a proposed fix, in
+**[GCROOT_TRUNCATION.md](GCROOT_TRUNCATION.md)**. The fix has two parts: always report truncation,
+and make the budget a caller-settable option (`--max-nodes`, with `0` meaning unlimited) rather than
+a hard-coded constant.
+
+### 11.5 A TUI needs none of this
+
+Worth stating plainly, because it is much the cheaper path to interactivity: a terminal UI
+(Spectre.Console, Terminal.Gui) is long-lived and single-user with no serialization boundary. It can
+hold ClrMD live in memory and be perfectly served by today's structures plus the §6 result cache,
+and it inherits the warm in-memory type cache the CLI must discard on every invocation.
+
+The web front end is what forces a serialization story, because millions of rows cannot cross to a
+browser. If *interactivity* is the goal rather than shareability, a TUI gets most of the value for a
+fraction of the work.
+
+### 11.6 What this means for current work
+
+Nothing structural, deliberately. The seams already exist:
+
+* `IAnalysisCache` (§6.4) makes the storage substrate swappable — a SQLite-backed provider would be a
+  new implementation, not a redesign.
+* Phase 4's `PagedResult<T>` separates "compute the full result" from "page it". That boundary is
+  exactly where an indexed backend plugs in later, without touching analyzer callers.
+
+The one thing worth acting on independently is §11.4, tracked in
+[GCROOT_TRUNCATION.md](GCROOT_TRUNCATION.md): at minimum `gcroot` must report when its traversal
+budget was exhausted, so "no paths found" is distinguishable from "gave up" — and the budget itself
+should be settable, up to unlimited.
+
+## 12. Open questions
 
 1. **Startup cost** — §1.1. Decides native-per-command vs. persistent-container delivery.
 2. **Should `use` validate eagerly?** Opening the dump to verify catches a bad path immediately but
