@@ -88,6 +88,17 @@ establish what object counts production dumps actually reach.
 
 Every task brief must include:
 
+* **Verify your baseline before touching anything.** Agent worktrees are branched from `main`, which
+  is *far* behind the working branch — `docs/overall-checkup` carries ~1,000 lines of Core changes
+  that `main` does not have. Run `git log --oneline -1` and, if you are not on a descendant of
+  `docs/overall-checkup`, `git merge --ff-only docs/overall-checkup` before starting. **This is not
+  hypothetical:** Phase 2 was silently built against `main`, mirrored an obsolete `MarkdownFormatter`
+  (16 KB vs the real 24 KB) and had to be redone in full. Phase 1 caught the same problem and
+  fast-forwarded itself.
+* **Scope `dotnet format` with `--include`.** `.editorconfig` specifies `end_of_line = crlf` while
+  the committed blobs are LF, so an unscoped full-solution `dotnet format` rewrites line endings in
+  every file in the repo and buries your actual change in hundreds of files of churn. Format only the
+  files you touched, and revert incidental line-ending changes elsewhere.
 * Read `AGENTS.md` and `docs/CLI_DESIGN.md` first. The spec is the contract; do not redesign it.
 * Respect the layering: analysis logic in Core, formatting in `Core/Formatting/`, argument handling
   in the CLI project. The CLI project must not reference `DotNetDump.Server` or
@@ -106,10 +117,10 @@ Both gates in §0 are resolved: native per-command delivery, and tier 1 caching 
 
 | # | Deliverable | Model | Depends on | Parallel with |
 | :-- | :--- | :--- | :--- | :--- |
-| 1 | Cache abstraction + providers, tier 1 only (§6.4) | Sonnet 5 | — | 2, 3 |
-| 2 | JSON + TSV formatters (§3.3) | Haiku 4.5 | — | 1, 3 |
-| 3 | `DumpIdentity` on `IDumpContext` (§6.4) | Haiku 4.5 | — | 1, 2 |
-| 4 | Wire cache into analyzers; delete `_cachedStats` (§6.3) | Sonnet 5 | 1, 3 | 5 |
+| 1 | Cache abstraction + providers, tier 1 only, incl. `DumpIdentity` on `IDumpContext` (§6.4) | Sonnet 5 | — | 2 |
+| 2 | JSON + TSV formatters (§3.3, §10.3) | Haiku 4.5 | — | 1 |
+| ~~3~~ | ~~`DumpIdentity` on `IDumpContext`~~ — folded into Phase 1 | — | — | — |
+| 4 | Wire cache into analyzers; delete `_cachedStats` (§6.3) | Sonnet 5 | 1 | 5 |
 | 5 | CLI scaffold: project, global options, dump resolution, exit codes (§2, §3) | Sonnet 5 | 2 | 4 |
 | 6 | The 25 command wirings (§4) | Haiku 4.5 | 5 | 7 |
 | 7 | Docker: DAC cache volume; keep arch-mismatch path working (§8.2) | Sonnet 5 | — | 6 |
@@ -117,9 +128,16 @@ Both gates in §0 are resolved: native per-command delivery, and tier 1 caching 
 | 9 | Skill authoring (§8.3) | Sonnet 5 | 6 | — |
 | 10 | Integration review, README, `PLAN.md` update | Opus (me) | all | — |
 
-Phases 1, 2 and 3 have no dependencies and should be launched together. Phase 6 is the largest by
-volume but the most mechanical, which is why it is deliberately isolated behind Phase 5 — once one
-command is wired, the remaining 24 are pattern-matching.
+Phases 1 and 2 have no dependencies and launch together. They touch disjoint directories
+(`Core/Caching/` and `Core/Formatting/`) but must run in **separate git worktrees** regardless —
+concurrent `dotnet build`/`dotnet test` in one working tree collides over `obj/` and `bin/`.
+
+Phase 3 was folded into Phase 1: it added `DumpIdentity` to `IDumpContext`, but Phase 1 defines that
+type, so running them concurrently would have produced either a duplicate definition or a build
+failure. It is a few lines and belongs with its owner.
+
+Phase 6 is the largest by volume but the most mechanical, which is why it is deliberately isolated
+behind Phase 5 — once one command is wired, the remaining 24 are pattern-matching.
 
 Phase 7 is reduced from the original plan: §0.1 showed sub-second init, so the persistent-container
 wrapper is optional rather than the primary path. What remains is the DAC cache volume and keeping
@@ -166,6 +184,23 @@ recorded future direction and would consume this as its API, so:
 This is the same amount of work as the naive version and much cheaper than retrofitting it later.
 TSV stays deliberately dumb: rows only, for `grep`/`awk`.
 
+**Outcome — first attempt discarded, must be redone.** Two independent problems:
+
+1. **Wrong baseline (fatal).** The worktree was branched from `main` and never fast-forwarded, so the
+   agent mirrored a `MarkdownFormatter` of 16 KB against the working branch's 24 KB, on model shapes
+   ~1,000 lines out of date. The output references none of the current fields — `GCHandleInfo` alone
+   has gained `IsStrong`, `ReferenceCount`, `DependentTarget`, `AppDomainName` and a whole
+   `GCHandleStatItem` companion class, none of which appear. Not patchable: the mirror target itself
+   was wrong. See the baseline instruction in §0.3.
+2. **Contradictory brief (mine).** The brief asked the formatters to mirror `MarkdownFormatter`'s
+   signatures *and* to emit total/offset/limit/hasMore. Those conflict — analyzers slice with
+   `Skip().Take()` and return a bare `IEnumerable<T>`, so the pre-pagination total is discarded before
+   any formatter is reached. The agent shipped `{ "itemCount": n }`, the only thing its inputs
+   allowed. Phase 4 now owns this via `PagedResult<T>`.
+
+The redo should keep the envelope shape (`{ data, pagination }`, camelCase, nulls omitted, 16-hex
+addresses) — that part was right — and emit `pagination` with the fields Phase 4 will populate.
+
 ### Phase 3 — Dump identity · Haiku 4.5
 
 Add `DumpIdentity Identity { get; }` to `IDumpContext`, computed once in `DumpContext.Load` from
@@ -173,7 +208,25 @@ dump `size + mtime + inode` plus the resolved DAC path/build id. Must not read t
 Throws or returns a sentinel when no dump is loaded, consistent with the existing `IsLoaded`
 pattern.
 
-### Phase 4 — Wire the cache into analyzers · Sonnet 5
+### Phase 4 — Wire the cache into analyzers, and split compute from pagination · Sonnet 5
+
+**Scope expanded after Phase 2.** Two requirements turn out to be the same refactor:
+
+1. §6.2 requires caching the *unpaginated* model so one entry serves every `limit`/`offset`/`sort`
+   variant. Analyzers currently do walk → sort → page inside a single method
+   (`HeapAnalyzer.cs:54,74,141,316`, `ThreadAnalyzer.cs:43,140,204,258`, `ModuleAnalyzer.cs:47`), so
+   the cache cannot sit around the full result until computation and pagination are separated.
+2. §10.3 requires JSON pagination metadata — total available, offset, limit, whether more remains.
+   Phase 2 could not deliver this: analyzers return a bare `IEnumerable<T>` after slicing, so the
+   pre-pagination total is discarded before any formatter sees it. Phase 2 shipped a placeholder
+   `{ "itemCount": n }`, which is derivable from the array and therefore carries no information.
+
+Introduce `PagedResult<T>` in `Core/Models/` — items plus `TotalAvailable`, `Offset`, `Limit` — and
+have the analyzers return it. The cache then wraps the unpaginated computation; pagination is applied
+after the lookup; and `JsonFormatter` gets the fields it needs to fill the envelope properly.
+
+`MarkdownFormatter` and the MCP server call sites need updating to match. `MarkdownFormatter`'s
+rendering must not change — only how it receives the data.
 
 Add `IAnalysisCache` constructor injection to `HeapAnalyzer` and `ThreadAnalyzer`, defaulting to
 `NullAnalysisCache` so existing callers and tests are unaffected.

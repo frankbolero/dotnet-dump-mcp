@@ -117,9 +117,12 @@ people actually describe the operation ("top 20 types by size").
 
 * **`md`** (default) — the existing `MarkdownFormatter` output. Preserves current behavior and is
   the most readable for an LLM reading results directly.
-* **`json`** — the Core model objects serialized directly. This is the format that makes the CLI
-  worth building: `dndump dumpheap --format json | jq '.[] | select(.TotalSize > 1e9)'` filters on
-  the machine instead of in the context window.
+* **`json`** — the Core model objects in a stable envelope: `{ "data": …, "pagination": … }` for
+  collection results, `{ "data": {…} }` for single items, camelCase field names, nulls omitted, and
+  `ulong` addresses as 16-char uppercase hex without a `0x` prefix. This is the format that makes
+  the CLI worth building: `dndump dumpheap --format json | jq '.data[] | select(.totalSize > 1e9)'`
+  filters on the machine instead of in the context window. Field names are pinned with explicit
+  `[JsonPropertyName]` attributes, so renaming a Core property cannot silently break the contract.
 * **`tsv`** — tab-separated, no header decoration. For `grep`/`awk`/`cut` pipelines where markdown
   table padding gets in the way.
 
@@ -236,7 +239,7 @@ dndump dumpheap --format tsv --limit 5000 | grep -i 'HttpClient'
 
 # Everything over 1 GB
 dndump dumpheap --format json --limit 5000 \
-  | jq -r '.[] | select(.TotalSize > 1073741824) | "\(.TotalSize)\t\(.TypeName)"'
+  | jq -r '.data[] | select(.totalSize > 1073741824) | "\(.totalSize)\t\(.typeName)"'
 
 # Sample an instance and find what retains it
 dndump listobj --type MyApp.CacheEntry --limit 1
