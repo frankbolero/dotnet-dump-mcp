@@ -1,0 +1,264 @@
+# CLI Implementation Plan
+
+Execution plan for [CLI_DESIGN.md](CLI_DESIGN.md). Status: **not started**.
+
+The work is broken into phases sized for delegation to subagents. Model assignments are chosen to
+keep token cost down: mechanical work with an established pattern goes to Haiku 4.5, work requiring
+design judgement goes to Sonnet 5, and architectural decisions plus review gates stay with Opus.
+
+## 0. Prerequisites
+
+### 0.1 Decision gate: startup measurement — **RESOLVED, native delivery**
+
+Measured 2026-07-27 against `core_20251212_112511`, a 6.3 GB Mach-O arm64 core, using a Release
+build of `DotNetDumpExplorer` invoked directly (not via `dotnet run`, which adds ~450 ms of MSBuild
+evaluation and is not representative of a shipped tool).
+
+| Path | Wall time |
+| :--- | :--- |
+| `LoadDump` + `CreateRuntime` + exit (cold) | 0.77 s |
+| Same + full `dumpheap -stat` heap walk (warm) | 0.57 s |
+
+Per-command init is **well under the 3 s threshold**, so:
+
+* **Native per-command delivery (§8.1) is the primary path.** No persistent container required.
+* **Phase 7 is descoped** to keeping Docker working for architecture mismatch, plus the DAC cache
+  volume. The `docker exec` wrapper becomes optional, not the default.
+
+Caveat on the heap-walk figure — see §0.3. This dump's managed heap is 26.7 MB, so the walk is
+effectively free and that number does **not** generalize.
+
+### 0.2 Decision gate: is the cache justified? — **RESOLVED, build tier 1**
+
+Three dumps measured 2026-07-27, all Mach-O arm64 cores:
+
+| | `…112511` | `…205808` | `…211646` |
+| :--- | ---: | ---: | ---: |
+| File size | 6.3 GB | 8.6 GB | 9.0 GB |
+| Managed heap | 26.7 MB | 2,296.3 MB | 2,858.0 MB |
+| **Objects** | **22,733** | **86,216** | **10,187,201** |
+| Types | 1,449 | 1,404 | 1,511 |
+| `eeheap` committed | 26.9 MB / 25 seg | 2,296.7 MB / 33 seg | 2,876.6 MB / 33 seg |
+| Init only (cold) | 0.77 s | 0.62 s | 0.55 s |
+| Init + walk (cold) | 0.57 s | 0.41 s | **2.62 s** |
+| Init + walk (warm, ×2) | — | — | **1.81 s / 1.77 s** |
+| DAC | mismatched, forced | matched | matched |
+
+Objects total against `eeheap` committed on all three, so every walk is correct. The last two loaded
+without the `ignoreMismatch` fallback.
+
+**Heap size is the wrong metric; object count is the right one.** Dump 2 has an 86× larger heap than
+dump 1 and still walks in under half a second — its 2.24 GB sits in only 21,403 `System.Byte[]`
+instances averaging ~112 KB. `EnumerateObjects` walks segments linearly, reading headers and skipping
+object bodies, so cost tracks object count, not bytes. Dump 3 has a similar heap size to dump 2 but
+**118× the objects**, and that is where time appears.
+
+**Derived rate: ~8M objects/sec warm** (10.19M objects, ~1.25 s of walk after subtracting ~0.55 s
+init). Use this to predict any dump's walk cost from its object count:
+
+| Objects | Walk (warm) |
+| ---: | ---: |
+| 10 M | ~1.3 s |
+| 50 M | ~6 s |
+| 100 M | ~13 s |
+
+**The decisive finding is that the walk is CPU-bound, not I/O-bound.** Warm runs held at 103% CPU
+with essentially no I/O wait, and repeated runs were stable at 1.81 s / 1.77 s. The OS page cache
+flattens the cold→warm transition (2.62 s → 1.81 s) and then stops helping. There is a hard floor
+that no amount of file caching removes, because the cost is ClrMD CPU work. **Only a result cache
+eliminates it.**
+
+Compounding this: a triage session hits four of the five walk sites (`dumpheap`, `listobj`,
+`syncblk`, heap-exception scanning), so the per-session cost is roughly 4× the per-walk figure, paid
+again by every agent and every re-run.
+
+**Decision: build tier 1.** Phases 1, 4 and 8 are ungated. At 10 M objects the saving is ~1.8 s per
+repeat — modest but real; at the 50–100 M objects a production leak dump can reach, it is 6–13 s per
+walk and decisive. Tier 1 is also the cheap half of §6: small JSON entries, no bespoke binary format.
+
+**Tier 2 (object index) stays deferred** per §10.4. At ~24 bytes/object it would be 240 MB for dump 3
+alone and GB-scale for the dumps that motivate it, to save a walk now measured at ~1.3 s. Revisit
+only if `listobj`/`gcroot` prove painful in real use.
+
+Caveat: all three dumps are synthetic or semi-synthetic (dump 3 is `HeapNode*` × 30,000 each plus
+3.0 M strings and 3.0 M byte arrays). They establish the *rate*, which transfers; they do not
+establish what object counts production dumps actually reach.
+
+### 0.3 Standing instructions for every subagent
+
+Every task brief must include:
+
+* Read `AGENTS.md` and `docs/CLI_DESIGN.md` first. The spec is the contract; do not redesign it.
+* Respect the layering: analysis logic in Core, formatting in `Core/Formatting/`, argument handling
+  in the CLI project. The CLI project must not reference `DotNetDump.Server` or
+  `ModelContextProtocol`.
+* Multi-target `net8.0;net9.0;net10.0`. No APIs unavailable on net8.0.
+* Nullable reference types are enabled; keep the existing tab-indented, brace-on-same-line style.
+* Before reporting: `dotnet build`, `dotnet test`, and `dotnet format`.
+* Report what you did **not** do, and any place the spec was ambiguous. Do not invent scope.
+
+Writing the spec first is what makes this delegation cheap — each subagent starts cold, and
+`CLI_DESIGN.md` is the shared context that saves re-deriving the design in every brief.
+
+## 1. Phase table
+
+Both gates in §0 are resolved: native per-command delivery, and tier 1 caching is in scope.
+
+| # | Deliverable | Model | Depends on | Parallel with |
+| :-- | :--- | :--- | :--- | :--- |
+| 1 | Cache abstraction + providers, tier 1 only (§6.4) | Sonnet 5 | — | 2, 3 |
+| 2 | JSON + TSV formatters (§3.3) | Haiku 4.5 | — | 1, 3 |
+| 3 | `DumpIdentity` on `IDumpContext` (§6.4) | Haiku 4.5 | — | 1, 2 |
+| 4 | Wire cache into analyzers; delete `_cachedStats` (§6.3) | Sonnet 5 | 1, 3 | 5 |
+| 5 | CLI scaffold: project, global options, dump resolution, exit codes (§2, §3) | Sonnet 5 | 2 | 4 |
+| 6 | The 25 command wirings (§4) | Haiku 4.5 | 5 | 7 |
+| 7 | Docker: DAC cache volume; keep arch-mismatch path working (§8.2) | Sonnet 5 | — | 6 |
+| 8 | MCP server registers a cache provider (§6.6) | Haiku 4.5 | 1, 4 | 6, 7 |
+| 9 | Skill authoring (§8.3) | Sonnet 5 | 6 | — |
+| 10 | Integration review, README, `PLAN.md` update | Opus (me) | all | — |
+
+Phases 1, 2 and 3 have no dependencies and should be launched together. Phase 6 is the largest by
+volume but the most mechanical, which is why it is deliberately isolated behind Phase 5 — once one
+command is wired, the remaining 24 are pattern-matching.
+
+Phase 7 is reduced from the original plan: §0.1 showed sub-second init, so the persistent-container
+wrapper is optional rather than the primary path. What remains is the DAC cache volume and keeping
+the architecture-mismatch path working.
+
+## 2. Phase briefs
+
+### Phase 1 — Cache abstraction and providers · Sonnet 5
+
+Create `src/DotNetDump.Core/Caching/` implementing §6.4 exactly: `DumpIdentity`, `CacheKey`,
+`IAnalysisCache`, `ICacheSerializer`, and the four providers (`Null`, `Memory`, `FileSystem`,
+`Tiered`) plus `JsonCacheSerializer`.
+
+Requirements beyond the interface sketch:
+
+* `FileSystemAnalysisCache` writes temp-file-then-rename; readers never see partial entries.
+* Advisory locking on the key so concurrent processes do not duplicate a multi-minute walk.
+* Cache root from `DNDUMP_CACHE`, else an XDG-style user cache directory. Directory per
+  `DumpIdentity`.
+* `ClearDump` and LRU pruning support, since tier 2 entries will be GB-scale later.
+
+Tests: key composition and stability, hit/miss, tier promotion, atomicity under concurrent writers,
+`NullAnalysisCache` always computing. No dump file required — these are pure unit tests.
+
+Out of scope: tier 2 binary index (§10.4 is unresolved), and any analyzer changes.
+
+### Phase 2 — JSON and TSV formatters · Haiku 4.5
+
+Add `JsonFormatter` and `TsvFormatter` to `src/DotNetDump.Core/Formatting/`, mirroring the public
+surface of the existing `MarkdownFormatter` method-for-method. Mechanical: the models and the method
+list already exist; serialize the same inputs in a different shape. `MarkdownFormatter` is not to be
+modified. TSV emits a header row then tab-separated values, no padding or alignment.
+
+### Phase 3 — Dump identity · Haiku 4.5
+
+Add `DumpIdentity Identity { get; }` to `IDumpContext`, computed once in `DumpContext.Load` from
+dump `size + mtime + inode` plus the resolved DAC path/build id. Must not read the whole file.
+Throws or returns a sentinel when no dump is loaded, consistent with the existing `IsLoaded`
+pattern.
+
+### Phase 4 — Wire the cache into analyzers · Sonnet 5
+
+Add `IAnalysisCache` constructor injection to `HeapAnalyzer` and `ThreadAnalyzer`, defaulting to
+`NullAnalysisCache` so existing callers and tests are unaffected.
+
+Wrap only the five walk-scale sites named in §6.3: `HeapAnalyzer.cs:31,59,320,408` and
+`ThreadAnalyzer.cs:291`. Do not add caching to cheap operations.
+
+Delete `_cachedStats` and replace it with a `GetOrCompute` call — it is currently either dead (per-
+call instantiation) or stale (never invalidated by `load_dump`), and the cache key in §6.1 fixes
+both.
+
+Critical: the arguments hash must exclude `limit`, `offset`, `sort`, `order` and `format`, so one
+entry serves every pagination and rendering variant (§6.2). Add a test proving that two calls
+differing only in `--limit` produce one cache entry and one computation.
+
+### Phase 5 — CLI scaffold · Sonnet 5
+
+Create `src/DotNetDump.Cli/` per §2, add it to the solution, and implement §3 in full: global
+options, dump resolution precedence (`--dump` → `DNDUMP_PATH` → `.dndump/session.json` searched
+upward), the three output formats, stdout/stderr separation, and the four exit codes.
+
+Wire exactly one analysis command end to end — `dumpheap` — as the reference pattern Phase 6 will
+replicate. Also implement `use`, `info` and `commands` (§4.1).
+
+Do **not** port `ExecuteSafe` from `DumpAnalyzerTools.cs:313`. Analyzer exceptions propagate to a
+single top-level handler mapping exception type to exit code, with the message on stderr.
+
+On argument parsing: verify the currently published `System.CommandLine` version and API shape
+before writing against it — the package went through a long beta with breaking changes between
+previews. If it is still unstable, a hand-rolled parser is acceptable and preferable to churn;
+report which you chose and why.
+
+### Phase 6 — Command wirings · Haiku 4.5
+
+Implement the remaining 24 commands from §4.2–§4.5, following the `dumpheap` pattern established in
+Phase 5. Each is: parse arguments, call the analyzer, hand the model to the selected formatter, set
+the exit code. No logic in the CLI project.
+
+The spec tables give exact option names, defaults and valid sort fields per command. Match them
+literally, including the negatable flags (`--[no-]thin-locks`, `--[no-]heap-exceptions`) and
+`--all-threads` as the inverse of `onlyWithExceptions`.
+
+### Phase 7 — Docker · Sonnet 5
+
+Per §8.2: mount a DAC/symbol cache volume so `dotnet-symbol --dac-only` runs once rather than per
+command, and add a wrapper script for the persistent-container pattern (`docker run -d` once, then
+`docker exec` per command) that hides the prefix so agent-facing commands match the native ones.
+`entrypoint.sh` must keep working unchanged for the existing MCP server path.
+
+### Phase 8 — Server cache registration · Haiku 4.5
+
+Register a `TieredAnalysisCache` (memory + filesystem) in `src/DotNetDump.Server/Program.cs` so the
+MCP server shares the cache written by the CLI. Roughly a one-line DI change plus verification that
+`load_dump` on a second dump serves correct results — the regression the old `_cachedStats` would
+have caused.
+
+### Phase 9 — Skill · Sonnet 5
+
+Author the skill per §8.3: dump-selection convention, condensed command table, the three triage
+workflows (OOM/leak, deadlock/hang, unhandled exception), and the piping idioms from §5 so the agent
+filters in the shell by default. The workflows are the part that needs judgement — they are what a
+tool manifest structurally cannot express.
+
+### Phase 10 — Integration · Opus
+
+Cross-phase review, README restructuring to present the CLI as the default with the MCP server as
+the option, and `docs/PLAN.md` updated to reflect the new shape.
+
+## 3. Why these model assignments
+
+**Haiku 4.5** takes Phases 2, 3, 6 and 8. Each has an existing pattern to copy and a spec table to
+match literally — formatter methods mirroring `MarkdownFormatter`, a single computed property, 24
+commands following a reference implementation, one DI registration. Phase 6 is the largest single
+block of code in the plan and also the least design-sensitive, which is exactly the trade that makes
+delegation to a cheaper model worthwhile.
+
+**Sonnet 5** takes Phases 1, 4, 5, 7 and 9. These involve decisions the spec deliberately leaves
+open: locking and atomicity strategy, where cache boundaries sit relative to pagination, the
+argument-parsing library call, container lifecycle, and what a good triage workflow looks like.
+
+**Opus** keeps Phase 10 and the §0.1 gate. Integration review is where cross-phase mistakes surface,
+and the measurement decides a delivery model that is expensive to change later.
+
+## 4. Risks
+
+* **Phase 4 is the correctness-critical one.** Getting the argument hash wrong — including
+  `limit`/`offset` in the key, or omitting the DAC identity — produces a cache that is either
+  useless or silently wrong. The named test is not optional.
+* **Phase 6 volume.** 24 near-identical commands is where a cheaper model is most likely to drift
+  from the spec tables. Review the option names and defaults against §4 specifically, rather than
+  trusting a green build.
+* **`System.CommandLine` churn** could stall Phase 5. The hand-rolled fallback is explicitly
+  sanctioned so this does not become a blocker.
+* **The measured rate comes from synthetic dumps.** ~8M objects/sec transfers, but the object counts
+  production dumps actually reach do not. If real dumps land nearer 100k objects than 10M, tier 1
+  caching will have been built for a cost that never materialises. It is cheap enough to accept that
+  risk; tier 2 is not, which is why it stays deferred.
+* **Phase 1 should not over-build.** §6.4 specifies four providers, locking, atomic renames and LRU
+  pruning. At tier-1 sizes (a few MB per entry) the pruning and tiering are speculative. Build the
+  interface and all four providers as specified, but keep the eviction policy simple until there is
+  evidence it matters.
