@@ -2,9 +2,9 @@
 
 Execution plan for [CLI_DESIGN.md](CLI_DESIGN.md).
 
-**Status: Phases 1, 2, 3b, 4, 5, 6 and 8 complete** (commits `ca7274a`, `f05b5c2`, `32e0d79`,
-`c41b490`, `aed4895`, `cd40502`, `95d53f6`). Both §0 gates resolved. Phase 7 is in progress; Phase 9
-is unblocked and not started; Phase 10 sits behind all of them.
+**Status: Phases 1, 2, 3b, 4, 5, 6, 7 and 8 complete** (commits `ca7274a`, `f05b5c2`, `32e0d79`,
+`c41b490`, `aed4895`, `cd40502`, `95d53f6`, `222d44d`). Both §0 gates resolved. Phase 9 is unblocked
+and not started; Phase 10 sits behind it.
 
 The work is broken into phases sized for delegation to subagents. Model assignments are chosen to
 keep token cost down: mechanical work with an established pattern goes to Haiku 4.5, work requiring
@@ -340,12 +340,25 @@ Verified against the real sample dump post-merge: `eeheap`, `gchandles`, `syncbl
 `pe`, `listobj`, `dumpmt`, `clrmodules`, and `gcroot` against a real address (both retention paths
 render correctly) all work end to end in Markdown and JSON.
 
-### Phase 7 — Docker · Sonnet 5
+### Phase 7 — Docker · Sonnet 5 — **done, `222d44d`**
 
 Per §8.2: mount a DAC/symbol cache volume so `dotnet-symbol --dac-only` runs once rather than per
 command, and add a wrapper script for the persistent-container pattern (`docker run -d` once, then
 `docker exec` per command) that hides the prefix so agent-facing commands match the native ones.
 `entrypoint.sh` must keep working unchanged for the existing MCP server path.
+
+**Outcome.** Real bug found: the installed `dotnet-symbol` has no `--dac-only` flag any more (verified
+against its actual `--help`, not memory) — `entrypoint.sh`'s DAC fetch was silently failing into its
+warning branch on every run, predating this phase. Replaced with `--debugging --cache-directory
+/symcache`. The Dockerfile now also publishes `DotNetDump.Cli` into the image (into its own
+`/app/cli` directory, so the two publishes' overlapping Core/ClrMD assemblies can't clobber each
+other) — without this, the design doc's `docker exec ... dndump ...` example would have had nothing
+to exec. `scripts/dndump-docker` wraps the persistent-container pattern idempotently, and works
+around a real footgun: `ENTRYPOINT`'s exec form swallows a bare `sleep infinity` as arguments to
+`entrypoint.sh` rather than running it, so the script uses `--entrypoint sleep` instead. Everything
+was verified against a real `docker build`/`run`/`exec`, including a cold vs. warm DAC-cache timing
+comparison (~7.5s vs ~0.19s). Rebuilt and reverified the image from the fully-merged state (all 24
+CLI commands, not just the 1 that existed when this phase's own worktree branched) — no regression.
 
 ### Phase 8 — Server cache registration · Haiku 4.5 — **done, `cd40502`**
 
