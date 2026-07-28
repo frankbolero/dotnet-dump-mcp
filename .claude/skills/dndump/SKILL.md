@@ -1,14 +1,14 @@
 ---
 name: dndump
-description: Analyze a .NET memory dump (core file, .dmp) with the dndump CLI from the shell. Use whenever the task involves investigating a .NET/CLR crash dump, OOM, memory leak, hang, deadlock, or unhandled exception, or when a dump file path or dndump/SOS-style command (dumpheap, gcroot, clrstack, syncblk, pe, ...) is mentioned. Covers dump selection, the command surface, and triage workflows for OOM/leak, deadlock/hang, and unhandled-exception investigations.
+description: Analyze a .NET memory dump (core file, .dmp) with the dndump CLI from the shell. Use whenever the task involves investigating a .NET/CLR crash dump, OOM, memory leak, hang, deadlock, or unhandled exception, or when a dump file path or dndump/SOS-style command (dumpheap, gcroot, clrstack, syncblk, pe, ...) is mentioned. Covers dump selection, the command surface, triage workflows for OOM/leak, deadlock/hang, and unhandled-exception investigations, and the Docker fallback for when a local dndump install cannot open the dump (architecture mismatch, missing install, missing DAC).
 user-invocable: false
 ---
 
 # dndump — .NET dump analysis CLI
 
-`dndump` is a per-invocation CLI over ClrMD (`docs/CLI_DESIGN.md`). It replaces the MCP server for
-any environment with shell access: each command starts, prints results, and exits — no persistent
-process, no tool-manifest context cost. Prefer it over the MCP server whenever a shell is available.
+`dndump` is a per-invocation CLI over ClrMD. Each command starts, prints results, and exits — no
+persistent process, no tool-manifest context cost. Prefer it over any MCP-server equivalent
+whenever a shell is available.
 
 **Filter in the shell, not in your head.** A `dumpheap` on a real dump can be thousands of rows.
 Never dump a full unfiltered result into context to eyeball it — use `--format json`/`tsv` with
@@ -26,10 +26,9 @@ After `use`, every later command in the same directory tree needs no `--dump`. R
 invocation is a fresh process with no inherited env, which is exactly why `use` exists — set it
 once, not per command.
 
-If `dndump` isn't on `PATH` (not installed as a global tool), fall back to
-`dotnet run --project src/DotNetDump.Cli/DotNetDump.Cli.csproj --framework net9.0 -- <args>`, or, for
-Linux/Mac architecture mismatches, `./scripts/dndump-docker <args>` (same command surface, backed by
-a long-lived container — see README "Running the CLI via Docker").
+If `dndump` fails to load the dump locally (wrong OS/architecture for the dump, no local .NET
+runtime matching it, or no matching DAC available), see "Docker fallback" below before concluding
+the dump is unreadable.
 
 ## Global options
 
@@ -48,8 +47,8 @@ distinguishable.
 
 ## Command surface
 
-Run `dndump commands` for the live list. Condensed reference (see `docs/CLI_DESIGN.md` §4 for full
-option/sort-field tables):
+Run `dndump commands` for the live list, and `dndump <command> --help` for a command's exact
+options and sort fields (trust `--help` over any static docs, which can lag behind).
 
 **Session** — `use <path>`, `info`, `commands`
 
@@ -66,7 +65,7 @@ reported "not conclusive"), `eeheap`, `gchandles`, `verifyheap`, `verifyobj <add
 threads and the heap (`--no-heap-exceptions` to heap-scan-skip, `--all-threads` to include threads
 without one); give an address to inspect a single exception object.
 
-**Modules/metadata** — `clrmodules --include-system`, `dumpmodule <addr>`, `dumpassembly <addr>`,
+**Modules/metadata** — `clrmodules`, `dumpmodule <addr>`, `dumpassembly <addr>`,
 `dumpmt <addr>`, `dumpmd <addr>`, `dumpclass <addr>` (a MethodTable address — ClrMD has no separate
 EEClass), `name2ee <module> <type[.method]>`, `ip2md <addr>`
 
@@ -118,3 +117,82 @@ dndump dumpheap --format json --limit 5000 \
 Default to `--format tsv` or `--format json` plus a shell filter whenever a result could be large
 (`dumpheap`, `listobj`, `clrthreads`, `gchandles`, `syncblk`, `pe` with no address) — reach for plain
 `md` output only once a result is already known to be small, or after filtering it down.
+
+## Docker fallback — when local dndump can't open the dump
+
+Reach for this whenever a native `dndump` attempt fails for any of these reasons:
+
+- **Architecture/OS mismatch** — e.g. a Linux dump analyzed on macOS or Windows, or an ARM64 dump
+  on an x64 host (or vice versa). ClrMD generally needs a host whose OS/arch matches the dump's.
+- **No local .NET runtime matching the dump's version**, or no `dndump` install at all on this
+  machine.
+- **DAC not found locally** and no matching runtime installed to source one from.
+
+A prebuilt, multi-arch image (`linux/amd64` and `linux/arm64`) that bundles `dndump` alongside
+`dotnet-symbol` (for fetching the DAC) is published at `ghcr.io/frankbolero/dotnet-dump-mcp` — no
+source checkout needed:
+
+```bash
+docker pull ghcr.io/frankbolero/dotnet-dump-mcp:latest
+```
+
+### One-shot command
+
+Fine for a single command; pays container startup and a DAC fetch every time:
+
+```bash
+docker run --rm -i \
+  -v "/path/to/your/dumps:/dumps" \
+  -e DUMP_PATH=/dumps/your_dump.core \
+  ghcr.io/frankbolero/dotnet-dump-mcp:latest
+```
+
+Add `--platform linux/amd64` (or `linux/arm64`) if the dump's architecture doesn't match the host's
+default (e.g. analyzing an x64 Linux dump on Apple Silicon).
+
+### Persistent session (preferred for a multi-command triage session)
+
+Keep one long-lived container and `docker exec` into it, so container startup and the DAC fetch are
+each paid once, not per command:
+
+```bash
+docker run -d --name dndump-session \
+  -v "/path/to/dumps:/dumps" \
+  -v dndump-symcache:/symcache \
+  --entrypoint sleep \
+  ghcr.io/frankbolero/dotnet-dump-mcp:latest infinity
+```
+
+`--entrypoint sleep ... infinity` is required — the image's normal entrypoint would otherwise try
+(and fail) to treat `sleep`/`infinity` as a dump path. But that also means its normal DAC
+auto-prefetch (which only runs as part of that entrypoint, keyed off a `DUMP_PATH` env var) is
+skipped here, so fetch the DAC yourself before using the dump, and pass it explicitly — the CLI's
+default (no-argument) DAC resolution does **not** automatically discover a manually-fetched DAC
+sitting next to the dump, it must be told the exact path:
+
+```bash
+docker exec dndump-session dotnet-symbol --debugging --cache-directory /symcache /dumps/your_dump.core
+docker exec dndump-session dndump use /dumps/your_dump.core --dac /dumps/libmscordaccore.so
+docker exec dndump-session dndump dumpheap --top 20
+docker exec dndump-session dndump info
+```
+
+(`libmscordaccore.so` is always the right filename here — the image, and therefore the DAC
+`dotnet-symbol` fetches for it, is always Linux regardless of the host OS/CPU. `-v
+dndump-symcache:/symcache` persists what `dotnet-symbol` fetches across container restarts so this
+is a no-op after the first run for a given dump.)
+
+If you hit `Could not find matching DAC for this runtime. Note that symbol server download of the
+DAC is disabled for this platform.` after `use`, it means the DAC fetch above either didn't run or
+wasn't passed via `--dac` — rerun both commands.
+
+### Benchmarking a dump before a long session
+
+The heap/thread-walk commands (`dumpheap`, `listobj`, `gcroot`, `syncblk`, `gchandles`,
+`printexception`) are the expensive ones. A quick cold-vs-warm timing check before committing to a
+long triage session:
+
+```bash
+time docker exec dndump-session dndump dumpheap --format json --limit 100000 >/dev/null
+time docker exec dndump-session dndump dumpheap --format json --limit 100000 >/dev/null  # warm (cached)
+```
