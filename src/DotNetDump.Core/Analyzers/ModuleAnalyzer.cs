@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using DotNetDump.Core.Models;
+using DotNetDump.Core.Utilities;
 
 using Microsoft.Diagnostics.Runtime;
 
@@ -27,7 +28,7 @@ public class ModuleAnalyzer {
 			Name = m.Name,
 			ImageBase = m.ImageBase,
 			Size = m.Size,
-			IsUserCode = !IsSystemModule(m.Name ?? "")
+			IsUserCode = !ModuleClassifier.IsSystemModule(m.Name)
 		});
 
 		if (!includeSystem) {
@@ -46,12 +47,6 @@ public class ModuleAnalyzer {
 		return modules.Skip(parameters.Offset).Take(parameters.Limit);
 	}
 
-	private bool IsSystemModule(string name) {
-		return name.Contains("System.", StringComparison.OrdinalIgnoreCase) ||
-				 name.Contains("Microsoft.", StringComparison.OrdinalIgnoreCase) ||
-				 name.EndsWith("mscorlib.dll", StringComparison.OrdinalIgnoreCase);
-	}
-
 	public ModuleDetails GetModuleDetails(ulong address) {
 		var runtime = GetRuntime();
 		var module = runtime.EnumerateModules().FirstOrDefault(m => m.ImageBase == address || m.MetadataAddress == address);
@@ -59,16 +54,10 @@ public class ModuleAnalyzer {
 		if (module == null)
 			throw new ArgumentException($"No module found at address {address:X}");
 
-		// Count types in this module by checking heap objects
-		int typeCount = 0;
-		var seenTypes = new HashSet<string>();
-		foreach (var obj in runtime.Heap.EnumerateObjects().Take(10000)) { // Sample first 10k objects
-			if (obj.Type?.Module == module) {
-				if (obj.Type.Name != null && seenTypes.Add(obj.Type.Name)) {
-					typeCount++;
-				}
-			}
-		}
+		// Exact type count from the module's TypeDef map, rather than inferring it from a sample of
+		// heap objects — a sample only sees types that happen to have live instances.
+		int typeCount = module.EnumerateTypeDefToMethodTableMap().Count();
+		int typesWithStatics = module.EnumerateTypesWithStaticFields().Count();
 
 		return new ModuleDetails {
 			Address = address,
@@ -78,33 +67,42 @@ public class ModuleAnalyzer {
 			Size = module.Size,
 			MetadataAddress = module.MetadataAddress,
 			MetadataLength = (int)module.MetadataLength,
-			AssemblyId = module.ImageBase, // Use ImageBase as pseudo-AssemblyId since AssemblyId not available in ClrMD
+			AssemblyAddress = module.AssemblyAddress,
 			IsDynamic = module.IsDynamic,
-			IsFileLayout = false, // Not available in ClrMD v3
-			TypeCount = typeCount
+			IsPEFile = module.IsPEFile,
+			Layout = module.Layout.ToString(),
+			AppDomainName = module.AppDomain?.Name,
+			TypeCount = typeCount,
+			TypesWithStaticFieldsCount = typesWithStatics
 		};
 	}
 
-	public AssemblyDetails GetAssemblyDetails(ulong assemblyId) {
+	/// <summary>
+	/// Looks up an assembly. Accepts the runtime's Assembly address (what SOS calls the assembly id)
+	/// and also a module ImageBase, since dumps and tools quote both.
+	/// </summary>
+	public AssemblyDetails GetAssemblyDetails(ulong assemblyAddress) {
 		var runtime = GetRuntime();
+		var allModules = runtime.EnumerateModules().ToList();
 
-		// Since AssemblyId is not available in ClrMD, we use ImageBase as the identifier
-		// Find the module with this ImageBase first
-		var targetModule = runtime.EnumerateModules().FirstOrDefault(m => m.ImageBase == assemblyId);
+		var targetModule = allModules.FirstOrDefault(m => m.AssemblyAddress == assemblyAddress)
+			?? allModules.FirstOrDefault(m => m.ImageBase == assemblyAddress);
 
 		if (targetModule == null)
-			throw new ArgumentException($"No module found with address {assemblyId:X}");
+			throw new ArgumentException(
+				$"No assembly or module found at {assemblyAddress:X}. Expected an Assembly address " +
+				"(from dump_module) or a module ImageBase (from clr_modules).");
 
-		// Get all modules with the same assembly name
-		var assemblyName = targetModule.AssemblyName;
-		var modules = runtime.EnumerateModules()
-			.Where(m => m.AssemblyName == assemblyName)
-			.ToList();
+		// Group by the runtime's assembly address where we have one; fall back to assembly name.
+		var modules = targetModule.AssemblyAddress != 0
+			? allModules.Where(m => m.AssemblyAddress == targetModule.AssemblyAddress).ToList()
+			: allModules.Where(m => m.AssemblyName == targetModule.AssemblyName).ToList();
 
 		return new AssemblyDetails {
-			AssemblyId = assemblyId,
-			Name = assemblyName ?? "<unknown>",
+			AssemblyAddress = targetModule.AssemblyAddress,
+			Name = targetModule.AssemblyName ?? "<unknown>",
 			IsDynamic = targetModule.IsDynamic,
+			AppDomainName = targetModule.AppDomain?.Name,
 			Modules = modules.Select(m => m.Name ?? "<unknown>").ToList()
 		};
 	}
@@ -119,42 +117,74 @@ public class ModuleAnalyzer {
 		if (module == null)
 			throw new ArgumentException($"Module '{moduleName}' not found");
 
-		// Try to find type
-		var type = module.GetTypeByName(typeName);
+		// The documented form is <module>!<Type> or <module>!<Type>.<Method>. Resolving the whole
+		// string as a type first and only then splitting off a method never worked: for
+		// "Program.Main" the type lookup fails and throws, and for a namespaced type such as
+		// "System.String" the trailing segment is not a method at all.
+		var (type, methodName) = ResolveTypeAndMethod(module, typeName);
 
-		if (type == null)
-			throw new ArgumentException($"Type '{typeName}' not found in module '{moduleName}'");
+		if (type == null) {
+			throw new ArgumentException(
+				$"Type '{typeName}' not found in module '{moduleName}'. Expected a fully-qualified " +
+				"type name, optionally followed by .MethodName.");
+		}
 
 		var result = new Name2EEResult {
 			ModuleName = module.Name,
 			TypeName = type.Name,
 			MethodTable = type.MethodTable,
-			EEClass = type.MethodTable // In ClrMD these are same
+			// ClrMD does not surface EEClass separately from the MethodTable.
+			EEClass = type.MethodTable
 		};
 
-		// If typeName contains a method (e.g., "MyClass.MyMethod"), try to find methods
-		if (typeName.Contains('.') || typeName.Contains("::")) {
-			var methodName = typeName.Split(new[] { '.', ':' }, StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
-			if (methodName != null) {
-				foreach (var method in type.Methods.Where(m => m.Name?.Equals(methodName, StringComparison.OrdinalIgnoreCase) ?? false)) {
-					result.Methods.Add(new MethodDescInfo {
-						MethodDesc = method.MethodDesc,
-						MethodTable = type.MethodTable,
-						MethodName = method.Name ?? "<unknown>",
-						TypeName = type.Name,
-						ModuleName = module.Name,
-						Signature = method.Signature,
-						NativeCode = method.NativeCode,
-						IsJitted = method.NativeCode != 0,
-						IsGeneric = method.Name?.Contains('<') ?? false,
-						MetadataToken = method.MetadataToken
-					});
-				}
-				result.MethodName = methodName;
-			}
+		if (methodName == null)
+			return result;
+
+		result.MethodName = methodName;
+
+		foreach (var method in type.Methods.Where(m => m.Name?.Equals(methodName, StringComparison.Ordinal) ?? false)) {
+			result.Methods.Add(new MethodDescInfo {
+				MethodDesc = method.MethodDesc,
+				MethodTable = type.MethodTable,
+				MethodName = method.Name ?? "<unknown>",
+				TypeName = type.Name,
+				ModuleName = module.Name,
+				Signature = method.Signature,
+				NativeCode = method.NativeCode,
+				IsJitted = method.NativeCode != 0,
+				IsGeneric = method.Name?.Contains('<') ?? false,
+				MetadataToken = method.MetadataToken
+			});
 		}
 
+		if (result.Methods.Count == 0)
+			throw new ArgumentException($"Type '{type.Name}' has no method named '{methodName}'.");
+
 		return result;
+	}
+
+	/// <summary>
+	/// Resolves <paramref name="name"/> as a type, or as a type plus trailing method name. The full
+	/// string is tried as a type first, so a namespaced type is never mistaken for Type.Method.
+	/// </summary>
+	private static (ClrType? Type, string? MethodName) ResolveTypeAndMethod(ClrModule module, string name) {
+		string normalized = name.Replace("::", ".");
+
+		var exact = module.GetTypeByName(normalized);
+		if (exact != null)
+			return (exact, null);
+
+		int lastDot = normalized.LastIndexOf('.');
+		if (lastDot > 0 && lastDot < normalized.Length - 1) {
+			string candidateType = normalized.Substring(0, lastDot);
+			string candidateMethod = normalized.Substring(lastDot + 1);
+
+			var type = module.GetTypeByName(candidateType);
+			if (type != null)
+				return (type, candidateMethod);
+		}
+
+		return (null, null);
 	}
 
 	public MethodDescInfo GetMethodByIP(ulong instructionPointer) {

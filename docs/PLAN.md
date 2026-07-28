@@ -1,6 +1,13 @@
 # Development Plan: dotnet-dump-mcp-server
 
-This document outlines the steps to transition from the `DotNetDumpExplorer` prototype to a production-ready, containerized MCP Server.
+This document outlines the steps to transition from the `DotNetDumpExplorer` prototype to a
+production-ready dump analysis tool. It originally covered only the MCP server; the checklist below
+records that build and is kept as-is for history. **The project has since grown a second, now
+primary front end**: `dndump`, a CLI over the same `DotNetDump.Core` engine, plus a disk-backed
+result cache shared by both front ends. See `docs/CLI_DESIGN.md` for the design and
+`docs/CLI_IMPLEMENTATION_PLAN.md` for that build's phase-by-phase execution and outcomes (all 9
+phases complete as of this writing; only final integration review remains). The README documents
+the CLI first, with the MCP server as the option for clients that cannot invoke a shell.
 
 ## Status Checklist
 

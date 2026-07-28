@@ -4,6 +4,7 @@ using DotNetDump.Core;
 using DotNetDump.Core.Analyzers;
 using DotNetDump.Core.Formatting;
 using DotNetDump.Core.Models;
+using DotNetDump.Core.Utilities;
 
 using ModelContextProtocol.Server;
 
@@ -35,7 +36,7 @@ public class DumpAnalyzerTools {
 		}
 	}
 
-	[McpServerTool, Description("Analyzes managed heap objects and returns statistical summary.")]
+	[McpServerTool, Description("Analyzes managed heap objects and returns a statistical summary by type, including each type's MethodTable.")]
 	public string DumpHeap(
 		[Description("Field to sort by (Count, TotalSize, TypeName)")] string? sortBy = "TotalSize",
 		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Desc",
@@ -44,7 +45,7 @@ public class DumpAnalyzerTools {
 		return ExecuteSafe(() => {
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var stats = _heapAnalyzer.GetHeapStatistics(parameters);
-			return MarkdownFormatter.FormatHeapStatistics(stats);
+			return MarkdownFormatter.FormatHeapStatistics(stats.Items);
 		});
 	}
 
@@ -58,7 +59,7 @@ public class DumpAnalyzerTools {
 		return ExecuteSafe(() => {
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var objects = _heapAnalyzer.GetObjects(parameters, typeFilter);
-			return MarkdownFormatter.FormatHeapObjects(objects);
+			return MarkdownFormatter.FormatHeapObjects(objects.Items);
 		});
 	}
 
@@ -91,7 +92,7 @@ public class DumpAnalyzerTools {
 		});
 	}
 
-	[McpServerTool, Description("Displays detailed stack traces for all threads including frame types and addresses.")]
+	[McpServerTool, Description("Displays detailed stack traces for all threads including frame types, addresses, and declaring types.")]
 	public string DumpStack(
 		[Description("Field to sort by (ManagedThreadId, OSThreadId)")] string? sortBy = "ManagedThreadId",
 		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
@@ -107,7 +108,7 @@ public class DumpAnalyzerTools {
 
 	[McpServerTool, Description("Lists the managed modules in the process.")]
 	public string ClrModules(
-		[Description("Include system modules (System.*, Microsoft.*)")] bool includeSystem = false,
+		[Description("Include runtime/framework modules from the shared framework directory")] bool includeSystem = false,
 		[Description("Field to sort by (Size, Name, Address)")] string? sortBy = "Address",
 		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
 		[Description("Number of items to return")] int limit = 50,
@@ -119,283 +120,155 @@ public class DumpAnalyzerTools {
 		});
 	}
 
-	[McpServerTool, Description("Finds Garbage Collection roots for a specific object.")]
+	[McpServerTool, Description("Finds why an object is still alive by tracing reference chains from GC roots to it. Returns the full retention path, not just direct roots. The result always states whether the search completed or was truncated by the node budget — a truncated result with no paths is inconclusive, not proof the object is unrooted.")]
 	public string GcRoot(
-		[Description("The address of the object to find roots for")] string address,
+		[Description("The hex address of the object to find roots for (0x prefix optional)")] string address,
+		[Description("Maximum number of distinct retention paths to return")] int maxPaths = 4,
+		[Description("Traversal budget in nodes visited per search pass. 0 means unlimited, which is the only way to get a conclusive answer but is not free: memory scales with nodes visited, roughly 40 bytes each (~4 GB at 100,000,000). Defaults to the DNDUMP_GCROOT_MAX_NODES environment variable, else 2,000,000.")] int? maxNodes = null,
 		[Description("Number of items to return")] int limit = 50,
 		[Description("Number of items to skip")] int offset = 0) {
 		return ExecuteSafe(() => {
-			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong objAddr))
-				throw new ArgumentException("Invalid address format");
-
+			ulong objAddr = AddressParser.Parse(address);
 			var parameters = CreateParameters(null, null, limit, offset);
-			var roots = _heapAnalyzer.GetGCRoots(objAddr, parameters);
-			return MarkdownFormatter.FormatGCRoots(roots);
+			var result = _heapAnalyzer.GetGCRoots(objAddr, parameters, maxPaths, maxNodes);
+			return MarkdownFormatter.FormatGCRootPaths(result);
 		});
 	}
 
 	[McpServerTool, Description("Inspects a specific object, listing its fields and values.")]
-	public string DumpObj([Description("The hex address of the object to inspect")] string address) {
+	public string DumpObj([Description("The hex address of the object to inspect (0x prefix optional)")] string address) {
 		return ExecuteSafe(() => {
-			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong objAddr))
-				throw new ArgumentException("Invalid address format");
-
+			ulong objAddr = AddressParser.Parse(address);
 			var details = _heapAnalyzer.GetObjectDetails(objAddr);
 			return MarkdownFormatter.FormatObjectDetails(details);
 		});
 	}
 
-	[McpServerTool, Description("Displays information about the managed heap segments.")]
-
+	[McpServerTool, Description("Displays the managed heap segments, including generation, committed and reserved bytes, GC flavour and DATAS state.")]
 	public string EeHeap() {
-
 		return ExecuteSafe(() => {
-
-			var segments = _heapAnalyzer.GetHeapSegments();
-
-			return MarkdownFormatter.FormatHeapSegments(segments);
-
+			var summary = _heapAnalyzer.GetHeapSegments();
+			return MarkdownFormatter.FormatHeapSegments(summary);
 		});
-
 	}
 
-
-
-	[McpServerTool, Description("Displays the sync blocks (locks) for the process.")]
-
+	[McpServerTool, Description("Displays held monitors. Includes thin locks (uncontended locks that allocate no sync block) by default.")]
 	public string SyncBlk(
-
-		 [Description("Field to sort by (Recursion, Waiting, Address)")] string? sortBy = "Address",
-
-		 [Description("Sort direction (Asc, Desc)")] string? sortDirection = "Desc",
-
-		 [Description("Number of items to return")] int limit = 50,
-
-		 [Description("Number of items to skip")] int offset = 0) {
-
+		[Description("Include thin locks; requires a full heap walk")] bool includeThinLocks = true,
+		[Description("Field to sort by (Recursion, Waiting, Address)")] string? sortBy = "Address",
+		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Desc",
+		[Description("Number of items to return")] int limit = 50,
+		[Description("Number of items to skip")] int offset = 0) {
 		return ExecuteSafe(() => {
-
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
-
-			var blocks = _heapAnalyzer.GetSyncBlocks(parameters);
-
-			return MarkdownFormatter.FormatSyncBlocks(blocks);
-
+			var blocks = _heapAnalyzer.GetSyncBlocks(parameters, includeThinLocks);
+			return MarkdownFormatter.FormatSyncBlocks(blocks.Items);
 		});
-
 	}
 
-
-
-	[McpServerTool, Description("Displays information about the CLR ThreadPool.")]
-
+	[McpServerTool, Description("Displays information about the CLR ThreadPool, including CPU utilization and completion ports.")]
 	public string ThreadPool() {
-
 		return ExecuteSafe(() => {
-
 			var info = _threadAnalyzer.GetThreadPoolInfo();
-
 			return MarkdownFormatter.FormatThreadPool(info);
-
 		});
-
 	}
 
-
-
-	[McpServerTool, Description("Lists all GC handles in the process.")]
-
+	[McpServerTool, Description("Lists all GC handles in the process, including handle strength, ref count and dependent targets.")]
 	public string GcHandles(
-
-		 [Description("Field to sort by (Address, Kind, TypeName)")] string? sortBy = "Address",
-
-		 [Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
-
-		 [Description("Number of items to return")] int limit = 50,
-
-		 [Description("Number of items to skip")] int offset = 0) {
-
+		[Description("Field to sort by (Address, Kind, TypeName)")] string? sortBy = "Address",
+		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
+		[Description("Number of items to return")] int limit = 50,
+		[Description("Number of items to skip")] int offset = 0) {
 		return ExecuteSafe(() => {
-
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
-
 			var handles = _heapAnalyzer.GetGCHandles(parameters);
-
 			return MarkdownFormatter.FormatGCHandles(handles);
-
 		});
-
 	}
 
-
-
-	[McpServerTool, Description("Verifies the integrity of the managed heap and reports any corruption found.")]
-
+	[McpServerTool, Description("Verifies the integrity of the managed heap and reports any corruption found, with its kind and offset.")]
 	public string VerifyHeap() {
-
 		return ExecuteSafe(() => {
-
 			var corruptions = _heapAnalyzer.VerifyHeap();
-
 			return MarkdownFormatter.FormatHeapVerification(corruptions);
-
 		});
-
 	}
 
-
-
-	[McpServerTool, Description("Displays information about a MethodTable structure.")]
-
-	public string DumpMt([Description("The hex address of the MethodTable")] string address) {
-
+	[McpServerTool, Description("Verifies a single object at the given address and reports any corruption found.")]
+	public string VerifyObj([Description("The hex address of the object to verify (0x prefix optional)")] string address) {
 		return ExecuteSafe(() => {
-
-			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong mt))
-
-				throw new ArgumentException("Invalid address format");
-
-
-
-			var info = _metadataAnalyzer.GetMethodTable(mt);
-
-			return MarkdownFormatter.FormatMethodTable(info);
-
+			ulong objAddr = AddressParser.Parse(address);
+			var corruptions = _heapAnalyzer.VerifyObject(objAddr);
+			return MarkdownFormatter.FormatHeapVerification(corruptions);
 		});
-
 	}
 
-
+	[McpServerTool, Description("Displays information about a MethodTable structure, including real type flags and implemented interfaces.")]
+	public string DumpMt([Description("The hex address of the MethodTable (0x prefix optional)")] string address) {
+		return ExecuteSafe(() => {
+			ulong mt = AddressParser.Parse(address);
+			var info = _metadataAnalyzer.GetMethodTable(mt);
+			return MarkdownFormatter.FormatMethodTable(info);
+		});
+	}
 
 	[McpServerTool, Description("Displays information about a MethodDesc structure.")]
-
-	public string DumpMd([Description("The hex address of the MethodDesc")] string address) {
-
+	public string DumpMd([Description("The hex address of the MethodDesc (0x prefix optional)")] string address) {
 		return ExecuteSafe(() => {
-
-			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong md))
-
-				throw new ArgumentException("Invalid address format");
-
-
-
+			ulong md = AddressParser.Parse(address);
 			var info = _metadataAnalyzer.GetMethodDesc(md);
-
 			return MarkdownFormatter.FormatMethodDesc(info);
-
 		});
-
 	}
 
-
-
-	[McpServerTool, Description("Displays information about an EEClass structure.")]
-
-	public string DumpClass([Description("The hex address of the EEClass")] string address) {
-
+	[McpServerTool, Description("Displays type metadata: fields with offsets, static field values, and methods. Takes a MethodTable address (ClrMD does not expose EEClass separately).")]
+	public string DumpClass([Description("The hex address of the MethodTable (0x prefix optional)")] string address) {
 		return ExecuteSafe(() => {
-
-			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong eeClass))
-
-				throw new ArgumentException("Invalid address format");
-
-
-
-			var info = _metadataAnalyzer.GetClass(eeClass);
-
+			ulong methodTable = AddressParser.Parse(address);
+			var info = _metadataAnalyzer.GetClass(methodTable);
 			return MarkdownFormatter.FormatClass(info);
-
 		});
-
 	}
-
-
 
 	[McpServerTool, Description("Displays detailed information about a loaded module.")]
-
-	public string DumpModule([Description("The hex address of the module (ImageBase or MetadataAddress)")] string address) {
-
+	public string DumpModule([Description("The hex address of the module (ImageBase or MetadataAddress; 0x prefix optional)")] string address) {
 		return ExecuteSafe(() => {
-
-			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong moduleAddr))
-
-				throw new ArgumentException("Invalid address format");
-
-
-
+			ulong moduleAddr = AddressParser.Parse(address);
 			var info = _moduleAnalyzer.GetModuleDetails(moduleAddr);
-
 			return MarkdownFormatter.FormatModuleDetails(info);
-
 		});
-
 	}
 
-
-
-	[McpServerTool, Description("Displays information about a loaded assembly.")]
-
-	public string DumpAssembly([Description("The hex address of the assembly (AssemblyId)")] string address) {
-
+	[McpServerTool, Description("Displays information about a loaded assembly. Accepts the runtime Assembly address or a module ImageBase.")]
+	public string DumpAssembly([Description("The hex address of the assembly, or a module ImageBase (0x prefix optional)")] string address) {
 		return ExecuteSafe(() => {
-
-			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong assemblyId))
-
-				throw new ArgumentException("Invalid address format");
-
-
-
-			var info = _moduleAnalyzer.GetAssemblyDetails(assemblyId);
-
+			ulong assemblyAddress = AddressParser.Parse(address);
+			var info = _moduleAnalyzer.GetAssemblyDetails(assemblyAddress);
 			return MarkdownFormatter.FormatAssemblyDetails(info);
-
 		});
-
 	}
-
-
 
 	[McpServerTool, Description("Finds MethodTable and MethodDesc for a type or method by name.")]
-
 	public string Name2Ee(
-
 		[Description("The module name (e.g., 'System.Private.CoreLib' or 'MyApp')")] string moduleName,
-
-		[Description("The type or method name (e.g., 'System.String' or 'MyClass.MyMethod')")] string typeName) {
-
+		[Description("The type name, optionally followed by .MethodName (e.g., 'System.String' or 'MyNamespace.MyClass.MyMethod')")] string typeName) {
 		return ExecuteSafe(() => {
-
 			var info = _moduleAnalyzer.Name2EE(moduleName, typeName);
-
 			return MarkdownFormatter.FormatName2EE(info);
-
 		});
-
 	}
-
-
 
 	[McpServerTool, Description("Gets the MethodDesc for the method at the specified instruction pointer.")]
-
-	public string Ip2Md([Description("The hex address of the instruction pointer")] string address) {
-
+	public string Ip2Md([Description("The hex address of the instruction pointer (0x prefix optional)")] string address) {
 		return ExecuteSafe(() => {
-
-			if (!ulong.TryParse(address, System.Globalization.NumberStyles.HexNumber, null, out ulong ip))
-
-				throw new ArgumentException("Invalid address format");
-
-
-
+			ulong ip = AddressParser.Parse(address);
 			var info = _moduleAnalyzer.GetMethodByIP(ip);
-
 			return MarkdownFormatter.FormatMethodDesc(info);
-
 		});
-
 	}
 
-	[McpServerTool, Description("Displays detailed thread state information including GC mode, locks, and flags.")]
+	[McpServerTool, Description("Displays detailed thread state including GC mode, apartment state, lock count and runtime flags.")]
 	public string ThreadState(
 		[Description("Field to sort by (ManagedThreadId, OSThreadId, LockCount)")] string? sortBy = "ManagedThreadId",
 		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
@@ -408,17 +281,25 @@ public class DumpAnalyzerTools {
 		});
 	}
 
-	[McpServerTool, Description("Displays detailed exception information for threads with exceptions (similar to SOS !pe command).")]
+	[McpServerTool, Description("Displays exceptions with messages, HResults, stack traces and inner exceptions. Finds exceptions in flight on a thread AND exceptions reachable on the heap (which is where already-caught exceptions live), or one specific exception by address.")]
 	public string PrintException(
+		[Description("Optional hex address of a specific exception object to print (0x prefix optional)")] string? address = null,
+		[Description("Also scan the heap for exception objects not in flight on any thread; requires a full heap walk")] bool includeHeapExceptions = true,
+		[Description("Only include threads that have an exception in flight")] bool onlyWithExceptions = true,
 		[Description("Field to sort by (ManagedThreadId, OSThreadId)")] string? sortBy = "ManagedThreadId",
 		[Description("Sort direction (Asc, Desc)")] string? sortDirection = "Asc",
-		[Description("Only show threads with exceptions")] bool onlyWithExceptions = true,
 		[Description("Number of items to return")] int limit = 50,
 		[Description("Number of items to skip")] int offset = 0) {
 		return ExecuteSafe(() => {
+			if (!string.IsNullOrWhiteSpace(address)) {
+				ulong exceptionAddress = AddressParser.Parse(address);
+				var single = _threadAnalyzer.GetExceptionByAddress(exceptionAddress);
+				return MarkdownFormatter.FormatThreadExceptions(new[] { single });
+			}
+
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
-			var exceptions = _threadAnalyzer.GetThreadExceptions(parameters, onlyWithExceptions);
-			return MarkdownFormatter.FormatThreadExceptions(exceptions);
+			var exceptions = _threadAnalyzer.GetThreadExceptions(parameters, onlyWithExceptions, includeHeapExceptions);
+			return MarkdownFormatter.FormatThreadExceptions(exceptions.Items);
 		});
 	}
 

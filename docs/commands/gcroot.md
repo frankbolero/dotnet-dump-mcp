@@ -2,6 +2,11 @@
 
 Displays information about references (or roots) to a specified object. It helps in identifying what is keeping an object alive in the managed heap.
 
+> **Known defect:** the search is bounded at 2,000,000 visited nodes and a truncated search is
+> currently reported as "no GC root path found" — i.e. as if the object were unrooted. On heaps above
+> ~2M objects this can be wrong. See [GCROOT_TRUNCATION.md](../GCROOT_TRUNCATION.md); the fix makes
+> the bound settable (`--max-nodes`, `0` = unlimited) and always reports truncation.
+
 ## Usage
 ```
 gcroot <address>

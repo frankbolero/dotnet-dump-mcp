@@ -2,11 +2,138 @@
 
 **Analyze .NET memory dumps with the help of your AI Assistant.**
 
-This project is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that wraps the powerful `Microsoft.Diagnostics.Runtime` (ClrMD) library. It allows AI agents (like Claude CLI, Gemini CLI, Zed Agent or Cursor) to inspect .NET core dumps, analyze the heap, check threads, and diagnose memory leaks or deadlocks directly.
+This project wraps the powerful `Microsoft.Diagnostics.Runtime` (ClrMD) library to analyze .NET
+memory dumps, and ships it two ways: **`dndump`**, a command-line tool you (or an AI agent with
+shell access) run directly, and a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
+server for MCP clients (like Claude Desktop or Cursor) that can't invoke a shell. Both are thin
+front ends over the same analysis engine — pick whichever fits how you work.
 
 ---
 
-## 🚀 Quick Start
+## 🧰 CLI Quick Start (`dndump`)
+
+`dndump` runs one dump analysis command at a time from your shell, prints results to stdout, and
+exits — no persistent process, no context cost until you actually invoke it. This is the
+recommended way to use this project, including for AI agents that have shell access (see
+`docs/CLI_DESIGN.md` for the full design and rationale). If your MCP client can't run shell
+commands, skip to [MCP Server Quick Start](#-mcp-server-quick-start) below instead.
+
+### Run it (no install)
+
+From a clone of this repo, on a host whose OS/architecture matches your dump's:
+
+```bash
+dotnet run --project src/DotNetDump.Cli/DotNetDump.Cli.csproj --framework net9.0 -- \
+  use /path/to/your/dump.core
+dotnet run --project src/DotNetDump.Cli/DotNetDump.Cli.csproj --framework net9.0 -- \
+  info
+```
+
+### Install it as a tool (recommended for repeated use)
+
+`dndump` isn't published to nuget.org yet, so install it from a local build:
+
+```bash
+dotnet pack src/DotNetDump.Cli/DotNetDump.Cli.csproj -c Release -o ./nupkg
+dotnet tool install --global --add-source ./nupkg dndump
+```
+
+Once installed, every example below works as shown (`dndump ...` instead of the longer
+`dotnet run --project ...` form).
+
+### Try it
+
+```bash
+# Orient: pick a dump, then see what you're looking at
+dndump use /path/to/your/dump.core
+dndump info
+
+# Top heap consumers
+dndump dumpheap --top 20
+
+# Machine-readable output for piping through jq/grep
+dndump dumpheap --format json --limit 5000 \
+  | jq -r '.data[] | select(.totalSize > 1073741824) | "\(.totalSize)\t\(.typeName)"'
+
+# Full command list, with one-line descriptions
+dndump commands
+```
+
+Every command supports `--format md|json|tsv` (default `md`), `--limit`/`--offset` for paging, and
+`--sort`/`--order` where a sort makes sense. `dndump <command> --help` shows a command's exact
+options. See `docs/CLI_DESIGN.md` §4 for the full command reference (arguments, options, sort
+fields) and §5 for worked triage examples (OOM/leak, deadlock, unhandled exception).
+
+### Selecting a dump without repeating `--dump`
+
+`dndump use <path>` writes `.dndump/session.json` in the current directory (already in this repo's
+own `.gitignore`, and worth adding to yours if you're using `dndump` elsewhere) so later commands
+in the same directory tree don't need `--dump` at all. Resolution order: `--dump <path>` flag, then
+`DNDUMP_PATH` environment variable, then the session file, searched from the current directory
+upward.
+
+### Result caching
+
+Heap and thread walks (`dumpheap`, `listobj`, `syncblk`, `gchandles`, exception scans) are the slow
+part of dump analysis, and a dump never changes — so every `dndump` process persists those results
+to disk, keyed by the dump's identity, and reuses them on the next invocation instead of re-walking.
+One cached entry serves every `--limit`/`--offset`/`--sort`/`--format` variant of a command, so
+exploring the same data ten different ways only pays for the walk once. The cache lives in an
+XDG-style user cache directory by default; set `DNDUMP_CACHE` to point it elsewhere (e.g. a mounted
+volume in Docker). It's safe to delete at any time — worst case, the next command just recomputes.
+The MCP server shares the same cache, so a `dndump` run warms it for a later MCP session and vice
+versa. See `docs/CLI_DESIGN.md` §6 for the full design.
+
+### Running the CLI via Docker
+
+Useful for architecture mismatch — e.g. analyzing a Linux ARM64 dump on a Mac, or vice versa. The
+image (built below) carries `dndump` alongside the MCP server, plus a DAC cache volume so the
+first analysis command fetches the DAC and every later one reuses it instead of hitting the
+network again:
+
+```bash
+docker build -t dotnet-dump-mcp-server .
+
+docker run --rm -i \
+  -v "/path/to/your/dumps:/dumps" \
+  -v dndump-symcache:/symcache \
+  -e DUMP_PATH=/dumps/your_dump.core \
+  dotnet-dump-mcp-server
+```
+
+Running one container per `dndump` command would pay container startup and the DAC fetch every
+time, so instead keep one long-lived container per dump-analysis session and `docker exec` into
+it:
+
+```bash
+docker run -d --name dndump-session \
+  -v "/path/to/dumps:/dumps" -v dndump-symcache:/symcache \
+  --entrypoint sleep dotnet-dump-mcp-server infinity
+
+docker exec dndump-session dndump --dump /dumps/prod-oom.core dumpheap --top 20
+```
+
+(`--entrypoint sleep ... infinity` is required — the image's default
+`ENTRYPOINT ["./entrypoint.sh"]` would otherwise swallow a bare `sleep infinity` argument as input
+to `entrypoint.sh` instead of running it.)
+
+`scripts/dndump-docker` wraps both steps into one idempotent script, so the agent-facing commands
+look identical to running `dndump` natively:
+
+```bash
+./scripts/dndump-docker use /dumps/prod-oom.core
+./scripts/dndump-docker info
+./scripts/dndump-docker dumpheap --top 20
+```
+
+It creates `dndump-session` on first use, reuses (or restarts) it on subsequent calls, and reads
+`DNDUMP_IMAGE`, `DNDUMP_CONTAINER_NAME`, `DNDUMP_DUMPS_DIR`, `DNDUMP_SYMCACHE_VOLUME` and
+`DNDUMP_PLATFORM` (for `--platform linux/amd64`-style cross-architecture runs) for configuration —
+see the script header for details.
+
+---
+
+## 🚀 MCP Server Quick Start
 
 ### Option 1: Using Docker (Recommended)
 This is the easiest way to run the server, especially if you are on a Mac analyzing Linux dumps (fixes architecture mismatches).
@@ -50,7 +177,9 @@ dotnet run --project src\DotNetDump.Server\DotNetDump.Server.csproj --framework 
 
 ## ✨ Features
 
-The server exposes the following tools to your AI agent:
+Every capability below is available both as an MCP tool (name shown here) and as a `dndump` CLI
+command (same analysis, usually a shorter name — e.g. `dump_heap` is `dndump dumpheap`). Run
+`dndump commands` for the full CLI list, or see `docs/CLI_DESIGN.md` §4 for the exact mapping.
 
 *   **Heap Analysis**:
     *   `dump_heap`: Get a statistical summary of the managed heap (top objects by size/count).
@@ -116,6 +245,34 @@ Note that we set a timeout to 10 minutes (600000 ms) due to that some requests m
 
 ---
 
+## 🔣 Symbol Resolution
+
+The server ships with ClrMD 4.x. **Dump loading is offline by default** — no symbol server is
+contacted. In the Docker image, `entrypoint.sh` already fetches the matching DAC with
+`dotnet-symbol --debugging` before the server starts, so the common path needs no network
+access at all.
+
+If you need ClrMD to fetch binaries itself, opt in with these environment variables:
+
+| Variable | Description |
+| :--- | :--- |
+| `DOTNETDUMP_SYMBOL_PATHS` | Semicolon-separated symbol server URLs. Unset (the default) keeps dump loading fully offline. |
+| `DOTNETDUMP_SYMBOL_CACHE` | Directory for downloaded symbols. Defaults to `/dumps/.symcache`. The Docker image sets this to `/symcache` (see below) so it survives container restarts even when it isn't on the dumps mount. |
+
+```json
+"env": {
+  "DUMP_PATH": "/dumps/crash.core",
+  "DOTNETDUMP_SYMBOL_PATHS": "https://msdl.microsoft.com/download/symbols"
+}
+```
+
+> **Upgrading from an older build?** ClrMD 4 no longer reads the `_NT_SYMBOL_PATH`
+> environment variable. If you previously relied on it, switch to `DOTNETDUMP_SYMBOL_PATHS`.
+> Enabling a symbol server means dump loading may block on network I/O, which is worth
+> keeping in mind alongside the 10-minute client timeout noted above.
+
+---
+
 ## 🛠️ Development
 
 To contribute or test the server locally, you can use the MCP Inspector.
@@ -136,9 +293,10 @@ To contribute or test the server locally, you can use the MCP Inspector.
     ```
 
 ### Project Structure
-*   `src/DotNetDump.Core`: The analysis logic (ClrMD wrappers).
-*   `src/DotNetDump.Server`: The MCP Server implementation.
-*   `tests`: Integration tests.
+*   `src/DotNetDump.Core`: The analysis logic (ClrMD wrappers). No MCP or CLI dependencies.
+*   `src/DotNetDump.Cli`: The `dndump` CLI front end.
+*   `src/DotNetDump.Server`: The MCP Server front end.
+*   `src/DotNetDump.Tests`: Integration and unit tests for both front ends.
 
 ### Code Style
 *   Run `dotnet format` before committing to ensure code style consistency.

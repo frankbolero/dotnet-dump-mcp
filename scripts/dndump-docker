@@ -1,0 +1,115 @@
+#!/bin/bash
+# dndump-docker -- thin wrapper for the persistent-container Docker delivery model described in
+# docs/CLI_DESIGN.md §8.2.
+#
+# The container solves architecture mismatch (e.g. Linux ARM64 dumps analyzed on a Mac, or vice
+# versa). Running one container per command would pay container startup plus entrypoint.sh's
+# dotnet-symbol fetch on every invocation, so instead this script keeps ONE long-lived container
+# per dump-analysis session and `docker exec`s into it, hiding that split so the agent-facing
+# commands look identical to running `dndump` natively:
+#
+#   ./scripts/dndump-docker use /dumps/prod-oom.core
+#   ./scripts/dndump-docker dumpheap --top 20
+#
+# Idempotent: running this again reuses the existing container (starting it if it was stopped)
+# instead of erroring or launching a duplicate.
+#
+# NOTE: `docker run <image> sleep infinity` does NOT work against this image as-is, because the
+# Dockerfile's `ENTRYPOINT ["./entrypoint.sh"]` (exec form) swallows "sleep infinity" as
+# arguments to entrypoint.sh instead of running them as the container's command -- entrypoint.sh
+# would see $1="sleep", fail to find a file by that name, warn, and exec the MCP server anyway.
+# This script uses `--entrypoint sleep` to bypass entrypoint.sh for the placeholder process
+# instead; `docker exec` into the running container is unaffected by that override.
+#
+# Configuration (all optional):
+#   DNDUMP_IMAGE            Docker image to run.               default: dotnet-dump-mcp-server
+#   DNDUMP_CONTAINER_NAME   Name of the persistent container.   default: dndump-session
+#   DNDUMP_DUMPS_DIR        Host directory mounted at /dumps.   default: current directory
+#   DNDUMP_SYMCACHE_VOLUME  Named volume mounted at /symcache.  default: dndump-symcache
+#   DNDUMP_PLATFORM         Passed as --platform to `docker run` if set (e.g. linux/amd64),
+#                           for cross-architecture dumps on Docker Desktop/Apple Silicon.
+#
+# Usage:
+#   dndump-docker <dndump arguments...>
+set -euo pipefail
+
+IMAGE="${DNDUMP_IMAGE:-dotnet-dump-mcp-server}"
+CONTAINER_NAME="${DNDUMP_CONTAINER_NAME:-dndump-session}"
+DUMPS_DIR="${DNDUMP_DUMPS_DIR:-$(pwd)}"
+SYMCACHE_VOLUME="${DNDUMP_SYMCACHE_VOLUME:-dndump-symcache}"
+
+if [ "$#" -eq 0 ]; then
+    echo "Usage: dndump-docker <dndump arguments...>" >&2
+    echo "Example: dndump-docker use /dumps/prod-oom.core && dndump-docker info" >&2
+    exit 2
+fi
+
+container_status() {
+    docker inspect -f '{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null || true
+}
+
+status=$(container_status)
+
+if [ -z "$status" ]; then
+    if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+        echo "Error: image '$IMAGE' not found locally. Build it first, e.g.:" >&2
+        echo "  docker build -t $IMAGE ." >&2
+        exit 3
+    fi
+
+    echo "Starting persistent container '$CONTAINER_NAME' from image '$IMAGE' (dumps: $DUMPS_DIR, symcache volume: $SYMCACHE_VOLUME)..." >&2
+
+    # Note: built as two explicit branches rather than an optional args array -- the default
+    # /bin/bash on macOS is 3.2, which errors on `"${empty_array[@]}"` under `set -u`.
+    if [ -n "${DNDUMP_PLATFORM:-}" ]; then
+        docker run -d --name "$CONTAINER_NAME" \
+            --platform "$DNDUMP_PLATFORM" \
+            -v "$DUMPS_DIR:/dumps" \
+            -v "$SYMCACHE_VOLUME:/symcache" \
+            --entrypoint sleep \
+            "$IMAGE" infinity >/dev/null
+    else
+        docker run -d --name "$CONTAINER_NAME" \
+            -v "$DUMPS_DIR:/dumps" \
+            -v "$SYMCACHE_VOLUME:/symcache" \
+            --entrypoint sleep \
+            "$IMAGE" infinity >/dev/null
+    fi
+elif [ "$status" != "running" ]; then
+    echo "Restarting existing (stopped) container '$CONTAINER_NAME'..." >&2
+    docker start "$CONTAINER_NAME" >/dev/null
+fi
+# else: already running -- nothing to do, just exec into it.
+
+# The persistent container is started with `--entrypoint sleep`, which bypasses entrypoint.sh --
+# and with it, the `dotnet-symbol --debugging` call that pre-fetches the matching DAC. Without
+# that, dump loading fails offline ("Could not find matching DAC for this runtime... symbol
+# server download of the DAC is disabled for this platform"). So replicate that prefetch here,
+# once per dump, whenever the wrapped command is `use <dump>` (the point at which a dump is first
+# selected). --cache-directory persists it in the mounted /symcache volume, so this is a no-op on
+# every later `use` of the same dump (matching entrypoint.sh's own behavior).
+if [ "$1" = "use" ] && [ "$#" -ge 2 ]; then
+    DUMP_FILE_ARG="$2"
+    echo "Pre-fetching DAC for $DUMP_FILE_ARG..." >&2
+    docker exec "$CONTAINER_NAME" dotnet-symbol --debugging --cache-directory /symcache "$DUMP_FILE_ARG" >&2 \
+        || echo "Warning: dotnet-symbol failed to fetch DAC for $DUMP_FILE_ARG." >&2
+
+    # dotnet-symbol writes the DAC it just fetched next to the dump file itself (not into
+    # --cache-directory, which only caches build-id lookups for future runs) -- and always names
+    # it libmscordaccore.so, since this image (and therefore the DAC dotnet-symbol fetches for
+    # it) is always Linux regardless of host OS/CPU. ClrMD's parameterless CreateRuntime() does
+    # NOT scan the dump's directory for a manually-placed DAC on its own; it must be handed the
+    # path explicitly via `--dac`, or it falls back to the same offline error this whole prefetch
+    # is meant to avoid. So inject it here, unless the caller already passed their own --dac.
+    DAC_CANDIDATE="$(dirname "$DUMP_FILE_ARG")/libmscordaccore.so"
+    case " $* " in
+        *" --dac "*) ;; # caller already specified --dac; respect it
+        *)
+            if docker exec "$CONTAINER_NAME" test -f "$DAC_CANDIDATE" 2>/dev/null; then
+                set -- "$@" --dac "$DAC_CANDIDATE"
+            fi
+            ;;
+    esac
+fi
+
+exec docker exec "$CONTAINER_NAME" dndump "$@"

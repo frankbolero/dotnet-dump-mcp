@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+using DotNetDump.Core.Caching;
 using DotNetDump.Core.Models;
+using DotNetDump.Core.Utilities;
 
 using Microsoft.Diagnostics.Runtime;
 
@@ -10,11 +12,34 @@ namespace DotNetDump.Core.Analyzers {
 	public class HeapAnalyzer {
 		private const int MaxStringPreviewLength = 200;
 		private const int MaxArrayPreviewSize = 10;
-		private readonly IDumpContext _context;
-		private IEnumerable<HeapStatItem>? _cachedStats;
 
-		public HeapAnalyzer(IDumpContext context) {
+		/// <summary>
+		/// Bumped whenever one of the cached models below changes shape, so a stale on-disk entry
+		/// from an older build cannot be deserialized and served as if it matched the current
+		/// contract (CLI_DESIGN.md §6.1).
+		/// </summary>
+		private const int CacheSchemaVersion = 1;
+
+		/// <summary>
+		/// Shared with <see cref="ThreadAnalyzer"/> — both classes perform the identical full-heap
+		/// exception scan, so using the same operation name lets either one populate the cache entry
+		/// the other reuses.
+		/// </summary>
+		internal const string HeapExceptionsCacheOperation = "heap-exceptions";
+
+		/// <summary>
+		/// Overrides <see cref="RootPathFinder.DefaultMaxNodesVisited"/> when <c>gcroot</c> is not
+		/// given an explicit <c>maxNodesVisited</c>. Set to <c>"0"</c> for unlimited (see the memory
+		/// caveat on <see cref="GetGCRoots"/>).
+		/// </summary>
+		public const string GCRootMaxNodesVariable = "DNDUMP_GCROOT_MAX_NODES";
+
+		private readonly IDumpContext _context;
+		private readonly IAnalysisCache _cache;
+
+		public HeapAnalyzer(IDumpContext context, IAnalysisCache? cache = null) {
 			_context = context;
+			_cache = cache ?? NullAnalysisCache.Instance;
 		}
 
 		private ClrHeap GetHeap() {
@@ -23,93 +48,172 @@ namespace DotNetDump.Core.Analyzers {
 			return _context.Heap;
 		}
 
-		public IEnumerable<HeapStatItem> GetHeapStatistics(QueryParameters parameters) {
-			// Build cache on first call
-			if (_cachedStats == null) {
-				var heap = GetHeap();
-				_cachedStats = (from obj in heap.EnumerateObjects()
-									 let type = obj.Type
-									 where type != null
-									 group obj by new { type.Name, type.MethodTable } into g
-									 select new HeapStatItem {
-										 TypeName = g.Key.Name,
-										 MethodTable = g.Key.MethodTable,
-										 Count = g.Count(),
-										 TotalSize = g.Sum(p => (long)p.Size)
-									 }).ToList(); // Materialize once
-			}
-
-			// Sort and page from cache
-			var stats = _cachedStats;
-
-			if (parameters.SortBy?.ToLower() == "count") {
-				stats = parameters.SortDirection == SortDirection.Asc ? stats.OrderBy(s => s.Count) : stats.OrderByDescending(s => s.Count);
-			} else if (parameters.SortBy?.ToLower() == "typename") {
-				stats = parameters.SortDirection == SortDirection.Asc ? stats.OrderBy(s => s.TypeName) : stats.OrderByDescending(s => s.TypeName);
-			} else {
-				stats = parameters.SortDirection == SortDirection.Asc ? stats.OrderBy(s => s.TotalSize) : stats.OrderByDescending(s => s.TotalSize);
-			}
-
-			return stats.Skip(parameters.Offset).Take(parameters.Limit);
+		/// <summary>
+		/// The walk: groups every heap object by type. Cached under a single, argument-independent
+		/// key — one entry serves every <c>limit</c>/<c>offset</c>/<c>sort</c>/<c>order</c> variant
+		/// of <c>dumpheap</c> (CLI_DESIGN.md §6.2).
+		/// </summary>
+		private List<HeapStatItem> ComputeHeapStatistics() {
+			var heap = GetHeap();
+			return (from obj in heap.EnumerateObjects()
+					  let type = obj.Type
+					  where type != null
+					  group obj by new { type.Name, type.MethodTable } into g
+					  select new HeapStatItem {
+						  TypeName = g.Key.Name,
+						  MethodTable = g.Key.MethodTable,
+						  Count = g.Count(),
+						  TotalSize = g.Sum(p => (long)p.Size)
+					  }).ToList();
 		}
 
-		public IEnumerable<HeapObjectItem> GetObjects(QueryParameters parameters, string? typeFilter = null) {
+		public PagedResult<HeapStatItem> GetHeapStatistics(QueryParameters parameters) {
+			var key = new CacheKey(_context.Identity, "heap-statistics", "", CacheSchemaVersion);
+			List<HeapStatItem> stats = _cache.GetOrCompute(key, ComputeHeapStatistics);
+
+			IEnumerable<HeapStatItem> sorted = stats;
+			if (parameters.SortBy?.ToLower() == "count") {
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(s => s.Count) : sorted.OrderByDescending(s => s.Count);
+			} else if (parameters.SortBy?.ToLower() == "typename") {
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(s => s.TypeName) : sorted.OrderByDescending(s => s.TypeName);
+			} else {
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(s => s.TotalSize) : sorted.OrderByDescending(s => s.TotalSize);
+			}
+
+			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+			return new PagedResult<HeapStatItem>(page, stats.Count, parameters.Offset, parameters.Limit);
+		}
+
+		/// <summary>
+		/// The walk, filtered by <paramref name="typeFilter"/>. The filter changes what is computed
+		/// (unlike pagination/sort), so it is part of the cache key — a distinct filter gets its own
+		/// entry, computed by its own heap walk.
+		/// </summary>
+		private List<HeapObjectItem> ComputeObjects(string? typeFilter) {
 			var heap = GetHeap();
-			var objects = heap.EnumerateObjects()
+			return heap.EnumerateObjects()
 				 .Where(obj => typeFilter == null || (obj.Type?.Name?.Contains(typeFilter, StringComparison.OrdinalIgnoreCase) ?? false))
 				 .Select(obj => new HeapObjectItem {
 					 Address = obj.Address,
 					 MethodTable = obj.Type?.MethodTable ?? 0,
 					 Size = obj.Size,
 					 TypeName = obj.Type?.Name
-				 });
-
-			if (parameters.SortBy?.ToLower() == "size") {
-				objects = parameters.SortDirection == SortDirection.Asc ? objects.OrderBy(o => o.Size) : objects.OrderByDescending(o => o.Size);
-			} else if (parameters.SortBy?.ToLower() == "address") {
-				objects = parameters.SortDirection == SortDirection.Asc ? objects.OrderBy(o => o.Address) : objects.OrderByDescending(o => o.Address);
-			}
-
-			return objects.Skip(parameters.Offset).Take(parameters.Limit);
+				 }).ToList();
 		}
 
-		public IEnumerable<GCRootInfo> GetGCRoots(ulong targetAddress, QueryParameters parameters) {
+		public PagedResult<HeapObjectItem> GetObjects(QueryParameters parameters, string? typeFilter = null) {
+			string argumentsHash = CacheKey.HashArguments(typeFilter?.ToLowerInvariant());
+			var key = new CacheKey(_context.Identity, "heap-objects", argumentsHash, CacheSchemaVersion);
+			List<HeapObjectItem> objects = _cache.GetOrCompute(key, () => ComputeObjects(typeFilter));
+
+			IEnumerable<HeapObjectItem> sorted = objects;
+			if (parameters.SortBy?.ToLower() == "size") {
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(o => o.Size) : sorted.OrderByDescending(o => o.Size);
+			} else if (parameters.SortBy?.ToLower() == "address") {
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(o => o.Address) : sorted.OrderByDescending(o => o.Address);
+			}
+
+			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+			return new PagedResult<HeapObjectItem>(page, objects.Count, parameters.Offset, parameters.Limit);
+		}
+
+		/// <summary>
+		/// Finds retention paths from GC roots to <paramref name="targetAddress"/>.
+		/// <para>
+		/// Note that <c>ClrHeap.EnumerateRoots()</c> already includes stack roots and static/thread-static
+		/// roots, so it is the single source here — enumerating per-thread stack roots as well would
+		/// report every stack root twice.
+		/// </para>
+		/// <para>
+		/// <paramref name="maxNodesVisited"/> bounds each BFS pass (see the per-pass-vs-total discussion
+		/// on <see cref="RootPathFinder.FindPaths"/>). When omitted, the budget comes from the
+		/// <see cref="GCRootMaxNodesVariable"/> environment variable, else
+		/// <see cref="RootPathFinder.DefaultMaxNodesVisited"/>. <c>0</c> means unlimited, which is
+		/// conclusive but not free: peak memory scales with nodes visited, roughly 40 bytes/node
+		/// (~4 GB at 100M). Check <see cref="GCRootSearchInfo.Truncated"/> before treating an empty
+		/// result as proof the object is unrooted.
+		/// </para>
+		/// </summary>
+		public GCRootSearchInfo GetGCRoots(ulong targetAddress, QueryParameters parameters, int maxPaths = 4, int? maxNodesVisited = null) {
 			var runtime = _context.Runtime;
-			if (runtime == null) return Enumerable.Empty<GCRootInfo>();
+			if (runtime == null) return new GCRootSearchInfo { TargetAddress = targetAddress };
 
 			var heap = GetHeap();
-			var roots = new List<GCRootInfo>();
 
-			foreach (var root in heap.EnumerateRoots()) {
-				if (root.Object.Address == targetAddress) {
-					roots.Add(new GCRootInfo {
-						Address = root.Address,
-						Kind = root.RootKind.ToString(),
-						RootName = null,
-						ObjectAddress = root.Object.Address,
-						ManagedThreadId = -1,
-						OSThreadId = 0
-					});
-				}
-			}
-
+			// Map thread stack-slot addresses back to their owning thread so a stack root can say
+			// which thread it belongs to.
+			// Slot address 0 shows up for roots the runtime cannot place, so it identifies nothing.
+			var stackRootOwners = new Dictionary<ulong, ClrThread>();
 			foreach (var thread in runtime.Threads) {
-				foreach (var root in thread.EnumerateStackRoots()) {
-					if (root.Object.Address == targetAddress) {
-						string? name = root.StackFrame?.ToString();
-						roots.Add(new GCRootInfo {
-							Address = root.Address,
-							Kind = "Stack",
-							RootName = name,
-							ObjectAddress = root.Object.Address,
-							ManagedThreadId = thread.ManagedThreadId,
-							OSThreadId = thread.OSThreadId
-						});
-					}
+				foreach (var stackRoot in thread.EnumerateStackRoots()) {
+					if (stackRoot.Address != 0)
+						stackRootOwners[stackRoot.Address] = thread;
 				}
 			}
 
-			return roots.Skip(parameters.Offset).Take(parameters.Limit);
+			var candidates = heap.EnumerateRoots()
+				.Where(r => r.Object.Address != 0)
+				.Select(r => {
+					stackRootOwners.TryGetValue(r.Address, out var owner);
+					return new RootCandidate(
+						ObjectAddress: r.Object.Address,
+						Kind: r.RootKind.ToString(),
+						RootAddress: r.Address,
+						ManagedThreadId: owner?.ManagedThreadId,
+						OSThreadId: owner?.OSThreadId,
+						IsPinned: r.IsPinned,
+						IsInterior: r.IsInterior);
+				});
+
+			int effectiveMaxNodes = ResolveMaxNodesVisited(maxNodesVisited);
+
+			var search = RootPathFinder.FindPaths(
+				targetAddress,
+				candidates,
+				address => heap.GetObject(address)
+					.EnumerateReferenceAddresses(carefully: true, considerDependantHandles: true),
+				maxPaths,
+				effectiveMaxNodes);
+
+			var pathInfos = search.Paths.Select(p => new GCRootPathInfo {
+				RootAddress = p.Root.RootAddress,
+				RootKind = p.Root.Kind,
+				ManagedThreadId = p.Root.ManagedThreadId,
+				OSThreadId = p.Root.OSThreadId,
+				IsPinned = p.Root.IsPinned,
+				IsInterior = p.Root.IsInterior,
+				TargetAddress = targetAddress,
+				Path = p.Path.Select(address => {
+					var obj = heap.GetObject(address);
+					return new GCRootPathNode {
+						Address = address,
+						TypeName = obj.Type?.Name,
+						Size = obj.IsNull ? 0 : obj.Size
+					};
+				}).ToList()
+			});
+
+			return new GCRootSearchInfo {
+				TargetAddress = targetAddress,
+				Paths = pathInfos.Skip(parameters.Offset).Take(parameters.Limit).ToList(),
+				NodesVisited = search.NodesVisited,
+				Truncated = search.Truncated,
+			};
+		}
+
+		/// <summary>Resolves the <c>gcroot</c> traversal budget: an explicit argument wins, then
+		/// <see cref="GCRootMaxNodesVariable"/>, then <see cref="RootPathFinder.DefaultMaxNodesVisited"/>.
+		/// A malformed environment variable is ignored rather than thrown, consistent with this class
+		/// not validating its other environment inputs strictly.</summary>
+		private static int ResolveMaxNodesVisited(int? requested) {
+			if (requested.HasValue)
+				return requested.Value;
+
+			string? env = Environment.GetEnvironmentVariable(GCRootMaxNodesVariable);
+			if (!string.IsNullOrWhiteSpace(env) && int.TryParse(env, out int parsed))
+				return parsed;
+
+			return RootPathFinder.DefaultMaxNodesVisited;
 		}
 
 		public ObjectDetails GetObjectDetails(ulong address) {
@@ -160,7 +264,7 @@ namespace DotNetDump.Core.Analyzers {
 					};
 					try {
 						if (field.IsObjectReference) {
-							var refObj = obj.ReadObjectField(fieldName);
+							var refObj = obj.ReadObjectField(field);
 							fieldModel.Address = refObj.Address;
 							fieldModel.Value = GetObjectValue(refObj);
 						} else {
@@ -191,70 +295,139 @@ namespace DotNetDump.Core.Analyzers {
 			return $"<{obj.Type?.Name}>";
 		}
 
+		/// <summary>
+		/// Reads a primitive field value. Uses the field-object overloads rather than the name-based
+		/// ones: the name lookup costs a round-trip per field per object, and returns nothing at all
+		/// for a field the metadata leaves unnamed.
+		/// </summary>
 		private object? ReadPrimitiveValue(ClrObject obj, ClrInstanceField field) {
-			string fieldName = field.Name ?? "";
-			if (string.IsNullOrEmpty(fieldName)) return null;
-
-			if (field.ElementType == ClrElementType.Boolean) return obj.ReadField<bool>(fieldName);
-			if (field.ElementType == ClrElementType.UInt8) return obj.ReadField<byte>(fieldName);
-			if (field.ElementType == ClrElementType.Int8) return obj.ReadField<sbyte>(fieldName);
-			if (field.ElementType == ClrElementType.Char) return obj.ReadField<char>(fieldName);
-			if (field.ElementType == ClrElementType.Int16) return obj.ReadField<short>(fieldName);
-			if (field.ElementType == ClrElementType.UInt16) return obj.ReadField<ushort>(fieldName);
-			if (field.ElementType == ClrElementType.Int32) return obj.ReadField<int>(fieldName);
-			if (field.ElementType == ClrElementType.UInt32) return obj.ReadField<uint>(fieldName);
-			if (field.ElementType == ClrElementType.Int64) return obj.ReadField<long>(fieldName);
-			if (field.ElementType == ClrElementType.UInt64) return obj.ReadField<ulong>(fieldName);
-			if (field.ElementType == ClrElementType.Float) return obj.ReadField<float>(fieldName);
-			if (field.ElementType == ClrElementType.Double) return obj.ReadField<double>(fieldName);
-			if (field.ElementType == ClrElementType.Pointer || field.ElementType == ClrElementType.NativeInt) return obj.ReadField<IntPtr>(fieldName);
-			if (field.ElementType == ClrElementType.NativeUInt) return obj.ReadField<UIntPtr>(fieldName);
-			if (field.ElementType == ClrElementType.Struct) return $"<struct {field.Type?.Name}>";
-
-			return null;
+			switch (field.ElementType) {
+				case ClrElementType.Boolean: return obj.ReadField<bool>(field);
+				case ClrElementType.UInt8: return obj.ReadField<byte>(field);
+				case ClrElementType.Int8: return obj.ReadField<sbyte>(field);
+				case ClrElementType.Char: return obj.ReadField<char>(field);
+				case ClrElementType.Int16: return obj.ReadField<short>(field);
+				case ClrElementType.UInt16: return obj.ReadField<ushort>(field);
+				case ClrElementType.Int32: return obj.ReadField<int>(field);
+				case ClrElementType.UInt32: return obj.ReadField<uint>(field);
+				case ClrElementType.Int64: return obj.ReadField<long>(field);
+				case ClrElementType.UInt64: return obj.ReadField<ulong>(field);
+				case ClrElementType.Float: return obj.ReadField<float>(field);
+				case ClrElementType.Double: return obj.ReadField<double>(field);
+				case ClrElementType.Pointer:
+				case ClrElementType.NativeInt: return obj.ReadField<IntPtr>(field);
+				case ClrElementType.NativeUInt: return obj.ReadField<UIntPtr>(field);
+				case ClrElementType.Struct: return $"<struct {field.Type?.Name}>";
+				default: return null;
+			}
 		}
 
-		public IEnumerable<HeapSegmentInfo> GetHeapSegments() {
+		public HeapSummaryInfo GetHeapSegments() {
 			var heap = GetHeap();
-			return heap.Segments.Select(s => new HeapSegmentInfo {
-				Start = s.Start,
-				End = s.End,
-				Size = s.Length,
-				Generation = s.Kind switch {
-					GCSegmentKind.Generation0 => 0,
-					GCSegmentKind.Generation1 => 1,
-					GCSegmentKind.Generation2 => 2,
-					_ => -1
-				},
-				IsLargeObjectHeap = s.Kind == GCSegmentKind.Large,
-				IsPinnedObjectHeap = s.Kind == GCSegmentKind.Pinned
-			});
+
+			return new HeapSummaryInfo {
+				IsServerGC = heap.IsServer,
+				SubHeapCount = heap.SubHeaps.Length,
+				CanWalkHeap = heap.CanWalkHeap,
+				DynamicAdaptationMode = heap.DynamicAdaptationMode,
+				Segments = heap.Segments.Select(s => new HeapSegmentInfo {
+					Start = s.Start,
+					End = s.End,
+					Size = s.Length,
+					Kind = SegmentClassifier.Label(s.Kind),
+					Generation = SegmentClassifier.Generation(s.Kind),
+					IsLargeObjectHeap = SegmentClassifier.IsLargeObjectHeap(s.Kind),
+					IsPinnedObjectHeap = SegmentClassifier.IsPinnedObjectHeap(s.Kind),
+					CommittedSize = s.CommittedMemory.Length,
+					ReservedSize = s.ReservedMemory.Length,
+					Gen0Size = s.Generation0.Length,
+					Gen1Size = s.Generation1.Length,
+					Gen2Size = s.Generation2.Length,
+					SubHeapIndex = s.SubHeap.Index
+				}).ToList()
+			};
 		}
 
-		public IEnumerable<SyncBlockInfo> GetSyncBlocks(QueryParameters parameters) {
+		/// <summary>
+		/// Lists monitors. An uncontended <c>lock</c> is stored as a thin lock in the object header and
+		/// never allocates a sync block, so sync-block enumeration alone reports an empty table for a
+		/// process that plainly holds a lock. <paramref name="includeThinLocks"/> walks the heap to find
+		/// those — it costs a full heap pass, hence opt-in.
+		/// <para>
+		/// Sync blocks are cheap to enumerate; thin locks are not, so <paramref name="includeThinLocks"/>
+		/// changes what is computed and is part of the cache key.
+		/// </para>
+		/// </summary>
+		private List<SyncBlockInfo> ComputeSyncBlocks(bool includeThinLocks) {
 			var heap = GetHeap();
 			var runtime = _context.Runtime;
 
-			var threadMap = runtime?.Threads.ToDictionary(t => t.Address, t => t.ManagedThreadId) ?? new Dictionary<ulong, int>();
+			var threadMap = runtime?.Threads.ToDictionary(t => t.Address, t => t) ?? new Dictionary<ulong, ClrThread>();
 
-			var blocks = heap.EnumerateSyncBlocks().Select(b => new SyncBlockInfo {
-				ObjectAddress = b.Object,
-				IsMonitorHeld = b.IsMonitorHeld,
-				HoldingThreadAddress = b.HoldingThreadAddress,
-				RecursionCount = b.RecursionCount,
-				WaitingThreadCount = b.WaitingThreadCount,
-				ManagedThreadId = threadMap.TryGetValue(b.HoldingThreadAddress, out int id) ? id : -1
-			});
+			var blocks = heap.EnumerateSyncBlocks().Select(b => {
+				threadMap.TryGetValue(b.HoldingThreadAddress, out var holder);
+				return new SyncBlockInfo {
+					ObjectAddress = b.Object,
+					TypeName = heap.GetObject(b.Object).Type?.Name,
+					IsMonitorHeld = b.IsMonitorHeld,
+					HoldingThreadAddress = b.HoldingThreadAddress,
+					RecursionCount = b.RecursionCount,
+					WaitingThreadCount = b.WaitingThreadCount,
+					ManagedThreadId = holder?.ManagedThreadId,
+					OSThreadId = holder?.OSThreadId,
+					IsThinLock = false
+				};
+			}).ToList();
 
-			if (parameters.SortBy?.ToLower() == "recursion") {
-				blocks = parameters.SortDirection == SortDirection.Asc ? blocks.OrderBy(b => b.RecursionCount) : blocks.OrderByDescending(b => b.RecursionCount);
-			} else if (parameters.SortBy?.ToLower() == "waiting") {
-				blocks = parameters.SortDirection == SortDirection.Asc ? blocks.OrderBy(b => b.WaitingThreadCount) : blocks.OrderByDescending(b => b.WaitingThreadCount);
-			} else {
-				blocks = parameters.SortDirection == SortDirection.Asc ? blocks.OrderBy(b => b.ObjectAddress) : blocks.OrderByDescending(b => b.ObjectAddress);
+			if (includeThinLocks) {
+				blocks.AddRange(EnumerateThinLocks(heap));
 			}
 
-			return blocks.Skip(parameters.Offset).Take(parameters.Limit);
+			return blocks;
+		}
+
+		public PagedResult<SyncBlockInfo> GetSyncBlocks(QueryParameters parameters, bool includeThinLocks = true) {
+			string argumentsHash = CacheKey.HashArguments(includeThinLocks);
+			var key = new CacheKey(_context.Identity, "sync-blocks", argumentsHash, CacheSchemaVersion);
+			List<SyncBlockInfo> blocks = _cache.GetOrCompute(key, () => ComputeSyncBlocks(includeThinLocks));
+
+			IEnumerable<SyncBlockInfo> sorted = blocks;
+			if (parameters.SortBy?.ToLower() == "recursion") {
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(b => b.RecursionCount) : sorted.OrderByDescending(b => b.RecursionCount);
+			} else if (parameters.SortBy?.ToLower() == "waiting") {
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(b => b.WaitingThreadCount) : sorted.OrderByDescending(b => b.WaitingThreadCount);
+			} else {
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(b => b.ObjectAddress) : sorted.OrderByDescending(b => b.ObjectAddress);
+			}
+
+			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+			return new PagedResult<SyncBlockInfo>(page, blocks.Count, parameters.Offset, parameters.Limit);
+		}
+
+		private static IEnumerable<SyncBlockInfo> EnumerateThinLocks(ClrHeap heap) {
+			foreach (var obj in heap.EnumerateObjects()) {
+				ClrThinLock? thinLock;
+				try {
+					thinLock = obj.GetThinLock();
+				} catch (Exception) {
+					continue;
+				}
+
+				if (thinLock == null)
+					continue;
+
+				yield return new SyncBlockInfo {
+					ObjectAddress = obj.Address,
+					TypeName = obj.Type?.Name,
+					IsMonitorHeld = true,
+					HoldingThreadAddress = thinLock.Thread?.Address ?? 0,
+					RecursionCount = thinLock.Recursion,
+					WaitingThreadCount = 0,
+					ManagedThreadId = thinLock.Thread?.ManagedThreadId,
+					OSThreadId = thinLock.Thread?.OSThreadId,
+					IsThinLock = true
+				};
+			}
 		}
 
 		public IEnumerable<GCHandleInfo> GetGCHandles(QueryParameters parameters) {
@@ -265,7 +438,12 @@ namespace DotNetDump.Core.Analyzers {
 				Address = h.Address,
 				Object = h.Object.Address,
 				Kind = h.HandleKind.ToString(),
-				TypeName = h.Object.Type?.Name ?? "<unknown>"
+				TypeName = h.Object.Type?.Name ?? "<unknown>",
+				IsStrong = h.IsStrong,
+				ReferenceCount = h.ReferenceCount,
+				DependentTarget = h.Dependent.Address,
+				AppDomainName = h.AppDomain?.Name,
+				Size = h.Object.IsNull ? 0 : h.Object.Size
 			});
 
 			if (parameters.SortBy?.ToLower() == "kind") {
@@ -282,11 +460,56 @@ namespace DotNetDump.Core.Analyzers {
 		public IEnumerable<HeapCorruptionInfo> VerifyHeap() {
 			var heap = GetHeap();
 			return heap.VerifyHeap().Select(c => new HeapCorruptionInfo {
-				Address = c.Object.Address,
+				Address = c.Object.Address + (ulong)(c.Offset > 0 ? c.Offset : 0),
 				Object = c.Object.Address,
-				Message = c.ToString(), // ClrMD ObjectCorruption.ToString() usually gives a good message
-				Offset = 0
+				Kind = c.Kind.ToString(),
+				Message = c.ToString(),
+				Offset = c.Offset,
+				TypeName = c.Object.Type?.Name
 			});
+		}
+
+		/// <summary>Verifies a single object, for following up on a suspect address.</summary>
+		public IEnumerable<HeapCorruptionInfo> VerifyObject(ulong address) {
+			var heap = GetHeap();
+
+			if (!heap.FullyVerifyObject(address, out var corruptions))
+				return Enumerable.Empty<HeapCorruptionInfo>();
+
+			return corruptions.Select(c => new HeapCorruptionInfo {
+				Address = c.Object.Address + (ulong)(c.Offset > 0 ? c.Offset : 0),
+				Object = c.Object.Address,
+				Kind = c.Kind.ToString(),
+				Message = c.ToString(),
+				Offset = c.Offset,
+				TypeName = c.Object.Type?.Name
+			}).ToList();
+		}
+
+		/// <summary>
+		/// Exception objects living on the heap. In a collected dump most exceptions have already been
+		/// caught, so they are not in flight on any thread and are only findable this way.
+		/// </summary>
+		/// <remarks>
+		/// Shares its cache entry with <see cref="ThreadAnalyzer"/>'s heap-exception scan (see
+		/// <see cref="HeapExceptionsCacheOperation"/>) — both perform the identical full-heap walk.
+		/// </remarks>
+		private List<ExceptionDetails> ComputeHeapExceptions() {
+			var heap = GetHeap();
+			return heap.EnumerateObjects()
+				.Where(o => o.Type?.IsException == true)
+				.Select(o => o.AsException())
+				.Where(e => e != null)
+				.Select(e => ExceptionMapper.Map(e!))
+				.ToList();
+		}
+
+		public PagedResult<ExceptionDetails> GetHeapExceptions(QueryParameters parameters) {
+			var key = new CacheKey(_context.Identity, HeapExceptionsCacheOperation, "", CacheSchemaVersion);
+			List<ExceptionDetails> found = _cache.GetOrCompute(key, ComputeHeapExceptions);
+
+			var page = found.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+			return new PagedResult<ExceptionDetails>(page, found.Count, parameters.Offset, parameters.Limit);
 		}
 	}
 }
