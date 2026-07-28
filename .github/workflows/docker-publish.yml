@@ -22,7 +22,7 @@ jobs:
       assemblySemVer: ${{ steps.gitversion.outputs.assemblySemVer }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -55,7 +55,7 @@ jobs:
             image_name: ${{ github.repository }}-cli
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
