@@ -2,9 +2,9 @@
 
 Execution plan for [CLI_DESIGN.md](CLI_DESIGN.md).
 
-**Status: Phases 1, 2, 3b, 4 and 5 complete** (commits `ca7274a`, `f05b5c2`, `32e0d79`, `c41b490`,
-`aed4895`). Both §0 gates resolved. Phase 6 is unblocked and not started; Phase 7 is independent and
-can run any time; Phases 8–10 sit behind 6/7.
+**Status: Phases 1, 2, 3b, 4, 5 and 8 complete** (commits `ca7274a`, `f05b5c2`, `32e0d79`, `c41b490`,
+`aed4895`, `cd40502`). Both §0 gates resolved. Phase 6 and Phase 7 are in progress; Phase 9 sits
+behind Phase 6; Phase 10 sits behind all of them.
 
 The work is broken into phases sized for delegation to subagents. Model assignments are chosen to
 keep token cost down: mechanical work with an established pattern goes to Haiku 4.5, work requiring
@@ -337,12 +337,18 @@ command, and add a wrapper script for the persistent-container pattern (`docker 
 `docker exec` per command) that hides the prefix so agent-facing commands match the native ones.
 `entrypoint.sh` must keep working unchanged for the existing MCP server path.
 
-### Phase 8 — Server cache registration · Haiku 4.5
+### Phase 8 — Server cache registration · Haiku 4.5 — **done, `cd40502`**
 
 Register a `TieredAnalysisCache` (memory + filesystem) in `src/DotNetDump.Server/Program.cs` so the
 MCP server shares the cache written by the CLI. Roughly a one-line DI change plus verification that
 `load_dump` on a second dump serves correct results — the regression the old `_cachedStats` would
 have caused.
+
+**Outcome.** Exactly as scoped: 3 lines in `Program.cs`, plus a regression test proving `CacheKey`
+values differ across `DumpIdentity`s (tested at the cache level, since no two-dump fixture exists to
+drive it through the full MCP tool surface). This agent's harness-provided worktree was itself
+mis-based (on old `main`, not `docs/overall-checkup`) — it caught this via the same self-verification
+instruction, created its own correctly-based worktree, and proceeded without needing intervention.
 
 ### Phase 9 — Skill · Sonnet 5
 
