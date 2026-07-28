@@ -21,6 +21,23 @@ namespace DotNetDump.Core.Formatting {
 
 		private static string Num(long value) => value.ToString("N0", CultureInfo.InvariantCulture);
 
+		/// <summary>Backs the CLI's `info` command (CLI_DESIGN.md &#0167;4.1); no MCP tool equivalent.</summary>
+		public static string FormatInfo(DumpInfo info) {
+			var sb = new StringBuilder();
+			sb.AppendLine($"- **Runtime**: {info.RuntimeFlavor} {info.RuntimeVersion}");
+			sb.AppendLine($"- **Architecture**: {info.Architecture}");
+			sb.AppendLine($"- **OS**: {info.OperatingSystem}");
+
+			string dacDescription = info.ExplicitDacPath ?? info.ExpectedDacFileName ?? "<unknown>";
+			string dacStatus = info.DacMatchVerified ? "matched" : "unverified -- explicit path bypasses ClrMD's match check";
+			sb.AppendLine($"- **DAC**: {dacDescription} ({dacStatus})");
+
+			string gcFlavor = info.IsServerGC ? "Server" : "Workstation";
+			sb.AppendLine($"- **Heap**: {Bytes(info.HeapSizeBytes)} bytes across {Num(info.SegmentCount)} segment(s), {gcFlavor} GC, {Num(info.SubHeapCount)} sub-heap(s)");
+			sb.AppendLine($"- **Threads**: {Num(info.ManagedThreadCount)} managed");
+			return sb.ToString();
+		}
+
 		public static string FormatHeapStatistics(IEnumerable<HeapStatItem> stats) {
 			var sb = new StringBuilder();
 			// MethodTable is included so a row can be fed straight to dump_mt / list_objects.

@@ -59,6 +59,26 @@ namespace DotNetDump.Core.Formatting {
 			_ => "unknown",
 		};
 
+		/// <summary>Backs the CLI's `info` command (CLI_DESIGN.md &#0167;4.1); no MCP tool equivalent.</summary>
+		public static string FormatInfo(DumpInfo info) {
+			var sb = new StringBuilder();
+			sb.AppendLine(Header("runtimeVersion", "runtimeFlavor", "architecture", "operatingSystem", "expectedDacFileName", "explicitDacPath", "dacMatchVerified", "isServerGC", "subHeapCount", "heapSizeBytes", "segmentCount", "managedThreadCount"));
+			sb.AppendLine(Row(
+				info.RuntimeVersion,
+				info.RuntimeFlavor,
+				info.Architecture,
+				info.OperatingSystem,
+				info.ExpectedDacFileName,
+				info.ExplicitDacPath,
+				Bool(info.DacMatchVerified),
+				Bool(info.IsServerGC),
+				Num(info.SubHeapCount),
+				info.HeapSizeBytes.ToString(CultureInfo.InvariantCulture),
+				Num(info.SegmentCount),
+				Num(info.ManagedThreadCount)));
+			return sb.ToString();
+		}
+
 		public static string FormatHeapStatistics(IEnumerable<HeapStatItem> stats) {
 			var sb = new StringBuilder();
 			sb.AppendLine(Header("methodTable", "count", "totalSize", "typeName"));
