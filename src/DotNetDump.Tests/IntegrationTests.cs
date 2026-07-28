@@ -434,6 +434,44 @@ public class IntegrationTests : IDisposable {
 		Assert.Equal(2, cache.ComputeCalls);
 	}
 
+	/// <summary>
+	/// Verifies that different dumps produce different DumpIdentity values, and thus different cache
+	/// keys, preventing cache leakage when the MCP server switches between dumps.
+	/// </summary>
+	[Fact]
+	public void TieredAnalysisCache_CacheKeyIncludesDumpIdentity_PreventsLeakageAcrossDumps() {
+		// Create two distinct DumpIdentity values (e.g., from different files or metadata).
+		var dump1 = DumpIdentity.FromComponents("dump1.core", "10485760", "2025-01-01T00:00:00Z");
+		var dump2 = DumpIdentity.FromComponents("dump2.core", "20971520", "2025-01-02T00:00:00Z");
+
+		// Create cache keys for the same operation on different dumps.
+		var key1 = new CacheKey(dump1, "GetHeapStatistics", "abc123", 1);
+		var key2 = new CacheKey(dump2, "GetHeapStatistics", "abc123", 1);
+
+		// Keys should be different since they reference different dumps.
+		Assert.NotEqual(key1, key2);
+
+		// Demonstrate that a TieredAnalysisCache with a memory tier stores separate entries.
+		var cache = new TieredAnalysisCache(new MemoryAnalysisCache());
+
+		var value1 = cache.GetOrCompute(key1, () => "Result from dump 1");
+		var value2 = cache.GetOrCompute(key2, () => "Result from dump 2");
+
+		Assert.Equal("Result from dump 1", value1);
+		Assert.Equal("Result from dump 2", value2);
+
+		// Verify that clearing dump1 does not affect dump2's cache entries.
+		cache.ClearDump(dump1);
+
+		// After clearing dump1, querying key1 should recompute.
+		var value1After = cache.GetOrCompute(key1, () => "RECOMPUTED for dump 1");
+		Assert.Equal("RECOMPUTED for dump 1", value1After);
+
+		// Verify that dump2's entry is still cached (not recomputed).
+		var value2After = cache.GetOrCompute(key2, () => "RECOMPUTED for dump 2");
+		Assert.Equal("Result from dump 2", value2After);
+	}
+
 	/// <summary>Wraps a real <see cref="MemoryAnalysisCache"/> and counts how many times the
 	/// underlying compute delegate actually runs, independent of how many times <c>GetOrCompute</c>
 	/// itself is called.</summary>

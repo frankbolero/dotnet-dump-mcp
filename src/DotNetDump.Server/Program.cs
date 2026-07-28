@@ -1,5 +1,6 @@
 using DotNetDump.Core;
 using DotNetDump.Core.Analyzers;
+using DotNetDump.Core.Caching;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -19,6 +20,8 @@ class Program {
 
 		// Register Core Services
 		builder.Services.AddSingleton<IDumpContext, DumpContext>();
+		builder.Services.AddSingleton<IAnalysisCache>(
+			new TieredAnalysisCache(new MemoryAnalysisCache(), new FileSystemAnalysisCache()));
 		builder.Services.AddTransient<HeapAnalyzer>();
 		builder.Services.AddTransient<ThreadAnalyzer>();
 		builder.Services.AddTransient<ModuleAnalyzer>();
