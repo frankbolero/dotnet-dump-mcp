@@ -2,8 +2,9 @@
 
 Execution plan for [CLI_DESIGN.md](CLI_DESIGN.md).
 
-**Status: Phases 1 and 2 complete** (commits `ca7274a`, `f05b5c2`). Both §0 gates resolved. Phase 4
-and Phase 5 are unblocked and not started; Phases 6–10 sit behind Phase 5.
+**Status: Phases 1, 2, 3b, 4 and 5 complete** (commits `ca7274a`, `f05b5c2`, `32e0d79`, `c41b490`,
+`aed4895`). Both §0 gates resolved. Phase 6 is unblocked and not started; Phase 7 is independent and
+can run any time; Phases 8–10 sit behind 6/7.
 
 The work is broken into phases sized for delegation to subagents. Model assignments are chosen to
 keep token cost down: mechanical work with an established pattern goes to Haiku 4.5, work requiring
@@ -212,7 +213,7 @@ dump `size + mtime + inode` plus the resolved DAC path/build id. Must not read t
 Throws or returns a sentinel when no dump is loaded, consistent with the existing `IsLoaded`
 pattern.
 
-### Phase 3b — `gcroot` truncation reporting and settable budget · Sonnet 5
+### Phase 3b — `gcroot` truncation reporting and settable budget · Sonnet 5 — **done, `32e0d79`**
 
 Full write-up, defect chain and proposed fix: **[GCROOT_TRUNCATION.md](GCROOT_TRUNCATION.md)**.
 
@@ -240,7 +241,7 @@ message point at `--max-nodes 0` as the way to get a conclusive answer.
 hand-built graph with no dump — see `src/DotNetDump.Tests/RootPathFinderTests.cs`. All the tests
 listed in the write-up are cheap unit tests.
 
-### Phase 4 — Wire the cache into analyzers, and split compute from pagination · Sonnet 5
+### Phase 4 — Wire the cache into analyzers, and split compute from pagination · Sonnet 5 — **done, `32e0d79`**
 
 **Scope expanded after Phase 2.** Two requirements turn out to be the same refactor:
 
@@ -274,7 +275,20 @@ Critical: the arguments hash must exclude `limit`, `offset`, `sort`, `order` and
 entry serves every pagination and rendering variant (§6.2). Add a test proving that two calls
 differing only in `--limit` produce one cache entry and one computation.
 
-### Phase 5 — CLI scaffold · Sonnet 5
+**Outcome — worktree isolation failed silently for both 3b and 4.** Both subagents ended up editing
+directly in the primary checkout instead of their own isolated worktree, uncoordinated, and each
+independently touched five shared files (`HeapAnalyzer.cs`, `JsonFormatter.cs`,
+`DumpAnalyzerTools.cs`, `IntegrationTests.cs`, `JsonFormatterTests.cs`). This was caught only because
+both agents' baseline check reported unexpected foreign changes appearing mid-task and stopped to ask
+rather than pushing through — the standing instruction earned its keep here in a new way. Reviewing
+the merged diff found the two changes genuinely complementary rather than conflicting (each agent's
+edits, made against a live shared file, had implicitly accounted for the other's presence), so no
+rework was needed; both landed in one commit, `32e0d79`. **Lesson for Phase 5, 6 and 7, which also run
+as parallel subagents: explicitly verify each agent is in its own worktree directory (not the primary
+checkout) before relying on isolation to prevent collisions** — the request for isolation does not
+guarantee it took effect.
+
+### Phase 5 — CLI scaffold · Sonnet 5 — **done, `c41b490` + `aed4895`**
 
 Create `src/DotNetDump.Cli/` per §2, add it to the solution, and implement §3 in full: global
 options, dump resolution precedence (`--dump` → `DNDUMP_PATH` → `.dndump/session.json` searched
@@ -290,6 +304,21 @@ On argument parsing: verify the currently published `System.CommandLine` version
 before writing against it — the package went through a long beta with breaking changes between
 previews. If it is still unstable, a hand-rolled parser is acceptable and preferable to churn;
 report which you chose and why.
+
+**Outcome.** Used **System.CommandLine 2.0.10** (verified current GA, not the unstable
+`3.0.0-preview` series) — chosen by loading the assembly and probing its actual API rather than
+trusting recollection. `info` required new Core plumbing with no prior MCP equivalent
+(`SessionAnalyzer`, `DumpInfo`) plus a `FormatInfo` method appended to each formatter, without
+touching any existing formatter method. Smoke-tested against a real sample dump.
+
+This worktree branched before Phase 4 landed, so it was built against the pre-Phase-4
+`HeapAnalyzer` API (bare `IEnumerable<T>`). Phase 4 merged first and changed those methods to
+return `PagedResult<T>`; reconciling required one small addition, an `OutputFormatting.Render`
+overload that takes a `PagedResult<T>` and hands `JsonFormatter` the full result (for real
+pagination metadata) while Markdown/TSV still get just the page — committed separately as
+`aed4895` and re-verified against the sample dump (`total`/`hasMore` render correctly). **Phase 6
+should use this overload for any command backed by one of the five cached analyzer methods, and
+the plain `Render<T>` overload for everything else.**
 
 ### Phase 6 — Command wirings · Haiku 4.5
 
