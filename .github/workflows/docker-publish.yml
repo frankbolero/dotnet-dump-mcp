@@ -15,6 +15,9 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
   version:
     runs-on: ubuntu-latest
     outputs:
@@ -36,7 +39,7 @@ jobs:
         uses: gittools/actions/gitversion/execute@v4.7.0
 
   build-and-push-image:
-    needs: version
+    needs: [test, version]
     runs-on: ubuntu-latest
     permissions:
       contents: read

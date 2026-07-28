@@ -1,0 +1,49 @@
+name: CI
+
+# Reusable test workflow -- invoked from docker-publish.yml on every push/PR so the same job
+# gates both "does the PR pass" and "do we build/publish images". Not triggered directly (no
+# `pull_request:`/`push:` here) so it never runs twice for the same event.
+on:
+  workflow_call:
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore src/dotnet-dump-mcp-server.sln
+
+      - name: Build
+        run: dotnet build src/dotnet-dump-mcp-server.sln --no-restore --configuration Release
+
+      # No sample dump is available in CI. Integration tests are [SkippableFact] and skip
+      # themselves visibly (SkipIfNoDump) rather than failing when DOTNETDUMP_TEST_DUMP is unset --
+      # this still exercises every unit test (cache, formatters, CLI parsing, etc.) at full
+      # strength across all three target frameworks.
+      # Multi-targeted, so this produces one .trx per TFM under TestResults -- a fixed
+      # LogFileName would make each target framework's run overwrite the last one's file.
+      - name: Test
+        run: >
+          dotnet test src/dotnet-dump-mcp-server.sln --no-build --configuration Release
+          --logger trx --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
