@@ -87,40 +87,36 @@ versa. See `docs/CLI_DESIGN.md` §6 for the full design.
 ### Running the CLI via Docker
 
 Useful for architecture mismatch — e.g. analyzing a Linux ARM64 dump on a Mac, or vice versa. The
-image (built below) carries `dndump` alongside the MCP server, plus a DAC cache volume so the
-first analysis command fetches the DAC and every later one reuses it instead of hitting the
-network again:
+CLI image carries `dndump` plus the DAC-fetching tooling only (no MCP server bits — a much smaller
+pull), and a DAC cache volume so the first analysis command fetches the DAC and every later one
+reuses it instead of hitting the network again.
+
+#### Option 1: Use the published image (recommended)
+
+A prebuilt image is published to the GitHub Container Registry on every push to `main`:
+[`ghcr.io/frankbolero/dotnet-dump-mcp-cli`](https://github.com/frankbolero/dotnet-dump-mcp/pkgs/container/dotnet-dump-mcp-cli).
+No local build required:
 
 ```bash
-docker build -t dotnet-dump-mcp-server .
+docker pull ghcr.io/frankbolero/dotnet-dump-mcp-cli:latest
 
 docker run --rm -i \
   -v "/path/to/your/dumps:/dumps" \
   -v dndump-symcache:/symcache \
   -e DUMP_PATH=/dumps/your_dump.core \
-  dotnet-dump-mcp-server
+  ghcr.io/frankbolero/dotnet-dump-mcp-cli:latest \
+  dumpheap --top 20
 ```
 
 Running one container per `dndump` command would pay container startup and the DAC fetch every
 time, so instead keep one long-lived container per dump-analysis session and `docker exec` into
-it:
+it. `scripts/dndump-docker` wraps this into one idempotent script — point it at the published
+image with `DNDUMP_IMAGE` so the agent-facing commands look identical to running `dndump`
+natively:
 
 ```bash
-docker run -d --name dndump-session \
-  -v "/path/to/dumps:/dumps" -v dndump-symcache:/symcache \
-  --entrypoint sleep dotnet-dump-mcp-server infinity
+export DNDUMP_IMAGE=ghcr.io/frankbolero/dotnet-dump-mcp-cli:latest
 
-docker exec dndump-session dndump --dump /dumps/prod-oom.core dumpheap --top 20
-```
-
-(`--entrypoint sleep ... infinity` is required — the image's default
-`ENTRYPOINT ["./entrypoint.sh"]` would otherwise swallow a bare `sleep infinity` argument as input
-to `entrypoint.sh` instead of running it.)
-
-`scripts/dndump-docker` wraps both steps into one idempotent script, so the agent-facing commands
-look identical to running `dndump` natively:
-
-```bash
 ./scripts/dndump-docker use /dumps/prod-oom.core
 ./scripts/dndump-docker info
 ./scripts/dndump-docker dumpheap --top 20
@@ -130,6 +126,36 @@ It creates `dndump-session` on first use, reuses (or restarts) it on subsequent 
 `DNDUMP_IMAGE`, `DNDUMP_CONTAINER_NAME`, `DNDUMP_DUMPS_DIR`, `DNDUMP_SYMCACHE_VOLUME` and
 `DNDUMP_PLATFORM` (for `--platform linux/amd64`-style cross-architecture runs) for configuration —
 see the script header for details.
+
+(Internally the script starts the persistent container with `--entrypoint sleep ... infinity` —
+required because the image's default `ENTRYPOINT ["./entrypoint-cli.sh"]` would otherwise swallow
+a bare `sleep infinity` argument as input to the entrypoint instead of running it — then `docker
+exec`s into it per command.)
+
+#### Option 2: Build it yourself
+
+Build from source if you want to test local changes, or the published image doesn't cover your
+platform:
+
+```bash
+docker build -f src/Dockerfile --target cli -t dotnet-dump-mcp-cli .
+
+docker run --rm -i \
+  -v "/path/to/your/dumps:/dumps" \
+  -v dndump-symcache:/symcache \
+  -e DUMP_PATH=/dumps/your_dump.core \
+  dotnet-dump-mcp-cli \
+  dumpheap --top 20
+```
+
+Same persistent-container pattern, pointed at the locally built image instead:
+
+```bash
+export DNDUMP_IMAGE=dotnet-dump-mcp-cli
+
+./scripts/dndump-docker use /dumps/prod-oom.core
+./scripts/dndump-docker dumpheap --top 20
+```
 
 ---
 
