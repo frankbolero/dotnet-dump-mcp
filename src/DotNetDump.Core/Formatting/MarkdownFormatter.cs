@@ -19,6 +19,8 @@ namespace DotNetDump.Core.Formatting {
 
 		private static string Num(int value) => value.ToString("N0", CultureInfo.InvariantCulture);
 
+		private static string Num(long value) => value.ToString("N0", CultureInfo.InvariantCulture);
+
 		public static string FormatHeapStatistics(IEnumerable<HeapStatItem> stats) {
 			var sb = new StringBuilder();
 			// MethodTable is included so a row can be fed straight to dump_mt / list_objects.
@@ -82,20 +84,43 @@ namespace DotNetDump.Core.Formatting {
 		/// <summary>
 		/// Renders retention chains. The chain is what answers "why is this alive?" — a bare list of
 		/// root addresses does not.
+		/// <para>
+		/// Never asserts the object is unrooted without checking <see cref="GCRootSearchInfo.Truncated"/>
+		/// first — an empty result and a truncated search used to be indistinguishable, which is the
+		/// defect tracked in docs/GCROOT_TRUNCATION.md.
+		/// </para>
 		/// </summary>
-		public static string FormatGCRootPaths(IEnumerable<GCRootPathInfo> paths, ulong targetAddress) {
-			var list = paths.ToList();
+		public static string FormatGCRootPaths(GCRootSearchInfo result) {
+			var list = result.Paths;
 			var sb = new StringBuilder();
 
 			if (list.Count == 0) {
-				sb.AppendLine($"**No GC root path found to `{Addr(targetAddress)}`.**");
+				if (result.Truncated) {
+					sb.AppendLine($"**Search truncated before finding any root path to `{Addr(result.TargetAddress)}`.**");
+					sb.AppendLine();
+					sb.AppendLine($"The traversal budget was exhausted after visiting {Num(result.NodesVisited)} node(s), " +
+						"before any path was found. This result is **inconclusive** — it does not show whether the " +
+						"object is reachable from a GC root, only that the search did not finish. Re-run with " +
+						"`maxNodes: 0` (unlimited) for a conclusive answer; be aware this can use substantial memory " +
+						"on a very large heap (roughly 40 bytes per node visited, e.g. ~4 GB at 100,000,000 nodes).");
+					return sb.ToString();
+				}
+
+				sb.AppendLine($"**No GC root path found to `{Addr(result.TargetAddress)}`.**");
 				sb.AppendLine();
-				sb.AppendLine("The object is not reachable from any GC root, which means it is unrooted and " +
-					"eligible for collection (or was already collected and the address is stale).");
+				sb.AppendLine($"The search completed ({Num(result.NodesVisited)} node(s) visited): the object is not " +
+					"reachable from any GC root, which means it is unrooted and eligible for collection (or was " +
+					"already collected and the address is stale).");
 				return sb.ToString();
 			}
 
-			sb.AppendLine($"Found {list.Count} root path(s) to `{Addr(targetAddress)}`.");
+			sb.AppendLine($"Found {list.Count} root path(s) to `{Addr(result.TargetAddress)}` ({Num(result.NodesVisited)} node(s) visited).");
+			if (result.Truncated) {
+				sb.AppendLine();
+				sb.AppendLine("**Search truncated:** the traversal budget was exhausted while looking for further " +
+					"node-disjoint paths. The path(s) below are confirmed, but more may exist than are shown. " +
+					"Re-run with `maxNodes: 0` (unlimited) for a conclusive answer.");
+			}
 			sb.AppendLine();
 
 			int index = 1;

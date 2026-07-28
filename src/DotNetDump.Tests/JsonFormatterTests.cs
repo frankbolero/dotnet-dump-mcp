@@ -11,18 +11,46 @@ namespace DotNetDump.Tests;
 /// would break a consumer, and these tests exist to catch that.
 /// </summary>
 public class JsonFormatterTests {
+	/// <summary>Wraps items as a single, un-split page — total/offset/limit all agree with what's given.</summary>
+	private static PagedResult<T> Page<T>(params T[] items) => new(items, items.Length, 0, items.Length);
+
 	[Fact]
 	public void CollectionMethods_WrapRowsInDataAndPagination() {
-		string output = JsonFormatter.FormatHeapStatistics(new[] {
+		string output = JsonFormatter.FormatHeapStatistics(Page(
 			new HeapStatItem { TypeName = "System.String", MethodTable = 0x10AE47598, Count = 4928, TotalSize = 199724 }
-		});
+		));
 
 		using var doc = JsonDocument.Parse(output);
 		var root = doc.RootElement;
 
 		Assert.Equal(JsonValueKind.Array, root.GetProperty("data").ValueKind);
 		Assert.Equal(1, root.GetProperty("data").GetArrayLength());
-		Assert.Equal(1, root.GetProperty("pagination").GetProperty("count").GetInt32());
+		Assert.Equal(1, root.GetProperty("pagination").GetProperty("total").GetInt32());
+		Assert.Equal(0, root.GetProperty("pagination").GetProperty("offset").GetInt32());
+		Assert.Equal(1, root.GetProperty("pagination").GetProperty("limit").GetInt32());
+		Assert.False(root.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
+	}
+
+	[Fact]
+	public void CollectionMethods_ReportRealTotalsFromAPagedResult() {
+		// A page that is short of the full result must say so: total exceeds what's in `data`, and
+		// hasMore is true (CLI_DESIGN.md §10.3) -- this is exactly what Phase 2's placeholder
+		// (`{ "itemCount": n }`) could never distinguish from "this is all there is."
+		var page = new PagedResult<HeapStatItem>(
+			new[] { new HeapStatItem { TypeName = "System.String", MethodTable = 0x1, Count = 1, TotalSize = 1 } },
+			totalAvailable: 500,
+			offset: 10,
+			limit: 1);
+
+		string output = JsonFormatter.FormatHeapStatistics(page);
+
+		using var doc = JsonDocument.Parse(output);
+		var pagination = doc.RootElement.GetProperty("pagination");
+
+		Assert.Equal(500, pagination.GetProperty("total").GetInt32());
+		Assert.Equal(10, pagination.GetProperty("offset").GetInt32());
+		Assert.Equal(1, pagination.GetProperty("limit").GetInt32());
+		Assert.True(pagination.GetProperty("hasMore").GetBoolean());
 	}
 
 	[Fact]
@@ -39,18 +67,19 @@ public class JsonFormatterTests {
 
 	[Fact]
 	public void EmptyCollection_ReportsZeroCount() {
-		string output = JsonFormatter.FormatHeapStatistics(Array.Empty<HeapStatItem>());
+		string output = JsonFormatter.FormatHeapStatistics(Page(Array.Empty<HeapStatItem>()));
 
 		using var doc = JsonDocument.Parse(output);
 		Assert.Equal(0, doc.RootElement.GetProperty("data").GetArrayLength());
-		Assert.Equal(0, doc.RootElement.GetProperty("pagination").GetProperty("count").GetInt32());
+		Assert.Equal(0, doc.RootElement.GetProperty("pagination").GetProperty("total").GetInt32());
+		Assert.False(doc.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
 	}
 
 	[Fact]
 	public void HeapStatistics_FieldNamesAndAddressFormatting() {
-		string output = JsonFormatter.FormatHeapStatistics(new[] {
+		string output = JsonFormatter.FormatHeapStatistics(Page(
 			new HeapStatItem { TypeName = "System.String", MethodTable = 0x10AE47598, Count = 4928, TotalSize = 199724 }
-		});
+		));
 
 		using var doc = JsonDocument.Parse(output);
 		var row = doc.RootElement.GetProperty("data")[0];
@@ -63,9 +92,9 @@ public class JsonFormatterTests {
 
 	[Fact]
 	public void HeapObjects_FieldNames() {
-		string output = JsonFormatter.FormatHeapObjects(new[] {
+		string output = JsonFormatter.FormatHeapObjects(Page(
 			new HeapObjectItem { Address = 0x13A611F10, MethodTable = 0x10AE47598, Size = 32, TypeName = "Leaf" }
-		});
+		));
 
 		using var doc = JsonDocument.Parse(output);
 		var row = doc.RootElement.GetProperty("data")[0];
@@ -149,12 +178,19 @@ public class JsonFormatterTests {
 			}
 		};
 
-		string output = JsonFormatter.FormatGCRootPaths(new[] { path }, 0x13A611F10);
+		string output = JsonFormatter.FormatGCRootPaths(new GCRootSearchInfo {
+			TargetAddress = 0x13A611F10,
+			Paths = new List<GCRootPathInfo> { path },
+			NodesVisited = 42,
+			Truncated = false,
+		});
 
 		using var doc = JsonDocument.Parse(output);
 		var root = doc.RootElement;
 
 		Assert.Equal("000000013A611F10", root.GetProperty("targetAddress").GetString());
+		Assert.Equal(42, root.GetProperty("nodesVisited").GetInt64());
+		Assert.False(root.GetProperty("truncated").GetBoolean());
 
 		var row = root.GetProperty("data")[0];
 		Assert.Equal("000000016D24DBE8", row.GetProperty("rootAddress").GetString());
@@ -285,13 +321,19 @@ public class JsonFormatterTests {
 
 	[Fact]
 	public void SyncBlocks_EveryField() {
-		string output = JsonFormatter.FormatSyncBlocks(new[] {
+		string output = JsonFormatter.FormatSyncBlocks(Page(
 			new SyncBlockInfo {
-				ObjectAddress = 0x13A6621D0, TypeName = "System.Object", IsMonitorHeld = true,
-				HoldingThreadAddress = 0xC46D69500, RecursionCount = 2, WaitingThreadCount = 1,
-				ManagedThreadId = 4, OSThreadId = 0x1280B6, IsThinLock = true
+				ObjectAddress = 0x13A6621D0,
+				TypeName = "System.Object",
+				IsMonitorHeld = true,
+				HoldingThreadAddress = 0xC46D69500,
+				RecursionCount = 2,
+				WaitingThreadCount = 1,
+				ManagedThreadId = 4,
+				OSThreadId = 0x1280B6,
+				IsThinLock = true
 			}
-		});
+		));
 
 		using var doc = JsonDocument.Parse(output);
 		var row = doc.RootElement.GetProperty("data")[0];
@@ -652,12 +694,12 @@ public class JsonFormatterTests {
 
 	[Fact]
 	public void ThreadExceptions_SourceIsAnExplicitString() {
-		string output = JsonFormatter.FormatThreadExceptions(new[] {
+		string output = JsonFormatter.FormatThreadExceptions(Page(
 			new ThreadExceptionInfo {
 				Source = ExceptionSource.Heap,
 				Exception = new ExceptionDetails { Address = 0x10, TypeName = "System.Exception", HResult = unchecked((int)0x80131600) }
 			}
-		});
+		));
 
 		using var doc = JsonDocument.Parse(output);
 		var row = doc.RootElement.GetProperty("data")[0];
@@ -669,18 +711,20 @@ public class JsonFormatterTests {
 
 	[Fact]
 	public void ThreadExceptions_NestInnerExceptionsRecursively() {
-		string output = JsonFormatter.FormatThreadExceptions(new[] {
+		string output = JsonFormatter.FormatThreadExceptions(Page(
 			new ThreadExceptionInfo {
 				Source = ExceptionSource.ThreadCurrentException,
 				ManagedThreadId = 5,
 				Exception = new ExceptionDetails {
-					Address = 0x1, TypeName = "Outer", Message = "outer-boom",
+					Address = 0x1,
+					TypeName = "Outer",
+					Message = "outer-boom",
 					InnerExceptions = new List<ExceptionDetails> {
 						new() { Address = 0x2, TypeName = "Inner", Message = "inner-boom" }
 					}
 				}
 			}
-		});
+		));
 
 		using var doc = JsonDocument.Parse(output);
 		var row = doc.RootElement.GetProperty("data")[0];
@@ -696,10 +740,10 @@ public class JsonFormatterTests {
 	[Fact]
 	public void ThreadExceptions_DropsEntriesWithoutAnException() {
 		// Matches MarkdownFormatter's behavior: an entry with no Exception carries no information.
-		string output = JsonFormatter.FormatThreadExceptions(new[] {
+		string output = JsonFormatter.FormatThreadExceptions(Page(
 			new ThreadExceptionInfo { ManagedThreadId = 1, Exception = null },
 			new ThreadExceptionInfo { ManagedThreadId = 2, Exception = new ExceptionDetails { TypeName = "X" } }
-		});
+		));
 
 		using var doc = JsonDocument.Parse(output);
 		Assert.Equal(1, doc.RootElement.GetProperty("data").GetArrayLength());

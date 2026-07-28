@@ -22,12 +22,15 @@ namespace DotNetDump.Core.Formatting {
 	/// {...} }```; every single-item method wraps its result in <c>{ "data": {...} }</c>.</item>
 	/// </list>
 	///
-	/// Pagination is necessarily partial: analyzers apply <c>Skip().Take()</c> internally and hand
-	/// formatters a bare <see cref="IEnumerable{T}"/>, so the pre-pagination total never reaches this
-	/// layer. Only the page size actually observed here is reported. Phase 4 threads a
-	/// <c>PagedResult&lt;T&gt;</c> through the analyzers; once that lands, <see cref="PaginationInfo"/>
-	/// gains <c>total</c>, <c>offset</c>, <c>limit</c> and <c>hasMore</c> without changing the envelope
-	/// shape established here.
+	/// <see cref="PaginationInfo"/> always reports <c>total</c>/<c>offset</c>/<c>limit</c>/<c>hasMore</c>
+	/// (CLI_DESIGN.md §10.3), but the numbers are only as good as what the caller can supply. The four
+	/// methods backing Phase 4's cached walk-scale analyzer sites (<see cref="FormatHeapStatistics"/>,
+	/// <see cref="FormatHeapObjects"/>, <see cref="FormatSyncBlocks"/>, <see cref="FormatThreadExceptions"/>)
+	/// take a <c>PagedResult&lt;T&gt;</c> and report the real pre-pagination total. Every other
+	/// collection method still receives an already-<c>Skip().Take()</c>'d <see cref="IEnumerable{T}"/>
+	/// from an analyzer that has not been split this way, so the pre-pagination total never reaches
+	/// this layer for those; <see cref="PaginationInfo.FromItemsOnly"/> reports the only honest thing
+	/// available — what is actually in <c>data</c> — rather than guessing at <c>hasMore</c>.
 	/// </summary>
 	public static class JsonFormatter {
 		private static readonly JsonSerializerOptions SerializerOptions = new() {
@@ -50,9 +53,38 @@ namespace DotNetDump.Core.Formatting {
 		// ---- Envelope shapes ----------------------------------------------------------------
 
 		private sealed class PaginationInfo {
-			/// <summary>Number of rows in this page. Total/offset/limit/hasMore arrive in Phase 4.</summary>
-			[JsonPropertyName("count")]
-			public int Count { get; init; }
+			[JsonPropertyName("total")]
+			public int Total { get; init; }
+
+			[JsonPropertyName("offset")]
+			public int Offset { get; init; }
+
+			[JsonPropertyName("limit")]
+			public int Limit { get; init; }
+
+			[JsonPropertyName("hasMore")]
+			public bool HasMore { get; init; }
+
+			/// <summary>
+			/// For a collection that reaches this layer already sliced by its analyzer, with no
+			/// <c>PagedResult&lt;T&gt;</c> to report the true pre-pagination total. <c>total</c> and
+			/// <c>limit</c> collapse to what is actually in <c>data</c>, and <c>hasMore</c> is reported
+			/// <c>false</c> rather than guessed -- this is honestly all that is known at this layer.
+			/// </summary>
+			public static PaginationInfo FromItemsOnly(int count) => new() {
+				Total = count,
+				Offset = 0,
+				Limit = count,
+				HasMore = false,
+			};
+
+			/// <summary>The real thing: total/offset/limit as computed by the analyzer, hasMore derived from them.</summary>
+			public static PaginationInfo FromPagedResult<T>(PagedResult<T> result) => new() {
+				Total = result.TotalAvailable,
+				Offset = result.Offset,
+				Limit = result.Limit,
+				HasMore = result.HasMore,
+			};
 		}
 
 		private sealed class CollectionEnvelope<T> {
@@ -68,11 +100,22 @@ namespace DotNetDump.Core.Formatting {
 			public T Data { get; init; } = default!;
 		}
 
-		/// <summary>FormatGCRootPaths takes the target address as a parameter separate from the model
-		/// list, so its envelope carries it as a sibling of <c>data</c> rather than dropping it.</summary>
+		/// <summary>
+		/// <c>targetAddress</c>, <c>nodesVisited</c> and <c>truncated</c> are search-level facts that
+		/// do not belong to any one path, so they ride as siblings of <c>data</c> rather than being
+		/// dropped or repeated per row. <c>truncated</c> is the field a consumer must check before
+		/// treating an empty <c>data</c> as proof the object is unrooted — see
+		/// docs/GCROOT_TRUNCATION.md.
+		/// </summary>
 		private sealed class GCRootPathsEnvelope {
 			[JsonPropertyName("targetAddress")]
 			public string TargetAddress { get; init; } = "";
+
+			[JsonPropertyName("nodesVisited")]
+			public long NodesVisited { get; init; }
+
+			[JsonPropertyName("truncated")]
+			public bool Truncated { get; init; }
 
 			[JsonPropertyName("data")]
 			public List<GCRootPathInfoDto> Data { get; init; } = new();
@@ -879,8 +922,8 @@ namespace DotNetDump.Core.Formatting {
 
 		// ---- Public surface, mirroring MarkdownFormatter method-for-method ----------------------
 
-		public static string FormatHeapStatistics(IEnumerable<HeapStatItem> stats) {
-			var data = stats.Select(item => new HeapStatItemDto {
+		public static string FormatHeapStatistics(PagedResult<HeapStatItem> stats) {
+			var data = stats.Items.Select(item => new HeapStatItemDto {
 				MethodTable = Addr(item.MethodTable),
 				Count = item.Count,
 				TotalSize = item.TotalSize,
@@ -889,12 +932,12 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<HeapStatItemDto> {
 				Data = data,
-				Pagination = new PaginationInfo { Count = data.Count },
+				Pagination = PaginationInfo.FromPagedResult(stats),
 			});
 		}
 
-		public static string FormatHeapObjects(IEnumerable<HeapObjectItem> objects) {
-			var data = objects.Select(item => new HeapObjectItemDto {
+		public static string FormatHeapObjects(PagedResult<HeapObjectItem> objects) {
+			var data = objects.Items.Select(item => new HeapObjectItemDto {
 				Address = Addr(item.Address),
 				MethodTable = Addr(item.MethodTable),
 				Size = item.Size,
@@ -903,7 +946,7 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<HeapObjectItemDto> {
 				Data = data,
-				Pagination = new PaginationInfo { Count = data.Count },
+				Pagination = PaginationInfo.FromPagedResult(objects),
 			});
 		}
 
@@ -918,7 +961,7 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<ThreadInfoDto> {
 				Data = data,
-				Pagination = new PaginationInfo { Count = data.Count },
+				Pagination = PaginationInfo.FromItemsOnly(data.Count),
 			});
 		}
 
@@ -932,7 +975,7 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<ModuleInfoDto> {
 				Data = data,
-				Pagination = new PaginationInfo { Count = data.Count },
+				Pagination = PaginationInfo.FromItemsOnly(data.Count),
 			});
 		}
 
@@ -945,17 +988,19 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<StackGroupDto> {
 				Data = data,
-				Pagination = new PaginationInfo { Count = data.Count },
+				Pagination = PaginationInfo.FromItemsOnly(data.Count),
 			});
 		}
 
-		public static string FormatGCRootPaths(IEnumerable<GCRootPathInfo> paths, ulong targetAddress) {
-			var data = paths.Select(ToDto).ToList();
+		public static string FormatGCRootPaths(GCRootSearchInfo result) {
+			var data = result.Paths.Select(ToDto).ToList();
 
 			return Serialize(new GCRootPathsEnvelope {
-				TargetAddress = Addr(targetAddress),
+				TargetAddress = Addr(result.TargetAddress),
+				NodesVisited = result.NodesVisited,
+				Truncated = result.Truncated,
 				Data = data,
-				Pagination = new PaginationInfo { Count = data.Count },
+				Pagination = PaginationInfo.FromItemsOnly(data.Count),
 			});
 		}
 
@@ -1006,8 +1051,8 @@ namespace DotNetDump.Core.Formatting {
 			});
 		}
 
-		public static string FormatSyncBlocks(IEnumerable<SyncBlockInfo> blocks) {
-			var data = blocks.Select(block => new SyncBlockInfoDto {
+		public static string FormatSyncBlocks(PagedResult<SyncBlockInfo> blocks) {
+			var data = blocks.Items.Select(block => new SyncBlockInfoDto {
 				ObjectAddress = Addr(block.ObjectAddress),
 				TypeName = block.TypeName,
 				IsMonitorHeld = block.IsMonitorHeld,
@@ -1021,7 +1066,7 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<SyncBlockInfoDto> {
 				Data = data,
-				Pagination = new PaginationInfo { Count = data.Count },
+				Pagination = PaginationInfo.FromPagedResult(blocks),
 			});
 		}
 
@@ -1040,7 +1085,7 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<GCHandleInfoDto> {
 				Data = data,
-				Pagination = new PaginationInfo { Count = data.Count },
+				Pagination = PaginationInfo.FromItemsOnly(data.Count),
 			});
 		}
 
@@ -1054,7 +1099,7 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<GCHandleStatItemDto> {
 				Data = data,
-				Pagination = new PaginationInfo { Count = data.Count },
+				Pagination = PaginationInfo.FromItemsOnly(data.Count),
 			});
 		}
 
@@ -1070,7 +1115,7 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<HeapCorruptionInfoDto> {
 				Data = data,
-				Pagination = new PaginationInfo { Count = data.Count },
+				Pagination = PaginationInfo.FromItemsOnly(data.Count),
 			});
 		}
 
@@ -1085,7 +1130,7 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<ThreadStackInfoDto> {
 				Data = data,
-				Pagination = new PaginationInfo { Count = data.Count },
+				Pagination = PaginationInfo.FromItemsOnly(data.Count),
 			});
 		}
 
@@ -1209,14 +1254,15 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<ThreadStateInfoDto> {
 				Data = data,
-				Pagination = new PaginationInfo { Count = data.Count },
+				Pagination = PaginationInfo.FromItemsOnly(data.Count),
 			});
 		}
 
-		public static string FormatThreadExceptions(IEnumerable<ThreadExceptionInfo> exceptionInfos) {
+		public static string FormatThreadExceptions(PagedResult<ThreadExceptionInfo> exceptionInfos) {
 			// Matches MarkdownFormatter: entries without an exception carry no information and are
-			// dropped rather than serialized as rows with a null "exception" field.
-			var data = exceptionInfos.Where(i => i.Exception != null).Select(info => new ThreadExceptionInfoDto {
+			// dropped rather than serialized as rows with a null "exception" field. Pagination is
+			// still reported against the pre-drop page, matching what the analyzer actually paginated.
+			var data = exceptionInfos.Items.Where(i => i.Exception != null).Select(info => new ThreadExceptionInfoDto {
 				ManagedThreadId = info.ManagedThreadId,
 				OSThreadId = info.OSThreadId,
 				Source = SourceName(info.Source),
@@ -1225,7 +1271,7 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<ThreadExceptionInfoDto> {
 				Data = data,
-				Pagination = new PaginationInfo { Count = data.Count },
+				Pagination = PaginationInfo.FromPagedResult(exceptionInfos),
 			});
 		}
 	}

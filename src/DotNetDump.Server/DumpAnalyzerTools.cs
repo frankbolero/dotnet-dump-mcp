@@ -45,7 +45,7 @@ public class DumpAnalyzerTools {
 		return ExecuteSafe(() => {
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var stats = _heapAnalyzer.GetHeapStatistics(parameters);
-			return MarkdownFormatter.FormatHeapStatistics(stats);
+			return MarkdownFormatter.FormatHeapStatistics(stats.Items);
 		});
 	}
 
@@ -59,7 +59,7 @@ public class DumpAnalyzerTools {
 		return ExecuteSafe(() => {
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var objects = _heapAnalyzer.GetObjects(parameters, typeFilter);
-			return MarkdownFormatter.FormatHeapObjects(objects);
+			return MarkdownFormatter.FormatHeapObjects(objects.Items);
 		});
 	}
 
@@ -120,17 +120,18 @@ public class DumpAnalyzerTools {
 		});
 	}
 
-	[McpServerTool, Description("Finds why an object is still alive by tracing reference chains from GC roots to it. Returns the full retention path, not just direct roots.")]
+	[McpServerTool, Description("Finds why an object is still alive by tracing reference chains from GC roots to it. Returns the full retention path, not just direct roots. The result always states whether the search completed or was truncated by the node budget — a truncated result with no paths is inconclusive, not proof the object is unrooted.")]
 	public string GcRoot(
 		[Description("The hex address of the object to find roots for (0x prefix optional)")] string address,
 		[Description("Maximum number of distinct retention paths to return")] int maxPaths = 4,
+		[Description("Traversal budget in nodes visited per search pass. 0 means unlimited, which is the only way to get a conclusive answer but is not free: memory scales with nodes visited, roughly 40 bytes each (~4 GB at 100,000,000). Defaults to the DNDUMP_GCROOT_MAX_NODES environment variable, else 2,000,000.")] int? maxNodes = null,
 		[Description("Number of items to return")] int limit = 50,
 		[Description("Number of items to skip")] int offset = 0) {
 		return ExecuteSafe(() => {
 			ulong objAddr = AddressParser.Parse(address);
 			var parameters = CreateParameters(null, null, limit, offset);
-			var paths = _heapAnalyzer.GetGCRoots(objAddr, parameters, maxPaths);
-			return MarkdownFormatter.FormatGCRootPaths(paths, objAddr);
+			var result = _heapAnalyzer.GetGCRoots(objAddr, parameters, maxPaths, maxNodes);
+			return MarkdownFormatter.FormatGCRootPaths(result);
 		});
 	}
 
@@ -161,7 +162,7 @@ public class DumpAnalyzerTools {
 		return ExecuteSafe(() => {
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var blocks = _heapAnalyzer.GetSyncBlocks(parameters, includeThinLocks);
-			return MarkdownFormatter.FormatSyncBlocks(blocks);
+			return MarkdownFormatter.FormatSyncBlocks(blocks.Items);
 		});
 	}
 
@@ -298,7 +299,7 @@ public class DumpAnalyzerTools {
 
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var exceptions = _threadAnalyzer.GetThreadExceptions(parameters, onlyWithExceptions, includeHeapExceptions);
-			return MarkdownFormatter.FormatThreadExceptions(exceptions);
+			return MarkdownFormatter.FormatThreadExceptions(exceptions.Items);
 		});
 	}
 

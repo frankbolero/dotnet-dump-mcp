@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+using DotNetDump.Core.Caching;
 using DotNetDump.Core.Models;
 using DotNetDump.Core.Utilities;
 
@@ -9,10 +10,17 @@ using Microsoft.Diagnostics.Runtime;
 
 namespace DotNetDump.Core.Analyzers {
 	public class ThreadAnalyzer {
-		private readonly IDumpContext _context;
+		/// <summary>
+		/// Bumped whenever the cached model below changes shape (CLI_DESIGN.md §6.1).
+		/// </summary>
+		private const int CacheSchemaVersion = 1;
 
-		public ThreadAnalyzer(IDumpContext context) {
+		private readonly IDumpContext _context;
+		private readonly IAnalysisCache _cache;
+
+		public ThreadAnalyzer(IDumpContext context, IAnalysisCache? cache = null) {
 			_context = context;
+			_cache = cache ?? NullAnalysisCache.Instance;
 		}
 
 		private ClrRuntime GetRuntime() {
@@ -210,7 +218,7 @@ namespace DotNetDump.Core.Analyzers {
 		/// survives only on the heap. Use <paramref name="includeHeapExceptions"/> (or
 		/// <see cref="GetExceptionByAddress"/>) to find those.
 		/// </summary>
-		public IEnumerable<ThreadExceptionInfo> GetThreadExceptions(
+		public PagedResult<ThreadExceptionInfo> GetThreadExceptions(
 			QueryParameters parameters,
 			bool onlyWithExceptions = true,
 			bool includeHeapExceptions = true) {
@@ -229,7 +237,8 @@ namespace DotNetDump.Core.Analyzers {
 				Exception = t.CurrentException != null ? ExceptionMapper.Map(t.CurrentException) : null
 			});
 
-			// Sorting
+			// Sorting -- applies only to the (cheap) per-thread portion, matching prior behavior:
+			// heap exceptions are appended afterwards in whatever order the walk produced them.
 			if (parameters.SortBy?.ToLower() == "osthreadid") {
 				exceptionInfos = parameters.SortDirection == SortDirection.Asc ? exceptionInfos.OrderBy(t => t.OSThreadId) : exceptionInfos.OrderByDescending(t => t.OSThreadId);
 			} else {
@@ -245,7 +254,10 @@ namespace DotNetDump.Core.Analyzers {
 					.Select(r => r.Exception!.Address)
 					.ToHashSet();
 
-				foreach (var details in EnumerateHeapExceptions()) {
+				var key = new CacheKey(_context.Identity, HeapAnalyzer.HeapExceptionsCacheOperation, "", CacheSchemaVersion);
+				List<ExceptionDetails> heapExceptions = _cache.GetOrCompute(key, ComputeHeapExceptions);
+
+				foreach (var details in heapExceptions) {
 					if (seen.Add(details.Address)) {
 						results.Add(new ThreadExceptionInfo {
 							Source = ExceptionSource.Heap,
@@ -255,7 +267,8 @@ namespace DotNetDump.Core.Analyzers {
 				}
 			}
 
-			return results.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+			var page = results.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+			return new PagedResult<ThreadExceptionInfo>(page, results.Count, parameters.Offset, parameters.Limit);
 		}
 
 		/// <summary>Reads a specific exception object by address, as SOS's <c>pe &lt;address&gt;</c> does.</summary>
@@ -285,8 +298,14 @@ namespace DotNetDump.Core.Analyzers {
 			};
 		}
 
-		private IEnumerable<ExceptionDetails> EnumerateHeapExceptions() {
+		/// <summary>
+		/// The walk-scale part of <see cref="GetThreadExceptions"/>. Shares its cache entry with
+		/// <see cref="HeapAnalyzer.GetHeapExceptions"/> (see <see cref="HeapAnalyzer.HeapExceptionsCacheOperation"/>)
+		/// — both perform the identical full-heap exception scan.
+		/// </summary>
+		private List<ExceptionDetails> ComputeHeapExceptions() {
 			var heap = GetRuntime().Heap;
+			var found = new List<ExceptionDetails>();
 
 			foreach (var obj in heap.EnumerateObjects()) {
 				if (obj.Type?.IsException != true)
@@ -300,8 +319,10 @@ namespace DotNetDump.Core.Analyzers {
 				}
 
 				if (exception != null)
-					yield return ExceptionMapper.Map(exception);
+					found.Add(ExceptionMapper.Map(exception));
 			}
+
+			return found;
 		}
 	}
 }

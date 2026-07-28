@@ -104,12 +104,32 @@ namespace DotNetDump.Core.Formatting {
 			return sb.ToString();
 		}
 
-		/// <summary>One row per node-disjoint path. <c>targetAddress</c> repeats the function
-		/// argument on every row, matching the model's own per-path <c>TargetAddress</c> field.</summary>
-		public static string FormatGCRootPaths(IEnumerable<GCRootPathInfo> paths, ulong targetAddress) {
+		/// <summary>
+		/// One row per node-disjoint path, plus the search-level <c>nodesVisited</c>/<c>truncated</c>
+		/// facts repeated on every row (matching the "parent scalar fields repeat" convention used for
+		/// heap segments).
+		/// <para>
+		/// Deliberate exception to "empty means header-only, no narrative text": when zero paths are
+		/// found, one row is still emitted with the path-specific columns blank, because
+		/// <c>truncated</c> is not a narrative message but a structured fact a consumer must be able to
+		/// read even when <c>data</c> is empty — a truncated search and a conclusively-unrooted object
+		/// both produce zero paths, and collapsing that distinction back into "header, no rows" would
+		/// reintroduce the exact defect this method exists to avoid (docs/GCROOT_TRUNCATION.md).
+		/// </para>
+		/// </summary>
+		public static string FormatGCRootPaths(GCRootSearchInfo result) {
 			var sb = new StringBuilder();
-			sb.AppendLine(Header("rootAddress", "rootKind", "rootName", "managedThreadId", "osThreadId", "isPinned", "isInterior", "targetAddress", "depth", "path"));
-			foreach (var path in paths) {
+			sb.AppendLine(Header("rootAddress", "rootKind", "rootName", "managedThreadId", "osThreadId", "isPinned", "isInterior", "targetAddress", "depth", "path", "nodesVisited", "truncated"));
+
+			string nodesVisited = result.NodesVisited.ToString(CultureInfo.InvariantCulture);
+			string truncated = Bool(result.Truncated);
+
+			if (result.Paths.Count == 0) {
+				sb.AppendLine(Row(null, null, null, null, null, null, null, Addr(result.TargetAddress), null, null, nodesVisited, truncated));
+				return sb.ToString();
+			}
+
+			foreach (var path in result.Paths) {
 				string pathCells = Join(path.Path.Select(node => $"{Addr(node.Address)}|{node.TypeName}|{node.Size}"));
 				sb.AppendLine(Row(
 					Addr(path.RootAddress),
@@ -121,7 +141,9 @@ namespace DotNetDump.Core.Formatting {
 					Bool(path.IsInterior),
 					Addr(path.TargetAddress),
 					Num(path.Depth),
-					pathCells));
+					pathCells,
+					nodesVisited,
+					truncated));
 			}
 			return sb.ToString();
 		}

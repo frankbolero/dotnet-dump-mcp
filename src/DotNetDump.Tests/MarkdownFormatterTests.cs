@@ -36,12 +36,61 @@ public class MarkdownFormatterTests {
 
 	[Fact]
 	public void GCRootPaths_SayPlainlyWhenNothingIsRooted() {
-		string output = MarkdownFormatter.FormatGCRootPaths(Array.Empty<GCRootPathInfo>(), 0x13A611F10);
+		string output = MarkdownFormatter.FormatGCRootPaths(new GCRootSearchInfo {
+			TargetAddress = 0x13A611F10,
+			Paths = new List<GCRootPathInfo>(),
+			NodesVisited = 12345,
+			Truncated = false,
+		});
 
 		Assert.Contains("No GC root path found", output);
 		Assert.Contains("000000013A611F10", output);
 		// An empty table is indistinguishable from a broken query; the reason must be stated.
 		Assert.Contains("unrooted", output);
+		// A conclusive "no path" must say the search actually finished.
+		Assert.Contains("completed", output);
+	}
+
+	[Fact]
+	public void GCRootPaths_NeverClaimUnrootedWhenTheSearchWasTruncated() {
+		// The defect this fixes: exhausting the traversal budget used to be indistinguishable from a
+		// genuinely empty result, so the object was reported as "unrooted and eligible for
+		// collection" when the search had simply given up (docs/GCROOT_TRUNCATION.md).
+		string output = MarkdownFormatter.FormatGCRootPaths(new GCRootSearchInfo {
+			TargetAddress = 0x13A611F10,
+			Paths = new List<GCRootPathInfo>(),
+			NodesVisited = 2_000_000,
+			Truncated = true,
+		});
+
+		Assert.DoesNotContain("unrooted", output);
+		Assert.Contains("truncat", output, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("inconclusive", output, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("maxNodes: 0", output);
+	}
+
+	[Fact]
+	public void GCRootPaths_FlagsATruncatedSearchEvenWhenPathsWereFound() {
+		// maxPaths gives each pass a fresh budget: some passes can succeed while the pass that would
+		// have found further paths exhausts its budget. That must stay visible even though the
+		// result is not empty.
+		var path = new GCRootPathInfo {
+			RootAddress = 0x10,
+			RootKind = "Stack",
+			TargetAddress = 0x99,
+			Path = new List<GCRootPathNode> { new() { Address = 0x99, TypeName = "Leaf", Size = 16 } }
+		};
+
+		string output = MarkdownFormatter.FormatGCRootPaths(new GCRootSearchInfo {
+			TargetAddress = 0x99,
+			Paths = new List<GCRootPathInfo> { path },
+			NodesVisited = 2_000_001,
+			Truncated = true,
+		});
+
+		Assert.Contains("Found 1 root path", output);
+		Assert.Contains("truncat", output, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("maxNodes: 0", output);
 	}
 
 	[Fact]
@@ -58,7 +107,12 @@ public class MarkdownFormatterTests {
 			}
 		};
 
-		string output = MarkdownFormatter.FormatGCRootPaths(new[] { path }, 0x13A611F10);
+		string output = MarkdownFormatter.FormatGCRootPaths(new GCRootSearchInfo {
+			TargetAddress = 0x13A611F10,
+			Paths = new List<GCRootPathInfo> { path },
+			NodesVisited = 100,
+			Truncated = false,
+		});
 
 		Assert.Contains("Stack", output);
 		Assert.Contains("thread 1", output);
@@ -77,7 +131,12 @@ public class MarkdownFormatterTests {
 			Path = new List<GCRootPathNode> { new() { Address = 0x10, TypeName = "System.Object" } }
 		};
 
-		string output = MarkdownFormatter.FormatGCRootPaths(new[] { path }, 0x10);
+		string output = MarkdownFormatter.FormatGCRootPaths(new GCRootSearchInfo {
+			TargetAddress = 0x10,
+			Paths = new List<GCRootPathInfo> { path },
+			NodesVisited = 1,
+			Truncated = false,
+		});
 
 		Assert.Contains("pinned", output);
 		Assert.Contains("interior", output);

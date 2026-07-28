@@ -1,5 +1,6 @@
 using DotNetDump.Core;
 using DotNetDump.Core.Analyzers;
+using DotNetDump.Core.Caching;
 using DotNetDump.Core.Models;
 
 using Xunit;
@@ -67,7 +68,7 @@ public class IntegrationTests : IDisposable {
 		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
-		var stats = analyzer.GetHeapStatistics(new QueryParameters { Limit = 10 }).ToList();
+		var stats = analyzer.GetHeapStatistics(new QueryParameters { Limit = 10 }).Items;
 
 		Assert.NotEmpty(stats);
 		Assert.Contains(stats, s => s.TypeName == "System.String");
@@ -98,10 +99,11 @@ public class IntegrationTests : IDisposable {
 		// This test is tricky because we need an object that HAS roots.
 		// Strings might not be rooted if they are garbage.
 		// But let's try to call the method and ensure it doesn't crash.
-		var roots = analyzer.GetGCRoots(obj.Address, new QueryParameters { Limit = 10 }).ToList();
+		var result = analyzer.GetGCRoots(obj.Address, new QueryParameters { Limit = 10 });
 
 		// Assert no exception
-		Assert.NotNull(roots);
+		Assert.NotNull(result);
+		Assert.NotNull(result.Paths);
 	}
 
 	[SkippableFact]
@@ -149,7 +151,7 @@ public class IntegrationTests : IDisposable {
 		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
-		var blocks = analyzer.GetSyncBlocks(new QueryParameters()).ToList();
+		var blocks = analyzer.GetSyncBlocks(new QueryParameters()).Items;
 
 		// Might be empty, but shouldn't throw
 		Assert.NotNull(blocks);
@@ -182,7 +184,7 @@ public class IntegrationTests : IDisposable {
 		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
-		var objects = analyzer.GetObjects(new QueryParameters { Limit = 10 }, null).ToList();
+		var objects = analyzer.GetObjects(new QueryParameters { Limit = 10 }, null).Items;
 
 		Assert.NotEmpty(objects);
 		Assert.All(objects, obj => Assert.True(obj.Address > 0));
@@ -193,7 +195,7 @@ public class IntegrationTests : IDisposable {
 		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
-		var objects = analyzer.GetObjects(new QueryParameters { Limit = 10 }, "System.String").ToList();
+		var objects = analyzer.GetObjects(new QueryParameters { Limit = 10 }, "System.String").Items;
 
 		Assert.NotEmpty(objects);
 		Assert.All(objects, obj => Assert.Contains("String", obj.TypeName ?? ""));
@@ -387,6 +389,67 @@ public class IntegrationTests : IDisposable {
 			// Method lookup failed, skip test
 			return;
 		}
+	}
+
+	/// <summary>
+	/// The correctness-critical property from CLI_DESIGN.md §6.2: the cache key must exclude
+	/// <c>limit</c>/<c>offset</c>/<c>sort</c>/<c>order</c>, so one cache entry -- and one heap walk --
+	/// serves every pagination/sort variant of the same underlying query. Asserted by counting actual
+	/// invocations of the compute delegate, not by inspecting the cache key directly, so it catches a
+	/// regression in <em>either</em> the key construction or the wiring.
+	/// </summary>
+	[SkippableFact]
+	public void HeapAnalyzer_GetHeapStatistics_PaginationVariantsShareOneCacheEntryAndOneComputation() {
+		SkipIfNoDump();
+
+		var cache = new CountingAnalysisCache();
+		var analyzer = new HeapAnalyzer(_context, cache);
+
+		var first = analyzer.GetHeapStatistics(new QueryParameters { Limit = 5, Offset = 0 });
+		var second = analyzer.GetHeapStatistics(new QueryParameters {
+			Limit = 10,
+			Offset = 5,
+			SortBy = "Count",
+			SortDirection = SortDirection.Asc
+		});
+
+		Assert.Equal(1, cache.ComputeCalls);
+		Assert.Equal(first.TotalAvailable, second.TotalAvailable);
+	}
+
+	/// <summary>Distinct <c>typeFilter</c> values are not pagination -- they change what is computed,
+	/// so (unlike limit/offset/sort/order) they are deliberately part of the cache key and each gets
+	/// its own entry and its own walk.</summary>
+	[SkippableFact]
+	public void HeapAnalyzer_GetObjects_DifferentTypeFiltersComputeIndependently() {
+		SkipIfNoDump();
+
+		var cache = new CountingAnalysisCache();
+		var analyzer = new HeapAnalyzer(_context, cache);
+
+		analyzer.GetObjects(new QueryParameters { Limit = 5 }, typeFilter: null);
+		analyzer.GetObjects(new QueryParameters { Limit = 5 }, typeFilter: "System.String");
+		analyzer.GetObjects(new QueryParameters { Limit = 5 }, typeFilter: null); // Repeats the first filter.
+
+		Assert.Equal(2, cache.ComputeCalls);
+	}
+
+	/// <summary>Wraps a real <see cref="MemoryAnalysisCache"/> and counts how many times the
+	/// underlying compute delegate actually runs, independent of how many times <c>GetOrCompute</c>
+	/// itself is called.</summary>
+	private sealed class CountingAnalysisCache : IAnalysisCache {
+		private readonly MemoryAnalysisCache _inner = new();
+		public int ComputeCalls { get; private set; }
+
+		public T GetOrCompute<T>(CacheKey key, Func<T> compute) where T : class {
+			return _inner.GetOrCompute(key, () => {
+				ComputeCalls++;
+				return compute();
+			});
+		}
+
+		public void Invalidate(CacheKey key) => _inner.Invalidate(key);
+		public void ClearDump(DumpIdentity dump) => _inner.ClearDump(dump);
 	}
 
 	public void Dispose() {

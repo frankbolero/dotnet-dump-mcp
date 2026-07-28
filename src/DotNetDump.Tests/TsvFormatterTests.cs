@@ -125,15 +125,45 @@ public class TsvFormatterTests {
 			}
 		};
 
-		string output = TsvFormatter.FormatGCRootPaths(new[] { path }, 0x13A611F10);
+		string output = TsvFormatter.FormatGCRootPaths(new GCRootSearchInfo {
+			TargetAddress = 0x13A611F10,
+			Paths = new List<GCRootPathInfo> { path },
+			NodesVisited = 42,
+			Truncated = false,
+		});
 
 		AssertConsistentColumnCount(output);
 		var row = Lines(output)[1].Split('\t');
-		Assert.Equal(10, row.Length);
+		Assert.Equal(12, row.Length);
 		Assert.Equal("000000016D24DBE8", row[0]);
 		Assert.Equal("1", row[8]); // depth
 		Assert.Contains("List<Leaf>", row[9]);
 		Assert.Contains("Leaf", row[9]);
+		Assert.Equal("42", row[10]); // nodesVisited
+		Assert.Equal("false", row[11]); // truncated
+	}
+
+	[Fact]
+	public void GCRootPaths_EmptyResultStillCarriesNodesVisitedAndTruncated() {
+		// Zero paths is ambiguous on its own (conclusively unrooted vs. search gave up), so unlike
+		// every other TSV method here, a zero-path gcroot result still emits one row carrying the
+		// search-level facts rather than collapsing to header-only.
+		string output = TsvFormatter.FormatGCRootPaths(new GCRootSearchInfo {
+			TargetAddress = 0x13A611F10,
+			Paths = new List<GCRootPathInfo>(),
+			NodesVisited = 2_000_000,
+			Truncated = true,
+		});
+
+		AssertConsistentColumnCount(output);
+		var lines = Lines(output);
+		Assert.Equal(2, lines.Length); // header + one metadata row
+		var row = lines[1].Split('\t');
+		Assert.Equal(12, row.Length);
+		Assert.Equal(string.Empty, row[0]); // rootAddress blank
+		Assert.Equal("000000013A611F10", row[7]); // targetAddress
+		Assert.Equal("2000000", row[10]); // nodesVisited
+		Assert.Equal("true", row[11]); // truncated
 	}
 
 	[Fact]

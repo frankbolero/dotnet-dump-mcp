@@ -25,3 +25,31 @@ public class GCRootPathInfo {
 	/// <summary>Number of references traversed from the root object to the target.</summary>
 	public int Depth => Path.Count > 0 ? Path.Count - 1 : 0;
 }
+
+/// <summary>
+/// The full result of a <c>gcroot</c> search: the paths found, plus whether the traversal actually
+/// finished.
+/// <para>
+/// <see cref="Paths"/> being empty does <b>not</b> by itself mean the target is unrooted — check
+/// <see cref="Truncated"/> first. When it is <c>true</c>, the search gave up because it exhausted its
+/// node budget, not because it proved the object unreachable from every root; reporting the object as
+/// "eligible for collection" in that state is the exact defect this type exists to prevent (see
+/// docs/GCROOT_TRUNCATION.md). A non-empty <see cref="Paths"/> with <see cref="Truncated"/> = true
+/// means the paths shown are confirmed, but the search stopped looking for additional node-disjoint
+/// paths before it could rule out more existing.
+/// </para>
+/// </summary>
+public class GCRootSearchInfo {
+	public ulong TargetAddress { get; set; }
+	public List<GCRootPathInfo> Paths { get; set; } = new();
+
+	/// <summary>Total nodes visited across every BFS pass the search ran.</summary>
+	public long NodesVisited { get; set; }
+
+	/// <summary>
+	/// <c>true</c> if the search stopped because it exhausted its traversal budget rather than
+	/// because it conclusively found every path it was looking for (or proved none exist). See the
+	/// type-level remarks.
+	/// </summary>
+	public bool Truncated { get; set; }
+}
