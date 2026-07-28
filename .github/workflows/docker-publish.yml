@@ -13,15 +13,13 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push-image:
+  version:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
+    outputs:
+      semVer: ${{ steps.gitversion.outputs.semVer }}
+      assemblySemVer: ${{ steps.gitversion.outputs.assemblySemVer }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -36,6 +34,30 @@ jobs:
       - name: Determine Version
         id: gitversion
         uses: gittools/actions/gitversion/execute@v4.3.3
+
+  build-and-push-image:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          # The MCP server image (Dockerfile's default target -- built with no --target so a
+          # bare `docker build -f src/Dockerfile .` keeps working exactly as documented).
+          - target: server
+            image_name: ${{ github.repository }}
+          # dndump only, no MCP server bits -- much smaller pull for shell-driven/agent workflows
+          # that never talk MCP at all. Published as its own package (distinct name, not just a
+          # tag) so it's discoverable and versioned independently in the registry UI.
+          - target: cli
+            image_name: ${{ github.repository }}-cli
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -54,22 +76,23 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ matrix.image_name }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}}
             type=sha
-            type=raw,value=${{ steps.gitversion.outputs.semVer }}
+            type=raw,value=${{ needs.version.outputs.semVer }}
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image (${{ matrix.target }})
         uses: docker/build-push-action@v6
         with:
           context: .
           file: src/Dockerfile
+          target: ${{ matrix.target }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
           build-args: |
-            VERSION=${{ steps.gitversion.outputs.semVer }}
-            ASSEMBLY_VERSION=${{ steps.gitversion.outputs.assemblySemVer }}
+            VERSION=${{ needs.version.outputs.semVer }}
+            ASSEMBLY_VERSION=${{ needs.version.outputs.assemblySemVer }}
