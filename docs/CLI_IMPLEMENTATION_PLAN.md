@@ -2,9 +2,9 @@
 
 Execution plan for [CLI_DESIGN.md](CLI_DESIGN.md).
 
-**Status: Phases 1, 2, 3b, 4, 5, 6, 7 and 8 complete** (commits `ca7274a`, `f05b5c2`, `32e0d79`,
-`c41b490`, `aed4895`, `cd40502`, `95d53f6`, `222d44d`). Both §0 gates resolved. Phase 9 is unblocked
-and not started; Phase 10 sits behind it.
+**Status: Phases 1, 2, 3b, 4, 5, 6, 7, 8 and 9 complete** (commits `ca7274a`, `f05b5c2`, `32e0d79`,
+`c41b490`, `aed4895`, `cd40502`, `95d53f6`, `222d44d`). Both §0 gates resolved. Phase 10 is
+unblocked and not started.
 
 The work is broken into phases sized for delegation to subagents. Model assignments are chosen to
 keep token cost down: mechanical work with an established pattern goes to Haiku 4.5, work requiring
@@ -383,12 +383,25 @@ drive it through the full MCP tool surface). This agent's harness-provided workt
 mis-based (on old `main`, not `docs/overall-checkup`) — it caught this via the same self-verification
 instruction, created its own correctly-based worktree, and proceeded without needing intervention.
 
-### Phase 9 — Skill · Sonnet 5
+### Phase 9 — Skill · Sonnet 5 — **done**
 
 Author the skill per §8.3: dump-selection convention, condensed command table, the three triage
 workflows (OOM/leak, deadlock/hang, unhandled exception), and the piping idioms from §5 so the agent
 filters in the shell by default. The workflows are the part that needs judgement — they are what a
 tool manifest structurally cannot express.
+
+**Outcome.** Written as a Claude Code skill at `.claude/skills/dndump/SKILL.md`
+(`user-invocable: false`, auto-triggered by dump/crash/OOM/SOS-command mentions, matching the
+pattern of this environment's other knowledge-type skills rather than an argument-taking command
+like Phase-9-adjacent action skills). Command names, options and defaults were verified against the
+actual `DotNetDump.Cli` source (`RootCommandFactory.cs`, `GlobalOptions.cs`, and the individual
+`Commands/*.cs` files) rather than transcribed from §4, since Phase 6's outcome notes recorded a
+deliberate deviation from the spec worth surfacing here too: `--top` is `dumpheap`-only, not a
+general alias across "summary commands" as §3.2 could be read to imply, and negatable flags are a
+single presence-based `--no-x` (e.g. `--no-thin-locks`, `--no-heap-exceptions`), not true
+`--[no-]x` pairs. The skill states both of these accurately rather than the spec's more general
+phrasing. Not covered: a top-level `dndump` project skill beyond this one file — no second skill or
+command-file split was warranted since the brief describes a single cohesive reference document.
 
 ### Phase 10 — Integration · Opus
 
