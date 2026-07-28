@@ -21,7 +21,38 @@ public static class RootCommandFactory {
 		root.Subcommands.Add(UseCommand.Create());
 		root.Subcommands.Add(InfoCommand.Create());
 		root.Subcommands.Add(CommandsCommand.Create());
+
+		// Heap commands
 		root.Subcommands.Add(DumpHeapCommand.Create());
+		root.Subcommands.Add(ListObjCommand.Create());
+		root.Subcommands.Add(DumpObjCommand.Create());
+		root.Subcommands.Add(GCRootCommand.Create());
+		root.Subcommands.Add(EEHeapCommand.Create());
+		root.Subcommands.Add(GCHandlesCommand.Create());
+		root.Subcommands.Add(VerifyHeapCommand.Create());
+		root.Subcommands.Add(VerifyObjCommand.Create());
+
+		// Thread commands
+		root.Subcommands.Add(ClrThreadsCommand.Create());
+		root.Subcommands.Add(ThreadStateCommand.Create());
+		root.Subcommands.Add(ClrStackCommand.Create());
+		root.Subcommands.Add(EEStackCommand.Create());
+		root.Subcommands.Add(DumpStackCommand.Create());
+		root.Subcommands.Add(ThreadPoolCommand.Create());
+		root.Subcommands.Add(SyncBlkCommand.Create());
+
+		// Exception commands
+		root.Subcommands.Add(PrintExceptionCommand.Create());
+
+		// Module and metadata commands
+		root.Subcommands.Add(ClrModulesCommand.Create());
+		root.Subcommands.Add(DumpModuleCommand.Create());
+		root.Subcommands.Add(DumpAssemblyCommand.Create());
+		root.Subcommands.Add(DumpMtCommand.Create());
+		root.Subcommands.Add(DumpMdCommand.Create());
+		root.Subcommands.Add(DumpClassCommand.Create());
+		root.Subcommands.Add(Name2EECommand.Create());
+		root.Subcommands.Add(IP2MdCommand.Create());
 
 		return root;
 	}
