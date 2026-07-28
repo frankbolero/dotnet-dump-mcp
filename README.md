@@ -120,7 +120,7 @@ Note that we set a timeout to 10 minutes (600000 ms) due to that some requests m
 
 The server ships with ClrMD 4.x. **Dump loading is offline by default** — no symbol server is
 contacted. In the Docker image, `entrypoint.sh` already fetches the matching DAC with
-`dotnet-symbol --dac-only` before the server starts, so the common path needs no network
+`dotnet-symbol --debugging` before the server starts, so the common path needs no network
 access at all.
 
 If you need ClrMD to fetch binaries itself, opt in with these environment variables:
@@ -128,7 +128,7 @@ If you need ClrMD to fetch binaries itself, opt in with these environment variab
 | Variable | Description |
 | :--- | :--- |
 | `DOTNETDUMP_SYMBOL_PATHS` | Semicolon-separated symbol server URLs. Unset (the default) keeps dump loading fully offline. |
-| `DOTNETDUMP_SYMBOL_CACHE` | Directory for downloaded symbols. Defaults to `/dumps/.symcache`, which is on the mounted volume so it survives container restarts. |
+| `DOTNETDUMP_SYMBOL_CACHE` | Directory for downloaded symbols. Defaults to `/dumps/.symcache`. The Docker image sets this to `/symcache` (see below) so it survives container restarts even when it isn't on the dumps mount. |
 
 ```json
 "env": {
@@ -141,6 +141,50 @@ If you need ClrMD to fetch binaries itself, opt in with these environment variab
 > environment variable. If you previously relied on it, switch to `DOTNETDUMP_SYMBOL_PATHS`.
 > Enabling a symbol server means dump loading may block on network I/O, which is worth
 > keeping in mind alongside the 10-minute client timeout noted above.
+
+---
+
+## 🐳 Docker: DAC cache volume and the CLI (`dndump`) in a container
+
+The Docker image also carries the `dndump` CLI (see `docs/CLI_DESIGN.md`), for architecture
+mismatch cases where the CLI can't run natively on the host (e.g. a Linux ARM64 dump analyzed on
+a Mac). Two things make repeated `dndump` invocations against the same container cheap:
+
+* **DAC cache volume.** `entrypoint.sh` runs `dotnet-symbol --debugging --cache-directory
+  /symcache` before the server starts, and the same directory is reused by ClrMD's own on-demand
+  symbol fetch if you opt into `DOTNETDUMP_SYMBOL_PATHS`. Mount a named volume there so the first
+  fetch is the only one that touches the network:
+  ```bash
+  docker run --rm -i \
+    -v "/path/to/your/dumps:/dumps" \
+    -v dndump-symcache:/symcache \
+    -e DUMP_PATH=/dumps/your_dump.core \
+    dotnet-dump-mcp-server
+  ```
+
+* **One long-lived container per dump, not one per command.** Naively running `docker run
+  dotnet-dump-mcp-server dndump ...` per command pays container startup and the DAC fetch every
+  time. Instead, start the container once and `docker exec` into it:
+  ```bash
+  docker run -d --name dndump-session \
+    -v "/path/to/dumps:/dumps" -v dndump-symcache:/symcache \
+    --entrypoint sleep dotnet-dump-mcp-server infinity
+
+  docker exec dndump-session dndump --dump /dumps/prod-oom.core dumpheap --top 20
+  ```
+  (`--entrypoint sleep ... infinity` is required here -- the image's default
+  `ENTRYPOINT ["./entrypoint.sh"]` would otherwise swallow a bare `sleep infinity` argument as
+  input to `entrypoint.sh` instead of running it.)
+
+  `scripts/dndump-docker` wraps both steps into one idempotent script so agent-facing commands
+  look identical to running `dndump` natively:
+  ```bash
+  ./scripts/dndump-docker use /dumps/prod-oom.core
+  ./scripts/dndump-docker dumpheap --top 20
+  ```
+  It creates `dndump-session` on first use, reuses (or restarts) it on subsequent calls, and
+  reads `DNDUMP_IMAGE`, `DNDUMP_CONTAINER_NAME`, `DNDUMP_DUMPS_DIR`, `DNDUMP_SYMCACHE_VOLUME` and
+  `DNDUMP_PLATFORM` for configuration -- see the script header for details.
 
 ---
 
