@@ -27,6 +27,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\DotNetDump.Core\DotNetDump.Core.csproj" />
+        <ProjectReference Include="..\DotNetDump.Cli\DotNetDump.Cli.csproj" />
     </ItemGroup>
 
 </Project>

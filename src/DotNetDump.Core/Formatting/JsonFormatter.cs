@@ -877,7 +877,65 @@ namespace DotNetDump.Core.Formatting {
 			InnerExceptions = exception.InnerExceptions.Select(ToDto).ToList(),
 		};
 
+		private sealed class DumpInfoDto {
+			[JsonPropertyName("runtimeVersion")]
+			public string? RuntimeVersion { get; init; }
+
+			[JsonPropertyName("runtimeFlavor")]
+			public string? RuntimeFlavor { get; init; }
+
+			[JsonPropertyName("architecture")]
+			public string? Architecture { get; init; }
+
+			[JsonPropertyName("operatingSystem")]
+			public string? OperatingSystem { get; init; }
+
+			[JsonPropertyName("expectedDacFileName")]
+			public string? ExpectedDacFileName { get; init; }
+
+			[JsonPropertyName("explicitDacPath")]
+			public string? ExplicitDacPath { get; init; }
+
+			[JsonPropertyName("dacMatchVerified")]
+			public bool DacMatchVerified { get; init; }
+
+			[JsonPropertyName("isServerGC")]
+			public bool IsServerGC { get; init; }
+
+			[JsonPropertyName("subHeapCount")]
+			public int SubHeapCount { get; init; }
+
+			[JsonPropertyName("heapSizeBytes")]
+			public ulong HeapSizeBytes { get; init; }
+
+			[JsonPropertyName("segmentCount")]
+			public int SegmentCount { get; init; }
+
+			[JsonPropertyName("managedThreadCount")]
+			public int ManagedThreadCount { get; init; }
+		}
+
 		// ---- Public surface, mirroring MarkdownFormatter method-for-method ----------------------
+
+		/// <summary>Backs the CLI's `info` command (CLI_DESIGN.md &#0167;4.1); no MCP tool equivalent.</summary>
+		public static string FormatInfo(DumpInfo info) {
+			return Serialize(new ItemEnvelope<DumpInfoDto> {
+				Data = new DumpInfoDto {
+					RuntimeVersion = info.RuntimeVersion,
+					RuntimeFlavor = info.RuntimeFlavor,
+					Architecture = info.Architecture,
+					OperatingSystem = info.OperatingSystem,
+					ExpectedDacFileName = info.ExpectedDacFileName,
+					ExplicitDacPath = info.ExplicitDacPath,
+					DacMatchVerified = info.DacMatchVerified,
+					IsServerGC = info.IsServerGC,
+					SubHeapCount = info.SubHeapCount,
+					HeapSizeBytes = info.HeapSizeBytes,
+					SegmentCount = info.SegmentCount,
+					ManagedThreadCount = info.ManagedThreadCount,
+				},
+			});
+		}
 
 		public static string FormatHeapStatistics(IEnumerable<HeapStatItem> stats) {
 			var data = stats.Select(item => new HeapStatItemDto {

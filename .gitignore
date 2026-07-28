@@ -7,6 +7,9 @@
 dumps/*
 core_*
 
+# dndump CLI session state (CLI_DESIGN.md §3.1) -- no analysis state, safe to delete any time.
+.dndump/
+
 # dotenv files
 .env
 
