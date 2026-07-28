@@ -65,7 +65,7 @@ public static class PrintExceptionCommand {
 			string? order = parseResult.GetValue(OrderOption);
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
-			var analyzer = new ThreadAnalyzer(context);
+			var analyzer = new ThreadAnalyzer(context, AnalysisCacheProvider.Default);
 
 			if (!string.IsNullOrWhiteSpace(addressText)) {
 				// Single-address mode: get one exception and wrap in PagedResult for formatter

@@ -28,7 +28,7 @@ public static class DumpObjCommand {
 			ulong address = AddressParser.Parse(addressText, "address");
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
-			var analyzer = new HeapAnalyzer(context);
+			var analyzer = new HeapAnalyzer(context, AnalysisCacheProvider.Default);
 			var details = analyzer.GetObjectDetails(address);
 
 			System.Console.WriteLine(OutputFormatting.Render(format, details, MarkdownFormatter.FormatObjectDetails, JsonFormatter.FormatObjectDetails, TsvFormatter.FormatObjectDetails));

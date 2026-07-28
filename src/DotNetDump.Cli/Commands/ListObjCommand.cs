@@ -46,7 +46,7 @@ public static class ListObjCommand {
 			string? typeFilter = parseResult.GetValue(TypeOption);
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
-			var analyzer = new HeapAnalyzer(context);
+			var analyzer = new HeapAnalyzer(context, AnalysisCacheProvider.Default);
 			var parameters = QueryParametersBuilder.Build(sort, order, limit, offset);
 			var objects = analyzer.GetObjects(parameters, typeFilter);
 

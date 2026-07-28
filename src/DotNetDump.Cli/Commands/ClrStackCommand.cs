@@ -27,7 +27,7 @@ public static class ClrStackCommand {
 			int maxFrames = parseResult.GetValue(MaxFramesOption);
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
-			var analyzer = new ThreadAnalyzer(context);
+			var analyzer = new ThreadAnalyzer(context, AnalysisCacheProvider.Default);
 			var groups = analyzer.GetStackTraceGroups(maxFrames);
 
 			System.Console.WriteLine(OutputFormatting.Render(format, groups, MarkdownFormatter.FormatStackGroups, JsonFormatter.FormatStackGroups, TsvFormatter.FormatStackGroups));

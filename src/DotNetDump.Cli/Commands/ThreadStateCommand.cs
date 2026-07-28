@@ -40,7 +40,7 @@ public static class ThreadStateCommand {
 			string? order = parseResult.GetValue(OrderOption);
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
-			var analyzer = new ThreadAnalyzer(context);
+			var analyzer = new ThreadAnalyzer(context, AnalysisCacheProvider.Default);
 			var parameters = QueryParametersBuilder.Build(sort, order, limit, offset);
 			var states = analyzer.GetThreadStates(parameters);
 

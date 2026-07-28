@@ -2,9 +2,10 @@
 
 Execution plan for [CLI_DESIGN.md](CLI_DESIGN.md).
 
-**Status: Phases 1, 2, 3b, 4, 5, 6, 7, 8 and 9 complete** (commits `ca7274a`, `f05b5c2`, `32e0d79`,
-`c41b490`, `aed4895`, `cd40502`, `95d53f6`, `222d44d`). Both §0 gates resolved. Phase 10 is
-unblocked and not started.
+**Status: all phases complete** (commits `ca7274a`, `f05b5c2`, `32e0d79`, `c41b490`, `aed4895`,
+`cd40502`, `95d53f6`, `222d44d`, `95dc447`, plus the Phase 10 integration commit). Both §0 gates
+resolved. Phase 10's review found and fixed a real cross-phase gap — the CLI never actually used
+the disk cache Phases 1 and 4 built — see that phase's outcome below.
 
 The work is broken into phases sized for delegation to subagents. Model assignments are chosen to
 keep token cost down: mechanical work with an established pattern goes to Haiku 4.5, work requiring
@@ -383,7 +384,7 @@ drive it through the full MCP tool surface). This agent's harness-provided workt
 mis-based (on old `main`, not `docs/overall-checkup`) — it caught this via the same self-verification
 instruction, created its own correctly-based worktree, and proceeded without needing intervention.
 
-### Phase 9 — Skill · Sonnet 5 — **done**
+### Phase 9 — Skill · Sonnet 5 — **done, `95dc447`**
 
 Author the skill per §8.3: dump-selection convention, condensed command table, the three triage
 workflows (OOM/leak, deadlock/hang, unhandled exception), and the piping idioms from §5 so the agent
@@ -403,10 +404,47 @@ single presence-based `--no-x` (e.g. `--no-thin-locks`, `--no-heap-exceptions`),
 phrasing. Not covered: a top-level `dndump` project skill beyond this one file — no second skill or
 command-file split was warranted since the brief describes a single cohesive reference document.
 
-### Phase 10 — Integration · Opus
+### Phase 10 — Integration · Opus — **done**
 
 Cross-phase review, README restructuring to present the CLI as the default with the MCP server as
 the option, and `docs/PLAN.md` updated to reflect the new shape.
+
+**Outcome.** `dotnet build` and `dotnet test` clean across all three target frameworks (288 passed,
+26 skipped — the skipped tests require a real sample dump and are unaffected by anything below).
+
+**Real bug found and fixed: the CLI never used the cache.** Every one of the 25 command files
+constructs its `HeapAnalyzer`/`ThreadAnalyzer` as `new HeapAnalyzer(context)` with no second
+argument, which defaults to `NullAnalysisCache` (`HeapAnalyzer.cs:40`,
+`ThreadAnalyzer.cs:21`). Phase 8's brief only covered registering a cache in the *server*; no phase
+brief told the CLI project to do the same, and it fell through the gap between them. The practical
+effect: none of the CLI's five cache-eligible walks (`heap-statistics`, `heap-objects`,
+`sync-blocks`, and the two `heap-exceptions` call sites shared with `printexception`) ever hit disk,
+so the CLI — the *primary* delivery path per §0.1 — re-walked the heap on every single invocation,
+directly contradicting §6's stated thesis ("the CLI is faster than today's MCP server on any
+repeated query, not slower"). Fixed by adding `AnalysisCacheProvider` (a single static
+`FileSystemAnalysisCache` — no memory tier, since a per-invocation process never makes a second
+`GetOrCompute` call for one to serve) and passing it into all 16 affected command files (the other 9
+construct `ModuleAnalyzer`/`MetadataAnalyzer`, which don't accept a cache). Verified end to end
+against a real sample dump: a cold `dumpheap --top 3` writes
+`<cache>/<dump-identity>/heap-statistics--v1.json`, and a subsequent `dumpheap --sort Count --top 3`
+(different sort and limit) reuses that entry rather than recomputing, exactly as §6.2 specifies.
+
+**Also noted, not fixed:** `scripts/dndump-docker` mounts a volume for the DAC/symbol cache but not
+for `DNDUMP_CACHE`, so the analysis-result cache still works during one persistent-container
+session but does not survive the container being recreated. Lower severity than the bug above (the
+session-scoped case is the documented common path) and left as a follow-up rather than expanding
+Phase 7's already-closed scope. `--no-cache`/`--refresh` (§6.5 escape hatches) also remain
+unimplemented on both front ends — real gaps, but net-new option surface rather than a wiring fix,
+so left for whoever picks up tier 2 or the escape hatches specifically.
+
+README: added a "Result caching" section under the CLI quick start explaining the disk cache,
+`DNDUMP_CACHE`, and that it's shared with the MCP server — the design doc covered this but the
+README, freshly written in commit `112b4da`, hadn't mentioned it at all. The rest of the README's
+CLI-first restructuring was already in place from that commit and needed no further changes.
+
+`docs/PLAN.md` (the pre-CLI MCP-server build log) gets a short pointer at the top to
+`CLI_DESIGN.md`/`CLI_IMPLEMENTATION_PLAN.md` rather than a rewrite — it's a historical record of a
+finished build, and restating it in CLI terms would falsify that history for no benefit.
 
 ## 3. Why these model assignments
 

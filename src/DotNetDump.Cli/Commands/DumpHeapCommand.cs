@@ -50,7 +50,7 @@ public static class DumpHeapCommand {
 			string? order = parseResult.GetValue(OrderOption);
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
-			var analyzer = new HeapAnalyzer(context);
+			var analyzer = new HeapAnalyzer(context, AnalysisCacheProvider.Default);
 			var parameters = QueryParametersBuilder.Build(sort, order, limit, offset);
 			var stats = analyzer.GetHeapStatistics(parameters);
 

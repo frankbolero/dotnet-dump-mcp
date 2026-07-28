@@ -28,7 +28,7 @@ public static class VerifyObjCommand {
 			ulong address = AddressParser.Parse(addressText, "address");
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
-			var analyzer = new HeapAnalyzer(context);
+			var analyzer = new HeapAnalyzer(context, AnalysisCacheProvider.Default);
 			var corruptions = analyzer.VerifyObject(address);
 
 			System.Console.WriteLine(OutputFormatting.Render(format, corruptions, MarkdownFormatter.FormatHeapVerification, JsonFormatter.FormatHeapVerification, TsvFormatter.FormatHeapVerification));

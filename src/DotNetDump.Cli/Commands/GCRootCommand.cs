@@ -48,7 +48,7 @@ public static class GCRootCommand {
 			int offset = parseResult.GetValue(OffsetOption);
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
-			var analyzer = new HeapAnalyzer(context);
+			var analyzer = new HeapAnalyzer(context, AnalysisCacheProvider.Default);
 			var parameters = QueryParametersBuilder.Build(null, null, limit, offset);
 			var result = analyzer.GetGCRoots(address, parameters, maxPaths, maxNodes);
 

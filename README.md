@@ -72,6 +72,18 @@ in the same directory tree don't need `--dump` at all. Resolution order: `--dump
 `DNDUMP_PATH` environment variable, then the session file, searched from the current directory
 upward.
 
+### Result caching
+
+Heap and thread walks (`dumpheap`, `listobj`, `syncblk`, `gchandles`, exception scans) are the slow
+part of dump analysis, and a dump never changes — so every `dndump` process persists those results
+to disk, keyed by the dump's identity, and reuses them on the next invocation instead of re-walking.
+One cached entry serves every `--limit`/`--offset`/`--sort`/`--format` variant of a command, so
+exploring the same data ten different ways only pays for the walk once. The cache lives in an
+XDG-style user cache directory by default; set `DNDUMP_CACHE` to point it elsewhere (e.g. a mounted
+volume in Docker). It's safe to delete at any time — worst case, the next command just recomputes.
+The MCP server shares the same cache, so a `dndump` run warms it for a later MCP session and vice
+versa. See `docs/CLI_DESIGN.md` §6 for the full design.
+
 ### Running the CLI via Docker
 
 Useful for architecture mismatch — e.g. analyzing a Linux ARM64 dump on a Mac, or vice versa. The

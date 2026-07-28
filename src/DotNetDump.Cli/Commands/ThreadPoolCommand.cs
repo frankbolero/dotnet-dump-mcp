@@ -19,7 +19,7 @@ public static class ThreadPoolCommand {
 			bool quiet = parseResult.GetValue(GlobalOptions.Quiet);
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
-			var analyzer = new ThreadAnalyzer(context);
+			var analyzer = new ThreadAnalyzer(context, AnalysisCacheProvider.Default);
 			var info = analyzer.GetThreadPoolInfo();
 
 			System.Console.WriteLine(OutputFormatting.Render(format, info, MarkdownFormatter.FormatThreadPool, JsonFormatter.FormatThreadPool, TsvFormatter.FormatThreadPool));

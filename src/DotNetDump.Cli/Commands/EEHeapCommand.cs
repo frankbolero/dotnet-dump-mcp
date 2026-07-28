@@ -19,7 +19,7 @@ public static class EEHeapCommand {
 			bool quiet = parseResult.GetValue(GlobalOptions.Quiet);
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
-			var analyzer = new HeapAnalyzer(context);
+			var analyzer = new HeapAnalyzer(context, AnalysisCacheProvider.Default);
 			var summary = analyzer.GetHeapSegments();
 
 			System.Console.WriteLine(OutputFormatting.Render(format, summary, MarkdownFormatter.FormatHeapSegments, JsonFormatter.FormatHeapSegments, TsvFormatter.FormatHeapSegments));

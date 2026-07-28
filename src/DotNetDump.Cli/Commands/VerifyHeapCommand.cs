@@ -19,7 +19,7 @@ public static class VerifyHeapCommand {
 			bool quiet = parseResult.GetValue(GlobalOptions.Quiet);
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
-			var analyzer = new HeapAnalyzer(context);
+			var analyzer = new HeapAnalyzer(context, AnalysisCacheProvider.Default);
 			var corruptions = analyzer.VerifyHeap();
 
 			System.Console.WriteLine(OutputFormatting.Render(format, corruptions, MarkdownFormatter.FormatHeapVerification, JsonFormatter.FormatHeapVerification, TsvFormatter.FormatHeapVerification));
