@@ -357,8 +357,18 @@ to exec. `scripts/dndump-docker` wraps the persistent-container pattern idempote
 around a real footgun: `ENTRYPOINT`'s exec form swallows a bare `sleep infinity` as arguments to
 `entrypoint.sh` rather than running it, so the script uses `--entrypoint sleep` instead. Everything
 was verified against a real `docker build`/`run`/`exec`, including a cold vs. warm DAC-cache timing
-comparison (~7.5s vs ~0.19s). Rebuilt and reverified the image from the fully-merged state (all 24
-CLI commands, not just the 1 that existed when this phase's own worktree branched) — no regression.
+comparison (~7.5s vs ~0.19s).
+
+Rebuilding from the fully-merged state (all 25 commands, not just the 1 that existed when this
+phase's own worktree branched) surfaced a second, unrelated latent bug: `.dockerignore` had no rule
+for the `core_*` sample dump files used for local smoke-testing (tens of GB across three dumps,
+`.gitignore`-excluded but not `.dockerignore`-excluded), so a build run from a checkout that happens
+to have them present sends them into the build context via `COPY . .` — confirmed as the actual
+cause after an initial false "no regression" read of a stale/wrong image (a `docker build | tail`
+pipeline had masked the real, failing exit code). Fixed in `362f42c`; reverified afterward with a
+clean `--no-cache` build: all 25 commands resolve on `PATH`, `dotnet-symbol --debugging
+--cache-directory` both verified as real flags, and the MCP server path starts and shuts down
+cleanly, unaffected.
 
 ### Phase 8 — Server cache registration · Haiku 4.5 — **done, `cd40502`**
 
