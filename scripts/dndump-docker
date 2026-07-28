@@ -81,4 +81,18 @@ elif [ "$status" != "running" ]; then
 fi
 # else: already running -- nothing to do, just exec into it.
 
+# The persistent container is started with `--entrypoint sleep`, which bypasses entrypoint.sh --
+# and with it, the `dotnet-symbol --debugging` call that pre-fetches the matching DAC. Without
+# that, dump loading fails offline ("Could not find matching DAC for this runtime... symbol
+# server download of the DAC is disabled for this platform"). So replicate that prefetch here,
+# once per dump, whenever the wrapped command is `use <dump>` (the point at which a dump is first
+# selected). --cache-directory persists it in the mounted /symcache volume, so this is a no-op on
+# every later `use` of the same dump (matching entrypoint.sh's own behavior).
+if [ "$1" = "use" ] && [ "$#" -ge 2 ]; then
+    DUMP_FILE_ARG="$2"
+    echo "Pre-fetching DAC for $DUMP_FILE_ARG..." >&2
+    docker exec "$CONTAINER_NAME" dotnet-symbol --debugging --cache-directory /symcache "$DUMP_FILE_ARG" >&2 \
+        || echo "Warning: dotnet-symbol failed to fetch DAC for $DUMP_FILE_ARG." >&2
+fi
+
 exec docker exec "$CONTAINER_NAME" dndump "$@"
