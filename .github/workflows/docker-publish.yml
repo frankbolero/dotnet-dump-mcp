@@ -4,17 +4,32 @@ on:
   push:
     branches: ["main"]
     tags: ["v*.*.*"]
-    paths:
-      - 'src/**'
   pull_request:
     branches: ["main"]
-    paths:
-      - 'src/**'
 
 env:
   REGISTRY: ghcr.io
 
 jobs:
+  # No path filter on the triggers above -- doc-only PRs still deserve a build+test check. Instead,
+  # only the image build/push job (the expensive, src-only-relevant part) is gated on whether
+  # src/** actually changed, via this job's output.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      src: ${{ steps.filter.outputs.src }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Check for src/** changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            src:
+              - 'src/**'
+
   test:
     uses: ./.github/workflows/ci.yml
 
@@ -39,7 +54,8 @@ jobs:
         uses: gittools/actions/gitversion/execute@v4.7.0
 
   build-and-push-image:
-    needs: [test, version]
+    needs: [changes, test, version]
+    if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
