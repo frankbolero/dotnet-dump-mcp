@@ -2,9 +2,9 @@
 
 Execution plan for [CLI_DESIGN.md](CLI_DESIGN.md).
 
-**Status: Phases 1, 2, 3b, 4, 5 and 8 complete** (commits `ca7274a`, `f05b5c2`, `32e0d79`, `c41b490`,
-`aed4895`, `cd40502`). Both §0 gates resolved. Phase 6 and Phase 7 are in progress; Phase 9 sits
-behind Phase 6; Phase 10 sits behind all of them.
+**Status: Phases 1, 2, 3b, 4, 5, 6 and 8 complete** (commits `ca7274a`, `f05b5c2`, `32e0d79`,
+`c41b490`, `aed4895`, `cd40502`, `95d53f6`). Both §0 gates resolved. Phase 7 is in progress; Phase 9
+is unblocked and not started; Phase 10 sits behind all of them.
 
 The work is broken into phases sized for delegation to subagents. Model assignments are chosen to
 keep token cost down: mechanical work with an established pattern goes to Haiku 4.5, work requiring
@@ -320,7 +320,7 @@ pagination metadata) while Markdown/TSV still get just the page — committed se
 should use this overload for any command backed by one of the five cached analyzer methods, and
 the plain `Render<T>` overload for everything else.**
 
-### Phase 6 — Command wirings · Haiku 4.5
+### Phase 6 — Command wirings · Haiku 4.5 — **done, `95d53f6`**
 
 Implement the remaining 24 commands from §4.2–§4.5, following the `dumpheap` pattern established in
 Phase 5. Each is: parse arguments, call the analyzer, hand the model to the selected formatter, set
@@ -329,6 +329,16 @@ the exit code. No logic in the CLI project.
 The spec tables give exact option names, defaults and valid sort fields per command. Match them
 literally, including the negatable flags (`--[no-]thin-locks`, `--[no-]heap-exceptions`) and
 `--all-threads` as the inverse of `onlyWithExceptions`.
+
+**Outcome.** 23 command files, one per remaining command, plus `RootCommandFactory` registration —
+1,143 lines, additive only, no shared files touched (no collision with Phase 7 or 8, which ran in
+parallel). Negatable flags implemented as a single presence-based `--no-x` option rather than a true
+`--[no-]x` pair (System.CommandLine 2.0.10 has no built-in negation syntax), which is sufficient
+since every negatable flag here defaults on. `gcroot` and `pe`'s single-address mode both correctly
+use the plain `Render<T>` overload / a `PagedResult` wrap rather than the wrong dispatch shape.
+Verified against the real sample dump post-merge: `eeheap`, `gchandles`, `syncblk --no-thin-locks`,
+`pe`, `listobj`, `dumpmt`, `clrmodules`, and `gcroot` against a real address (both retention paths
+render correctly) all work end to end in Markdown and JSON.
 
 ### Phase 7 — Docker · Sonnet 5
 
