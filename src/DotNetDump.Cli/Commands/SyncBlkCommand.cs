@@ -2,6 +2,7 @@ using System.CommandLine;
 
 using DotNetDump.Core.Analyzers;
 using DotNetDump.Core.Formatting;
+using DotNetDump.Core.Models;
 
 namespace DotNetDump.Cli.Commands;
 
@@ -26,6 +27,14 @@ public static class SyncBlkCommand {
 		Description = "Sort direction: asc or desc (default desc).",
 	};
 
+	// Honored set: HeapAnalyzer.GetSyncBlocks -> SyncBlockInfoFilter.Honored (DATA_CONTRACT.md
+	// §2.3). Note: plain TypeName (substring) only -- 'type=/regex/' is rejected here even though
+	// listobj/dumpheap accept it, since this method does not honor TypeNameRegex.
+	public static readonly Option<string[]> FilterOption = GlobalOptions.CreateFilterOption(
+		"Filter expression '<field><op><value>', repeatable and ANDed. Honored fields: " +
+		"type (~ substring only -- '=/regex/' is not honored here), thread (managed thread id), " +
+		"text (across type name).");
+
 	public static Command Create() {
 		var command = new Command("syncblk", "Synchronization block details and lock waits.");
 		command.Options.Add(NoThinLocksOption);
@@ -33,6 +42,7 @@ public static class SyncBlkCommand {
 		command.Options.Add(OffsetOption);
 		command.Options.Add(SortOption);
 		command.Options.Add(OrderOption);
+		command.Options.Add(FilterOption);
 
 		command.SetAction((ParseResult parseResult) => {
 			string? dumpOption = parseResult.GetValue(GlobalOptions.Dump);
@@ -46,10 +56,11 @@ public static class SyncBlkCommand {
 			int offset = parseResult.GetValue(OffsetOption);
 			string? sort = parseResult.GetValue(SortOption);
 			string? order = parseResult.GetValue(OrderOption);
+			FilterSpec filter = FilterExpressionParser.Parse(parseResult.GetValue(FilterOption));
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
 			var analyzer = new HeapAnalyzer(context, AnalysisCacheProvider.Default);
-			var parameters = QueryParametersBuilder.Build(sort, order, limit, offset);
+			var parameters = QueryParametersBuilder.Build(sort, order, limit, offset, filter);
 			var blocks = analyzer.GetSyncBlocks(parameters, includeThinLocks);
 
 			System.Console.WriteLine(OutputFormatting.Render(format, blocks, MarkdownFormatter.FormatSyncBlocks, JsonFormatter.FormatSyncBlocks, TsvFormatter.FormatSyncBlocks));
