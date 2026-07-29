@@ -72,7 +72,7 @@ public class DumpAnalyzerTools {
 		return ExecuteSafe(() => {
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var threads = _threadAnalyzer.GetThreads(parameters);
-			return MarkdownFormatter.FormatThreads(threads);
+			return MarkdownFormatter.FormatThreads(threads.Items);
 		});
 	}
 
@@ -102,7 +102,7 @@ public class DumpAnalyzerTools {
 		return ExecuteSafe(() => {
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var stacks = _threadAnalyzer.GetDetailedStacks(parameters, maxFrames);
-			return MarkdownFormatter.FormatDetailedStacks(stacks);
+			return MarkdownFormatter.FormatDetailedStacks(stacks.Items);
 		});
 	}
 
@@ -116,7 +116,7 @@ public class DumpAnalyzerTools {
 		return ExecuteSafe(() => {
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var modules = _moduleAnalyzer.GetModules(parameters, includeSystem);
-			return MarkdownFormatter.FormatModules(modules);
+			return MarkdownFormatter.FormatModules(modules.Items);
 		});
 	}
 
@@ -183,15 +183,18 @@ public class DumpAnalyzerTools {
 		return ExecuteSafe(() => {
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var handles = _heapAnalyzer.GetGCHandles(parameters);
-			return MarkdownFormatter.FormatGCHandles(handles);
+			return MarkdownFormatter.FormatGCHandles(handles.Items);
 		});
 	}
 
 	[McpServerTool, Description("Verifies the integrity of the managed heap and reports any corruption found, with its kind and offset.")]
-	public string VerifyHeap() {
+	public string VerifyHeap(
+		[Description("Number of items to return")] int limit = 50,
+		[Description("Number of items to skip")] int offset = 0) {
 		return ExecuteSafe(() => {
-			var corruptions = _heapAnalyzer.VerifyHeap();
-			return MarkdownFormatter.FormatHeapVerification(corruptions);
+			var parameters = CreateParameters(null, null, limit, offset);
+			var corruptions = _heapAnalyzer.VerifyHeap(parameters);
+			return MarkdownFormatter.FormatHeapVerification(corruptions.Items);
 		});
 	}
 
@@ -277,7 +280,7 @@ public class DumpAnalyzerTools {
 		return ExecuteSafe(() => {
 			var parameters = CreateParameters(sortBy, sortDirection, limit, offset);
 			var states = _threadAnalyzer.GetThreadStates(parameters);
-			return MarkdownFormatter.FormatThreadStates(states);
+			return MarkdownFormatter.FormatThreadStates(states.Items);
 		});
 	}
 

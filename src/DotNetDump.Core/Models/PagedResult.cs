@@ -35,4 +35,11 @@ public sealed class PagedResult<T> {
 		Offset = offset;
 		Limit = limit;
 	}
+
+	/// <summary>
+	/// No rows, but still carrying the caller's paging request. Used where the runtime is absent, so
+	/// "nothing to report" reads the same as a genuinely empty result rather than as a zero-limit page.
+	/// </summary>
+	public static PagedResult<T> Empty(QueryParameters parameters) =>
+		new(Array.Empty<T>(), 0, parameters.Offset, parameters.Limit);
 }

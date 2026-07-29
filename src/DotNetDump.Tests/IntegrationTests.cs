@@ -162,7 +162,7 @@ public class IntegrationTests : IDisposable {
 		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
-		var corruptions = analyzer.VerifyHeap().ToList();
+		var corruptions = analyzer.VerifyHeap(new QueryParameters { Limit = 50 }).Items;
 
 		// Should not throw, corruptions list might be empty (which is good)
 		Assert.NotNull(corruptions);
@@ -173,7 +173,7 @@ public class IntegrationTests : IDisposable {
 		SkipIfNoDump();
 
 		var analyzer = new HeapAnalyzer(_context);
-		var handles = analyzer.GetGCHandles(new QueryParameters { Limit = 50 }).ToList();
+		var handles = analyzer.GetGCHandles(new QueryParameters { Limit = 50 }).Items;
 
 		// Might be empty, but shouldn't throw
 		Assert.NotNull(handles);
@@ -206,7 +206,7 @@ public class IntegrationTests : IDisposable {
 		SkipIfNoDump();
 
 		var analyzer = new ThreadAnalyzer(_context);
-		var threads = analyzer.GetThreads(new QueryParameters { Limit = 50 }).ToList();
+		var threads = analyzer.GetThreads(new QueryParameters { Limit = 50 }).Items;
 
 		Assert.NotEmpty(threads);
 		Assert.All(threads, thread => Assert.True(thread.OSThreadId > 0 || thread.ManagedThreadId >= 0));
@@ -217,7 +217,7 @@ public class IntegrationTests : IDisposable {
 		SkipIfNoDump();
 
 		var analyzer = new ThreadAnalyzer(_context);
-		var stacks = analyzer.GetDetailedStacks(new QueryParameters { Limit = 10 }, maxFrames: 20).ToList();
+		var stacks = analyzer.GetDetailedStacks(new QueryParameters { Limit = 10 }, maxFrames: 20).Items;
 
 		Assert.NotEmpty(stacks);
 		Assert.All(stacks, stack => {
@@ -231,7 +231,7 @@ public class IntegrationTests : IDisposable {
 		SkipIfNoDump();
 
 		var analyzer = new ModuleAnalyzer(_context);
-		var modules = analyzer.GetModules(new QueryParameters { Limit = 50 }, includeSystem: true).ToList();
+		var modules = analyzer.GetModules(new QueryParameters { Limit = 50 }, includeSystem: true).Items;
 
 		Assert.NotEmpty(modules);
 		Assert.All(modules, module => Assert.NotNull(module.Name));
@@ -242,7 +242,7 @@ public class IntegrationTests : IDisposable {
 		SkipIfNoDump();
 
 		var analyzer = new ModuleAnalyzer(_context);
-		var modules = analyzer.GetModules(new QueryParameters { Limit = 50 }, includeSystem: false).ToList();
+		var modules = analyzer.GetModules(new QueryParameters { Limit = 50 }, includeSystem: false).Items;
 
 		// Might be empty if only system modules exist
 		Assert.NotNull(modules);

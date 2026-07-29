@@ -107,9 +107,9 @@ public class JsonFormatterTests {
 
 	[Fact]
 	public void Threads_EveryFieldIsPresent() {
-		string output = JsonFormatter.FormatThreads(new[] {
+		string output = JsonFormatter.FormatThreads(Page(new[] {
 			new ThreadInfo { ManagedThreadId = 1, OSThreadId = 0x1280B6, IsAlive = true, ExceptionType = "System.Exception", ExceptionMessage = "boom" }
-		});
+		}));
 
 		using var doc = JsonDocument.Parse(output);
 		var row = doc.RootElement.GetProperty("data")[0];
@@ -123,9 +123,9 @@ public class JsonFormatterTests {
 
 	[Fact]
 	public void Threads_NullFieldsAreOmittedNotNull() {
-		string output = JsonFormatter.FormatThreads(new[] {
+		string output = JsonFormatter.FormatThreads(Page(new[] {
 			new ThreadInfo { ManagedThreadId = 1, OSThreadId = 1, IsAlive = true }
-		});
+		}));
 
 		using var doc = JsonDocument.Parse(output);
 		var row = doc.RootElement.GetProperty("data")[0];
@@ -136,9 +136,9 @@ public class JsonFormatterTests {
 
 	[Fact]
 	public void Modules_FieldNames() {
-		string output = JsonFormatter.FormatModules(new[] {
+		string output = JsonFormatter.FormatModules(Page(new[] {
 			new ModuleInfo { Name = "app.dll", ImageBase = 0x102FF8000, Size = 6656, IsUserCode = true }
-		});
+		}));
 
 		using var doc = JsonDocument.Parse(output);
 		var row = doc.RootElement.GetProperty("data")[0];
@@ -353,12 +353,12 @@ public class JsonFormatterTests {
 	public void GCHandles_EveryField() {
 		// The previous attempt at this phase dropped IsStrong, ReferenceCount, DependentTarget,
 		// AppDomainName and Size. This test exists specifically to catch that regression again.
-		string output = JsonFormatter.FormatGCHandles(new[] {
+		string output = JsonFormatter.FormatGCHandles(Page(new[] {
 			new GCHandleInfo {
 				Address = 0x1033E1350, Object = 0x13A66C538, Kind = "Dependent", TypeName = "System.Object",
 				IsStrong = true, ReferenceCount = 3, DependentTarget = 0x13A611F10, AppDomainName = "AppDomain1", Size = 24
 			}
-		});
+		}));
 
 		using var doc = JsonDocument.Parse(output);
 		var row = doc.RootElement.GetProperty("data")[0];
@@ -391,9 +391,9 @@ public class JsonFormatterTests {
 
 	[Fact]
 	public void HeapVerification_EveryField() {
-		string output = JsonFormatter.FormatHeapVerification(new[] {
+		string output = JsonFormatter.FormatHeapVerification(Page(new[] {
 			new HeapCorruptionInfo { Address = 0x10, Object = 0x13A611F10, Kind = "InvalidMethodTable", Message = "bad", Offset = 0x18, TypeName = "Leaf" }
-		});
+		}));
 
 		using var doc = JsonDocument.Parse(output);
 		var row = doc.RootElement.GetProperty("data")[0];
@@ -408,14 +408,14 @@ public class JsonFormatterTests {
 
 	[Fact]
 	public void DetailedStacks_NestedFrames() {
-		string output = JsonFormatter.FormatDetailedStacks(new[] {
+		string output = JsonFormatter.FormatDetailedStacks(Page(new[] {
 			new ThreadStackInfo {
 				ManagedThreadId = 1, OSThreadId = 0x10, IsAlive = true,
 				Frames = new List<StackFrameInfo> {
 					new() { InstructionPointer = 0x1, StackPointer = 0x2, FrameKind = "ManagedMethod", MethodName = "Foo", ModuleName = "app.dll", IsManaged = true }
 				}
 			}
-		});
+		}));
 
 		using var doc = JsonDocument.Parse(output);
 		var row = doc.RootElement.GetProperty("data")[0];
@@ -659,7 +659,7 @@ public class JsonFormatterTests {
 			StateFlags = new List<string> { "GC_ON_TRANSITIONS" }
 		};
 
-		string output = JsonFormatter.FormatThreadStates(new[] { state });
+		string output = JsonFormatter.FormatThreadStates(Page(state));
 
 		using var doc = JsonDocument.Parse(output);
 		var row = doc.RootElement.GetProperty("data")[0];
@@ -682,9 +682,9 @@ public class JsonFormatterTests {
 
 	[Fact]
 	public void ThreadStates_OmitsNullLockCount() {
-		string output = JsonFormatter.FormatThreadStates(new[] {
+		string output = JsonFormatter.FormatThreadStates(Page(new[] {
 			new ThreadStateInfo { ManagedThreadId = 1, LockCount = null }
-		});
+		}));
 
 		using var doc = JsonDocument.Parse(output);
 		var row = doc.RootElement.GetProperty("data")[0];

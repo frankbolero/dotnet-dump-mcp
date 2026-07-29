@@ -1008,8 +1008,8 @@ namespace DotNetDump.Core.Formatting {
 			});
 		}
 
-		public static string FormatThreads(IEnumerable<ThreadInfo> threads) {
-			var data = threads.Select(item => new ThreadInfoDto {
+		public static string FormatThreads(PagedResult<ThreadInfo> threads) {
+			var data = threads.Items.Select(item => new ThreadInfoDto {
 				ManagedThreadId = item.ManagedThreadId,
 				OSThreadId = item.OSThreadId,
 				IsAlive = item.IsAlive,
@@ -1019,12 +1019,12 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<ThreadInfoDto> {
 				Data = data,
-				Pagination = PaginationInfo.FromItemsOnly(data.Count),
+				Pagination = PaginationInfo.FromPagedResult(threads),
 			});
 		}
 
-		public static string FormatModules(IEnumerable<ModuleInfo> modules) {
-			var data = modules.Select(item => new ModuleInfoDto {
+		public static string FormatModules(PagedResult<ModuleInfo> modules) {
+			var data = modules.Items.Select(item => new ModuleInfoDto {
 				Name = item.Name,
 				ImageBase = Addr(item.ImageBase),
 				Size = item.Size,
@@ -1033,7 +1033,7 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<ModuleInfoDto> {
 				Data = data,
-				Pagination = PaginationInfo.FromItemsOnly(data.Count),
+				Pagination = PaginationInfo.FromPagedResult(modules),
 			});
 		}
 
@@ -1128,8 +1128,8 @@ namespace DotNetDump.Core.Formatting {
 			});
 		}
 
-		public static string FormatGCHandles(IEnumerable<GCHandleInfo> handles) {
-			var data = handles.Select(handle => new GCHandleInfoDto {
+		public static string FormatGCHandles(PagedResult<GCHandleInfo> handles) {
+			var data = handles.Items.Select(handle => new GCHandleInfoDto {
 				Address = Addr(handle.Address),
 				Object = Addr(handle.Object),
 				Kind = handle.Kind,
@@ -1143,7 +1143,7 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<GCHandleInfoDto> {
 				Data = data,
-				Pagination = PaginationInfo.FromItemsOnly(data.Count),
+				Pagination = PaginationInfo.FromPagedResult(handles),
 			});
 		}
 
@@ -1161,7 +1161,12 @@ namespace DotNetDump.Core.Formatting {
 			});
 		}
 
-		public static string FormatHeapVerification(IEnumerable<HeapCorruptionInfo> corruptions) {
+		/// <summary>
+		/// One object's verification result. Unlike <see cref="FormatHeapVerification"/> this is never
+		/// paginated — verifying a single object either finds its corruptions or finds none, so
+		/// <see cref="PaginationInfo.FromItemsOnly"/> is the literal truth here rather than a fallback.
+		/// </summary>
+		public static string FormatObjectVerification(IEnumerable<HeapCorruptionInfo> corruptions) {
 			var data = corruptions.Select(item => new HeapCorruptionInfoDto {
 				Address = Addr(item.Address),
 				Object = Addr(item.Object),
@@ -1177,8 +1182,24 @@ namespace DotNetDump.Core.Formatting {
 			});
 		}
 
-		public static string FormatDetailedStacks(IEnumerable<ThreadStackInfo> stacks) {
-			var data = stacks.Select(stack => new ThreadStackInfoDto {
+		public static string FormatHeapVerification(PagedResult<HeapCorruptionInfo> corruptions) {
+			var data = corruptions.Items.Select(item => new HeapCorruptionInfoDto {
+				Address = Addr(item.Address),
+				Object = Addr(item.Object),
+				Kind = item.Kind,
+				Message = item.Message,
+				Offset = item.Offset,
+				TypeName = item.TypeName,
+			}).ToList();
+
+			return Serialize(new CollectionEnvelope<HeapCorruptionInfoDto> {
+				Data = data,
+				Pagination = PaginationInfo.FromPagedResult(corruptions),
+			});
+		}
+
+		public static string FormatDetailedStacks(PagedResult<ThreadStackInfo> stacks) {
+			var data = stacks.Items.Select(stack => new ThreadStackInfoDto {
 				ManagedThreadId = stack.ManagedThreadId,
 				OSThreadId = stack.OSThreadId,
 				IsAlive = stack.IsAlive,
@@ -1188,7 +1209,7 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<ThreadStackInfoDto> {
 				Data = data,
-				Pagination = PaginationInfo.FromItemsOnly(data.Count),
+				Pagination = PaginationInfo.FromPagedResult(stacks),
 			});
 		}
 
@@ -1289,8 +1310,8 @@ namespace DotNetDump.Core.Formatting {
 			});
 		}
 
-		public static string FormatThreadStates(IEnumerable<ThreadStateInfo> states) {
-			var data = states.Select(state => new ThreadStateInfoDto {
+		public static string FormatThreadStates(PagedResult<ThreadStateInfo> states) {
+			var data = states.Items.Select(state => new ThreadStateInfoDto {
 				ManagedThreadId = state.ManagedThreadId,
 				OSThreadId = state.OSThreadId,
 				IsAlive = state.IsAlive,
@@ -1312,7 +1333,7 @@ namespace DotNetDump.Core.Formatting {
 
 			return Serialize(new CollectionEnvelope<ThreadStateInfoDto> {
 				Data = data,
-				Pagination = PaginationInfo.FromItemsOnly(data.Count),
+				Pagination = PaginationInfo.FromPagedResult(states),
 			});
 		}
 

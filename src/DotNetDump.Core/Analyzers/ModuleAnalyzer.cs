@@ -22,9 +22,14 @@ public class ModuleAnalyzer {
 		return _context.Runtime;
 	}
 
-	public IEnumerable<DotNetDump.Core.Models.ModuleInfo> GetModules(QueryParameters parameters, bool includeSystem = false) {
+	/// <summary>
+	/// Loaded modules. <paramref name="includeSystem"/> is a scope rather than a filter — it decides
+	/// which modules are under consideration at all, so <see cref="PagedResult{T}.TotalAvailable"/>
+	/// counts what it admitted. "12 of 40 user modules" is the honest reading, not "12 of 400".
+	/// </summary>
+	public PagedResult<DotNetDump.Core.Models.ModuleInfo> GetModules(QueryParameters parameters, bool includeSystem = false) {
 		var runtime = GetRuntime();
-		var modules = runtime.EnumerateModules().Select(m => new DotNetDump.Core.Models.ModuleInfo {
+		IEnumerable<DotNetDump.Core.Models.ModuleInfo> modules = runtime.EnumerateModules().Select(m => new DotNetDump.Core.Models.ModuleInfo {
 			Name = m.Name,
 			ImageBase = m.ImageBase,
 			Size = m.Size,
@@ -35,16 +40,20 @@ public class ModuleAnalyzer {
 			modules = modules.Where(m => m.IsUserCode);
 		}
 
+		var inScope = modules.ToList();
+
 		// Sorting
+		IEnumerable<DotNetDump.Core.Models.ModuleInfo> sorted = inScope;
 		if (parameters.SortBy?.ToLower() == "size") {
-			modules = parameters.SortDirection == SortDirection.Asc ? modules.OrderBy(m => m.Size) : modules.OrderByDescending(m => m.Size);
+			sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(m => m.Size) : sorted.OrderByDescending(m => m.Size);
 		} else if (parameters.SortBy?.ToLower() == "name") {
-			modules = parameters.SortDirection == SortDirection.Asc ? modules.OrderBy(m => m.Name) : modules.OrderByDescending(m => m.Name);
+			sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(m => m.Name) : sorted.OrderByDescending(m => m.Name);
 		} else {
-			modules = parameters.SortDirection == SortDirection.Asc ? modules.OrderBy(m => m.ImageBase) : modules.OrderByDescending(m => m.ImageBase);
+			sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(m => m.ImageBase) : sorted.OrderByDescending(m => m.ImageBase);
 		}
 
-		return modules.Skip(parameters.Offset).Take(parameters.Limit);
+		var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+		return new PagedResult<DotNetDump.Core.Models.ModuleInfo>(page, inScope.Count, parameters.Offset, parameters.Limit);
 	}
 
 	public ModuleDetails GetModuleDetails(ulong address) {

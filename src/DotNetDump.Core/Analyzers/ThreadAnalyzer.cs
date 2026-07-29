@@ -29,7 +29,7 @@ namespace DotNetDump.Core.Analyzers {
 			return _context.Runtime;
 		}
 
-		public IEnumerable<ThreadInfo> GetThreads(QueryParameters parameters) {
+		public PagedResult<ThreadInfo> GetThreads(QueryParameters parameters) {
 			var runtime = GetRuntime();
 			var threads = runtime.Threads.Select(t => new ThreadInfo {
 				ManagedThreadId = t.ManagedThreadId,
@@ -37,18 +37,20 @@ namespace DotNetDump.Core.Analyzers {
 				IsAlive = t.IsAlive,
 				ExceptionType = t.CurrentException?.Type?.Name,
 				ExceptionMessage = t.CurrentException?.Message
-			});
+			}).ToList();
 
 			// Sorting
+			IEnumerable<ThreadInfo> sorted = threads;
 			if (parameters.SortBy?.ToLower() == "exception") {
-				threads = parameters.SortDirection == SortDirection.Asc ? threads.OrderBy(t => t.ExceptionType == null) : threads.OrderByDescending(t => t.ExceptionType != null);
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(t => t.ExceptionType == null) : sorted.OrderByDescending(t => t.ExceptionType != null);
 			} else if (parameters.SortBy?.ToLower() == "osthreadid") {
-				threads = parameters.SortDirection == SortDirection.Asc ? threads.OrderBy(t => t.OSThreadId) : threads.OrderByDescending(t => t.OSThreadId);
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(t => t.OSThreadId) : sorted.OrderByDescending(t => t.OSThreadId);
 			} else {
-				threads = parameters.SortDirection == SortDirection.Asc ? threads.OrderBy(t => t.ManagedThreadId) : threads.OrderByDescending(t => t.ManagedThreadId);
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(t => t.ManagedThreadId) : sorted.OrderByDescending(t => t.ManagedThreadId);
 			}
 
-			return threads.Skip(parameters.Offset).Take(parameters.Limit);
+			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+			return new PagedResult<ThreadInfo>(page, threads.Count, parameters.Offset, parameters.Limit);
 		}
 
 		public IEnumerable<StackGroup> GetStackTraceGroups(int maxFrames = 20) {
@@ -117,10 +119,32 @@ namespace DotNetDump.Core.Analyzers {
 			};
 		}
 
-		public IEnumerable<ThreadStackInfo> GetDetailedStacks(QueryParameters parameters, int maxFrames = 100) {
+		/// <summary>
+		/// Stack traces, one per live thread.
+		/// </summary>
+		/// <remarks>
+		/// Sorting and paging happen on the threads, and stacks are walked only for the resulting page.
+		/// Walking a stack is by far the expensive part, and a hung process can carry thousands of
+		/// threads — materialising every stack to return fifty would make this the slowest command in
+		/// the tool. <see cref="PagedResult{T}.TotalAvailable"/> is the live thread count, which is known
+		/// without walking anything.
+		/// </remarks>
+		public PagedResult<ThreadStackInfo> GetDetailedStacks(QueryParameters parameters, int maxFrames = 100) {
 			var runtime = GetRuntime();
-			var stacks = runtime.Threads
-				.Where(t => t.IsAlive)
+			var alive = runtime.Threads.Where(t => t.IsAlive).ToList();
+
+			// Sort by thread ID. Both keys come straight off the thread, so this is the same ordering
+			// the previous implementation produced from the projected rows.
+			IEnumerable<ClrThread> sorted = alive;
+			if (parameters.SortBy?.ToLower() == "osthreadid") {
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(t => t.OSThreadId) : sorted.OrderByDescending(t => t.OSThreadId);
+			} else {
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(t => t.ManagedThreadId) : sorted.OrderByDescending(t => t.ManagedThreadId);
+			}
+
+			var page = sorted
+				.Skip(parameters.Offset)
+				.Take(parameters.Limit)
 				.Select(t => new ThreadStackInfo {
 					ManagedThreadId = t.ManagedThreadId,
 					OSThreadId = t.OSThreadId,
@@ -136,16 +160,10 @@ namespace DotNetDump.Core.Analyzers {
 							IsManaged = f.Kind == ClrStackFrameKind.ManagedMethod
 						})
 						.ToList()
-				});
+				})
+				.ToList();
 
-			// Sort by thread ID
-			if (parameters.SortBy?.ToLower() == "osthreadid") {
-				stacks = parameters.SortDirection == SortDirection.Asc ? stacks.OrderBy(t => t.OSThreadId) : stacks.OrderByDescending(t => t.OSThreadId);
-			} else {
-				stacks = parameters.SortDirection == SortDirection.Asc ? stacks.OrderBy(t => t.ManagedThreadId) : stacks.OrderByDescending(t => t.ManagedThreadId);
-			}
-
-			return stacks.Skip(parameters.Offset).Take(parameters.Limit);
+			return new PagedResult<ThreadStackInfo>(page, alive.Count, parameters.Offset, parameters.Limit);
 		}
 
 		/// <summary>
@@ -178,7 +196,7 @@ namespace DotNetDump.Core.Analyzers {
 			return slash >= 0 && slash < path.Length - 1 ? path.Substring(slash + 1) : path;
 		}
 
-		public IEnumerable<ThreadStateInfo> GetThreadStates(QueryParameters parameters) {
+		public PagedResult<ThreadStateInfo> GetThreadStates(QueryParameters parameters) {
 			var runtime = GetRuntime();
 			var threadStates = runtime.Threads.Select(t => new ThreadStateInfo {
 				ManagedThreadId = t.ManagedThreadId,
@@ -198,18 +216,20 @@ namespace DotNetDump.Core.Analyzers {
 				IsAborted = ThreadStateDecoder.IsAborted(t.State),
 				IsSuspendPending = ThreadStateDecoder.IsSuspendPending(t.State),
 				StateFlags = ThreadStateDecoder.FlagNames(t.State).ToList()
-			});
+			}).ToList();
 
 			// Sorting
+			IEnumerable<ThreadStateInfo> sorted = threadStates;
 			if (parameters.SortBy?.ToLower() == "osthreadid") {
-				threadStates = parameters.SortDirection == SortDirection.Asc ? threadStates.OrderBy(t => t.OSThreadId) : threadStates.OrderByDescending(t => t.OSThreadId);
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(t => t.OSThreadId) : sorted.OrderByDescending(t => t.OSThreadId);
 			} else if (parameters.SortBy?.ToLower() == "lockcount") {
-				threadStates = parameters.SortDirection == SortDirection.Asc ? threadStates.OrderBy(t => t.LockCount ?? 0) : threadStates.OrderByDescending(t => t.LockCount ?? 0);
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(t => t.LockCount ?? 0) : sorted.OrderByDescending(t => t.LockCount ?? 0);
 			} else {
-				threadStates = parameters.SortDirection == SortDirection.Asc ? threadStates.OrderBy(t => t.ManagedThreadId) : threadStates.OrderByDescending(t => t.ManagedThreadId);
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(t => t.ManagedThreadId) : sorted.OrderByDescending(t => t.ManagedThreadId);
 			}
 
-			return threadStates.Skip(parameters.Offset).Take(parameters.Limit);
+			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+			return new PagedResult<ThreadStateInfo>(page, threadStates.Count, parameters.Offset, parameters.Limit);
 		}
 
 		/// <summary>

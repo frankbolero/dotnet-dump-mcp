@@ -31,7 +31,7 @@ public static class VerifyObjCommand {
 			var analyzer = new HeapAnalyzer(context, AnalysisCacheProvider.Default);
 			var corruptions = analyzer.VerifyObject(address);
 
-			System.Console.WriteLine(OutputFormatting.Render(format, corruptions, MarkdownFormatter.FormatHeapVerification, JsonFormatter.FormatHeapVerification, TsvFormatter.FormatHeapVerification));
+			System.Console.WriteLine(OutputFormatting.Render(format, corruptions, MarkdownFormatter.FormatHeapVerification, JsonFormatter.FormatObjectVerification, TsvFormatter.FormatHeapVerification));
 
 			return ExitCodes.Success;
 		});

@@ -430,9 +430,9 @@ namespace DotNetDump.Core.Analyzers {
 			}
 		}
 
-		public IEnumerable<GCHandleInfo> GetGCHandles(QueryParameters parameters) {
+		public PagedResult<GCHandleInfo> GetGCHandles(QueryParameters parameters) {
 			var runtime = _context.Runtime;
-			if (runtime == null) return Enumerable.Empty<GCHandleInfo>();
+			if (runtime == null) return PagedResult<GCHandleInfo>.Empty(parameters);
 
 			var handles = runtime.EnumerateHandles().Select(h => new GCHandleInfo {
 				Address = h.Address,
@@ -444,29 +444,39 @@ namespace DotNetDump.Core.Analyzers {
 				DependentTarget = h.Dependent.Address,
 				AppDomainName = h.AppDomain?.Name,
 				Size = h.Object.IsNull ? 0 : h.Object.Size
-			});
+			}).ToList();
 
+			IEnumerable<GCHandleInfo> sorted = handles;
 			if (parameters.SortBy?.ToLower() == "kind") {
-				handles = parameters.SortDirection == SortDirection.Asc ? handles.OrderBy(h => h.Kind) : handles.OrderByDescending(h => h.Kind);
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(h => h.Kind) : sorted.OrderByDescending(h => h.Kind);
 			} else if (parameters.SortBy?.ToLower() == "typename") {
-				handles = parameters.SortDirection == SortDirection.Asc ? handles.OrderBy(h => h.TypeName) : handles.OrderByDescending(h => h.TypeName);
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(h => h.TypeName) : sorted.OrderByDescending(h => h.TypeName);
 			} else {
-				handles = parameters.SortDirection == SortDirection.Asc ? handles.OrderBy(h => h.Address) : handles.OrderByDescending(h => h.Address);
+				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(h => h.Address) : sorted.OrderByDescending(h => h.Address);
 			}
 
-			return handles.Skip(parameters.Offset).Take(parameters.Limit);
+			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+			return new PagedResult<GCHandleInfo>(page, handles.Count, parameters.Offset, parameters.Limit);
 		}
 
-		public IEnumerable<HeapCorruptionInfo> VerifyHeap() {
+		/// <summary>
+		/// Verifies the whole heap. The verification walk has to run to completion before the corruption
+		/// count is known, so unlike the paginated walks there is no cheap way to report a total without
+		/// doing all the work.
+		/// </summary>
+		public PagedResult<HeapCorruptionInfo> VerifyHeap(QueryParameters parameters) {
 			var heap = GetHeap();
-			return heap.VerifyHeap().Select(c => new HeapCorruptionInfo {
+			var corruptions = heap.VerifyHeap().Select(c => new HeapCorruptionInfo {
 				Address = c.Object.Address + (ulong)(c.Offset > 0 ? c.Offset : 0),
 				Object = c.Object.Address,
 				Kind = c.Kind.ToString(),
 				Message = c.ToString(),
 				Offset = c.Offset,
 				TypeName = c.Object.Type?.Name
-			});
+			}).ToList();
+
+			var page = corruptions.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+			return new PagedResult<HeapCorruptionInfo>(page, corruptions.Count, parameters.Offset, parameters.Limit);
 		}
 
 		/// <summary>Verifies a single object, for following up on a suspect address.</summary>
