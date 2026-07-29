@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+using DotNetDump.Core.Filtering;
 using DotNetDump.Core.Models;
 using DotNetDump.Core.Utilities;
 
@@ -28,6 +29,8 @@ public class ModuleAnalyzer {
 	/// counts what it admitted. "12 of 40 user modules" is the honest reading, not "12 of 400".
 	/// </summary>
 	public PagedResult<DotNetDump.Core.Models.ModuleInfo> GetModules(QueryParameters parameters, bool includeSystem = false) {
+		parameters.Filter.EnsureSupported("clrmodules", ModuleInfoFilter.Honored);
+
 		var runtime = GetRuntime();
 		IEnumerable<DotNetDump.Core.Models.ModuleInfo> modules = runtime.EnumerateModules().Select(m => new DotNetDump.Core.Models.ModuleInfo {
 			Name = m.Name,
@@ -40,7 +43,10 @@ public class ModuleAnalyzer {
 			modules = modules.Where(m => m.IsUserCode);
 		}
 
-		var inScope = modules.ToList();
+		// includeSystem is a scope, not a filter -- it decides what is under consideration at all
+		// (see the doc comment above). FilterSpec is applied on top of that scope, and
+		// TotalAvailable below reflects both together.
+		var inScope = modules.Where(m => ModuleInfoFilter.Matches(m, parameters.Filter)).ToList();
 
 		// Sorting
 		IEnumerable<DotNetDump.Core.Models.ModuleInfo> sorted = inScope;

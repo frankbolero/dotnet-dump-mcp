@@ -329,6 +329,26 @@ public class IntegrationTests : IDisposable {
 	}
 
 	[SkippableFact]
+	public void ModuleAnalyzer_GetModules_FilterSpecModule_ReturnsOnlyMatchingModules() {
+		SkipIfNoDump();
+
+		var analyzer = new ModuleAnalyzer(_context);
+		var sample = analyzer.GetModules(new QueryParameters { Limit = 1 }, includeSystem: true).Items;
+		Skip.If(sample.Count == 0 || string.IsNullOrEmpty(sample[0].Name), "No named module found in the dump.");
+
+		string name = sample[0].Name!;
+		string needle = name.Length > 6 ? name[..6] : name;
+
+		var filtered = analyzer.GetModules(new QueryParameters {
+			Limit = 500,
+			Filter = new FilterSpec { Module = needle }
+		}, includeSystem: true).Items;
+
+		Assert.NotEmpty(filtered);
+		Assert.All(filtered, m => Assert.Contains(needle, m.Name ?? "", StringComparison.OrdinalIgnoreCase));
+	}
+
+	[SkippableFact]
 	public void MetadataAnalyzer_GetMethodTable_ReturnsData() {
 		SkipIfNoDump();
 
