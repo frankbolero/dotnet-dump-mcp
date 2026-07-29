@@ -1,4 +1,6 @@
 using DotNetDump.Cli;
+using DotNetDump.Core;
+using DotNetDump.Core.Models;
 
 namespace DotNetDump.Tests;
 
@@ -8,6 +10,15 @@ public class ExitCodeMapperTests {
 	[Fact]
 	public void CliUsageException_MapsToUsageError() {
 		Assert.Equal(2, ExitCodeMapper.Map(new CliUsageException("no dump")));
+	}
+
+	[Fact]
+	public void UnsupportedFilterException_MapsToUsageError() {
+		// DATA_CONTRACT.md §2.3: filtering on a field a command does not honor is a usage error, not
+		// an analysis failure -- the same exit code as CliUsageException, since the request itself
+		// was invalid and no analysis ever ran.
+		var ex = new UnsupportedFilterException("clrmodules", FilterField.Generation, FilterField.Module);
+		Assert.Equal(2, ExitCodeMapper.Map(ex));
 	}
 
 	[Fact]
