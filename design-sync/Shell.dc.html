@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="stylesheet" href="_ds/nocturne-a13f0cb8-d758-4cf1-afdc-e9b822f5c322/styles.css">
+  <script src="_ds/nocturne-a13f0cb8-d758-4cf1-afdc-e9b822f5c322/_ds_bundle.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    @keyframes dh-spin { to { transform: rotate(360deg); } }
+    @keyframes dh-fade-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: translateY(0); } }
+    body { margin: 0; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: var(--color-neutral-700); border-radius: 8px; }
+  </style>
+</helmet>
+
+<div style="{{ styles.root }}">
+
+  <nav style="{{ styles.nav }}">
+    <div style="{{ styles.navHead }}">
+      <sc-if value="{{ !navCollapsed }}" hint-placeholder-val="{{ true }}">
+        <div style="font-family:var(--font-heading);font-weight:500;font-size:13px;letter-spacing:0.02em;color:{{ t.text }}">Dump Analyzer</div>
+      </sc-if>
+      <button onClick="{{ toggleNav }}" style="{{ styles.navToggle }}" title="Collapse navigation">{{ navToggleGlyph }}</button>
+    </div>
+    <div style="{{ styles.navGroups }}">
+      <sc-for list="{{ navGroups }}" as="g" hint-placeholder-count="6">
+        <div style="{{ g.style }}" onClick="{{ g.onClick }}">
+          <span style="{{ g.dotStyle }}"></span>
+          <sc-if value="{{ !navCollapsed }}" hint-placeholder-val="{{ true }}">
+            <span>{{ g.label }}</span>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <div style="{{ styles.navFoot }}">
+      <button onClick="{{ toggleTheme }}" style="{{ styles.themeBtn }}" title="Toggle theme">
+        <sc-if value="{{ navCollapsed }}" hint-placeholder-val="{{ false }}">
+          <span>{{ themeGlyph }}</span>
+        </sc-if>
+        <sc-if value="{{ !navCollapsed }}" hint-placeholder-val="{{ true }}">
+          <span>{{ themeGlyph }} {{ themeLabel }}</span>
+        </sc-if>
+      </button>
+    </div>
+  </nav>
+
+  <div style="{{ styles.main }}">
+
+    <div style="{{ styles.dumpBar }}">
+      <div style="{{ styles.dumpBarLeft }}">
+        <span style="{{ styles.dumpFile }}">{{ dumpMeta.filename }}</span>
+        <span style="{{ styles.dumpSep }}">·</span>
+        <span style="{{ styles.dumpMeta }}">{{ dumpMeta.runtime }}</span>
+        <span style="{{ styles.dumpMeta }}">{{ dumpMeta.arch }}</span>
+        <span style="{{ styles.dumpMeta }}">{{ dumpMeta.os }}</span>
+        <span style="{{ styles.dumpMeta }}">pid {{ dumpMeta.pid }}</span>
+      </div>
+      <div style="{{ styles.dumpBarRight }}">
+        <span style="{{ styles.dumpMeta }}">{{ dumpMeta.totalHeapLabel }} heap</span>
+        <span style="{{ styles.dumpMeta }}">{{ dumpMeta.objectCountLabel }} objects</span>
+        <span style="{{ cacheBadgeStyle }}">{{ cacheBadgeLabel }}</span>
+      </div>
+    </div>
+
+    <sc-if value="{{ view.eq.pending }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ styles.viewPad }}">
+        <div style="{{ styles.pendingWrap }}">
+          <div style="{{ styles.pendingTitle }}">Analyzing heap</div>
+          <div style="{{ styles.pendingSub }}">Walking the managed heap to build the object index. This happens once per dump — after this, every view is instant.</div>
+          <div style="{{ styles.progressTrack }}">
+            <div style="{{ progressFillStyle }}"></div>
+          </div>
+          <div style="{{ styles.pendingStats }}">
+            <span>{{ pendingCountLabel }} of {{ pendingTotalLabel }} objects walked</span>
+            <span>{{ pendingElapsedLabel }} elapsed</span>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ view.eq.heap }}" hint-placeholder-val="{{ true }}">
+      <div style="{{ styles.viewHeader }}">
+        <div>
+          <div style="{{ styles.viewTitle }}">Heap Types</div>
+          <div style="{{ styles.viewDesc }}">SOS <code style="{{ styles.code }}">dumpheap -stat</code> — object types on the managed heap, sorted by total size.</div>
+        </div>
+        <div style="{{ styles.viewCount }}">{{ heapCountLabel }}</div>
+      </div>
+
+      <div style="{{ styles.filterBar }}">
+        <input value="{{ filters.search }}" onInput="{{ onSearchInput }}" placeholder="Type name contains…" style="{{ styles.searchInput }}"/>
+        <div style="{{ styles.filterField }}">
+          <label style="{{ styles.filterLabel }}">Size ≥</label>
+          <input value="{{ filters.sizeMin }}" onInput="{{ onSizeMinInput }}" placeholder="e.g. 1mb" style="{{ styles.filterInput }}"/>
+        </div>
+        <div style="{{ styles.filterField }}">
+          <label style="{{ styles.filterLabel }}">Count ≥</label>
+          <input value="{{ filters.countMin }}" onInput="{{ onCountMinInput }}" placeholder="e.g. 1000" style="{{ styles.filterInput }}"/>
+        </div>
+        <sc-if value="{{ hasActiveFilters }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ clearFilters }}" style="{{ styles.clearBtn }}">Clear all</button>
+        </sc-if>
+      </div>
+
+      <sc-if value="{{ hasActiveFilters }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ styles.chipRow }}">
+          <sc-for list="{{ activeChips }}" as="chip" hint-placeholder-count="2">
+            <span style="{{ styles.chip }}">{{ chip.label }} <span onClick="{{ chip.onRemove }}" style="{{ styles.chipX }}">×</span></span>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <div style="{{ styles.tableWrap }}">
+        <table style="{{ styles.table }}">
+          <thead>
+            <tr>
+              <th scope="col" style="{{ styles.thMono }}">MethodTable</th>
+              <th scope="col" aria-sort="{{ sortAria.count }}" onClick="{{ sortByCount }}" style="{{ styles.thNum }}">Count {{ sortGlyph.count }}</th>
+              <th scope="col" aria-sort="{{ sortAria.size }}" onClick="{{ sortBySize }}" style="{{ styles.thNum }}">Total size {{ sortGlyph.size }}</th>
+              <th scope="col" style="{{ styles.thText }}">Type</th>
+              <th scope="col" style="{{ styles.thAction }}"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ heapRows }}" as="row" hint-placeholder-count="4">
+              <tr style="{{ styles.tr }}">
+                <td style="{{ styles.tdMono }}"><span onClick="{{ row.onCopy }}" title="Click to copy" style="{{ styles.addrSpan }}" onMouseEnter="{{ row.mtHover.onEnter }}" onMouseLeave="{{ row.mtHover.onLeave }}">{{ row.methodTable }}</span></td>
+                <td style="{{ styles.tdNum }}">{{ row.countLabel }}</td>
+                <td style="{{ styles.tdNum }}" title="{{ row.sizeExactLabel }}">{{ row.sizeHuman }}</td>
+                <td style="{{ styles.tdType }}" title="{{ row.typeFull }}" onMouseEnter="{{ row.typeHover.onEnter }}" onMouseLeave="{{ row.typeHover.onLeave }}">{{ row.typeDisplay }}</td>
+                <td style="{{ styles.tdAction }}">
+                  <sc-if value="{{ row.sampleable }}" hint-placeholder-val="{{ false }}">
+                    <button onClick="{{ row.onSample }}" style="{{ styles.sampleBtn }}">Sample instance →</button>
+                  </sc-if>
+                </td>
+              </tr>
+            </sc-for>
+            <sc-if value="{{ heapRows.length === 0 }}" hint-placeholder-val="{{ false }}">
+              <tr><td colspan="5" style="{{ styles.emptyCell }}">
+                <div style="{{ styles.emptyTitle }}">No types match this filter</div>
+                <button onClick="{{ clearFilters }}" style="{{ styles.clearBtn }}">Clear filters</button>
+              </td></tr>
+            </sc-if>
+          </tbody>
+        </table>
+        <div style="{{ styles.endOfData }}">Showing {{ heapCountLabel }} — server-side filtered from all 1,502 types.</div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ view.eq.detail }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ styles.viewHeader }}">
+        <div>
+          <div style="{{ styles.breadcrumb }}">
+            <span onClick="{{ backToHeap }}" style="{{ styles.crumbLink }}">Heap Types</span>
+            <sc-for list="{{ breadcrumb }}" as="hop" hint-placeholder-count="0">
+              <span style="{{ styles.crumbSep }}">›</span>
+              <span onClick="{{ hop.onGo }}" style="{{ hop.style }}">{{ hop.label }}</span>
+            </sc-for>
+          </div>
+          <div style="{{ styles.viewTitle }}">Object Detail</div>
+          <div style="{{ styles.viewDesc }}">SOS <code style="{{ styles.code }}">dumpobj {{ current.address }}</code></div>
+        </div>
+        <button onClick="{{ goToRetention }}" style="{{ styles.primaryBtn }}">Find GC Roots →</button>
+      </div>
+
+      <div style="{{ styles.viewPad }}">
+        <div style="{{ styles.detailCard }}">
+          <div style="{{ styles.detailHead }}">
+            <div style="{{ styles.detailHeadRow }}"><span style="{{ styles.detailHeadLabel }}">Address</span><span style="{{ styles.addrSpan }}" onClick="{{ current.onCopyAddr }}" title="Click to copy" onMouseEnter="{{ current.addrHover.onEnter }}" onMouseLeave="{{ current.addrHover.onLeave }}">{{ current.address }}</span></div>
+            <div style="{{ styles.detailHeadRow }}"><span style="{{ styles.detailHeadLabel }}">Type</span><span style="{{ styles.monoStrong }}" onMouseEnter="{{ current.typeHover.onEnter }}" onMouseLeave="{{ current.typeHover.onLeave }}">{{ current.type }}</span></div>
+            <div style="{{ styles.detailHeadRow }}"><span style="{{ styles.detailHeadLabel }}">Size</span><span style="{{ styles.mono }}">{{ current.size }}</span></div>
+            <sc-if value="{{ current.methodTable }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ styles.detailHeadRow }}"><span style="{{ styles.detailHeadLabel }}">MethodTable</span><span style="{{ styles.mono }}" onMouseEnter="{{ current.mtHover.onEnter }}" onMouseLeave="{{ current.mtHover.onLeave }}">{{ current.methodTable }}</span></div>
+            </sc-if>
+          </div>
+
+          <sc-if value="{{ current.isLeaf }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ styles.leafNote }}">This is a value-type buffer (raw bytes) — no further object graph to walk.</div>
+          </sc-if>
+
+          <sc-if value="{{ !current.isLeaf }}" hint-placeholder-val="{{ true }}">
+            <table style="{{ styles.table }}">
+              <thead><tr>
+                <th scope="col" style="{{ styles.thMono }}">Offset</th>
+                <th scope="col" style="{{ styles.thText }}">Type</th>
+                <th scope="col" style="{{ styles.thText }}">Name</th>
+                <th scope="col" style="{{ styles.thText }}">Value</th>
+              </tr></thead>
+              <tbody>
+                <sc-for list="{{ current.fields }}" as="f" hint-placeholder-count="5">
+                  <tr style="{{ styles.tr }}">
+                    <td style="{{ styles.tdMono }}">{{ f.offset }}</td>
+                    <td style="{{ styles.tdType }}">{{ f.type }}</td>
+                    <td style="{{ styles.tdMono }}">{{ f.name }}</td>
+                    <td style="{{ f.valueStyle }}" onClick="{{ f.onNavigate }}" onMouseEnter="{{ f.hover.onEnter }}" onMouseLeave="{{ f.hover.onLeave }}">{{ f.value }}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ view.eq.retention }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ styles.viewHeader }}">
+        <div>
+          <div style="{{ styles.breadcrumb }}">
+            <span onClick="{{ backToHeap }}" style="{{ styles.crumbLink }}">Heap Types</span>
+            <span style="{{ styles.crumbSep }}">›</span>
+            <span onClick="{{ backToDetail }}" style="{{ styles.crumbLink }}">Object Detail</span>
+          </div>
+          <div style="{{ styles.viewTitle }}">Retention Path</div>
+          <div style="{{ styles.viewDesc }}">SOS <code style="{{ styles.code }}">gcroot {{ current.address }}</code> — GC roots keeping this object alive.</div>
+        </div>
+        <div style="{{ styles.retentionModeGroup }}">
+          <button onClick="{{ setModeList }}" style="{{ modeListBtnStyle }}">List</button>
+          <button onClick="{{ setModeGraph }}" style="{{ modeGraphBtnStyle }}">Graph</button>
+        </div>
+        <button onClick="{{ toggleTruncated }}" style="{{ styles.secondaryBtn }}">{{ truncateToggleLabel }}</button>
+      </div>
+
+      <div style="{{ styles.viewPad }}">
+        <sc-if value="{{ truncated }}" hint-placeholder-val="{{ false }}">
+          <div style="{{ styles.truncBanner }}">
+            <div style="{{ styles.truncTitle }}">⚠ Search truncated after 2,000,000 nodes</div>
+            <div style="{{ styles.truncBody }}">The root search gave up before proving a path. This object may still be rooted — this is not a "not rooted" result.</div>
+            <button onClick="{{ rerunUnlimited }}" style="{{ styles.primaryBtnSm }}">Re-run without a limit</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ showGraphMode }}" hint-placeholder-val="{{ false }}">
+          <dc-import name="Canvas" embedded="true" hint-size="100%,620px" style="height:620px;border:1px solid var(--color-neutral-800,#3f424d);border-radius:8px;overflow:hidden"></dc-import>
+        </sc-if>
+
+        <sc-if value="{{ showListMode }}" hint-placeholder-val="{{ true }}">
+          <div style="{{ styles.graphCard }}">
+            <div style="{{ styles.graphSummary }}">
+              <span>{{ rootGroups.length }} GC roots keep this object alive</span>
+              <span onClick="{{ toggleAllRoots }}" style="{{ styles.expandAllLink }}">{{ expandAllLabel }}</span>
+            </div>
+            <sc-for list="{{ rootGroups }}" as="grp" hint-placeholder-count="3">
+              <div style="{{ styles.rootGroup }}">
+                <div style="{{ styles.rootGroupHead }}" onClick="{{ grp.onToggle }}">
+                  <span style="{{ styles.toggleOpen }}">{{ grp.glyph }}</span>
+                  <span style="{{ styles.badgeNeutral }}">{{ grp.kind }}</span>
+                  <sc-if value="{{ grp.pinned }}" hint-placeholder-val="{{ false }}">
+                    <span style="{{ styles.badgeWarning }}">pinned</span>
+                  </sc-if>
+                  <span style="{{ styles.rootGroupName }}">{{ grp.name }}</span>
+                  <span style="{{ styles.rootGroupHops }}">{{ grp.hopCount }} hops</span>
+                </div>
+                <sc-if value="{{ grp.expanded }}" hint-placeholder-val="{{ false }}">
+                  <div role="tree" aria-label="Retention path" style="{{ styles.tree }}">
+                    <sc-for list="{{ grp.nodes }}" as="node" hint-placeholder-count="3">
+                      <div role="treeitem" aria-level="{{ node.level }}" style="{{ node.rowStyle }}">
+                        <span style="{{ styles.addrSpanSm }}" onMouseEnter="{{ node.addrHover.onEnter }}" onMouseLeave="{{ node.addrHover.onLeave }}">{{ node.address }}</span>
+                        <span style="{{ styles.monoMuted }}" onMouseEnter="{{ node.typeHover.onEnter }}" onMouseLeave="{{ node.typeHover.onLeave }}">{{ node.type }}</span>
+                        <span style="{{ styles.sizeMuted }}">{{ node.size }}</span>
+                        <sc-if value="{{ node.shared }}" hint-placeholder-val="{{ false }}">
+                          <span style="{{ styles.sharedTag }}">shared with other roots</span>
+                        </sc-if>
+                        <sc-if value="{{ node.isTarget }}" hint-placeholder-val="{{ false }}">
+                          <span style="{{ styles.targetTag }}">← target</span>
+                        </sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ view.eq.threads }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ styles.viewHeader }}">
+        <div>
+          <div style="{{ styles.viewTitle }}">Threads</div>
+          <div style="{{ styles.viewDesc }}">SOS <code style="{{ styles.code }}">clrthreads</code> — every managed thread; expand to see its stack.</div>
+        </div>
+        <div style="{{ styles.viewCount }}">5 of 5 threads shown (+312 idle)</div>
+      </div>
+
+      <div style="{{ styles.tableWrap }}">
+        <div role="tree" aria-label="Threads">
+          <div role="rowgroup">
+            <div style="{{ styles.threadRow }}" onClick="{{ null }}">
+              <span style="{{ styles.threadToggle }}"> </span>
+              <span style="{{ styles.threadIdCell }}">Managed</span>
+              <span style="{{ styles.threadOsCell }}">OS id</span>
+              <span style="{{ styles.threadAliveCell }}">Alive</span>
+              <span>Exception</span>
+            </div>
+          </div>
+          <sc-for list="{{ threadRows }}" as="th" hint-placeholder-count="3">
+            <div>
+              <div role="treeitem" aria-expanded="{{ th.expanded }}" style="{{ styles.threadRow }}" onClick="{{ th.onToggle }}">
+                <span style="{{ styles.threadToggle }}">{{ th.toggleGlyph }}</span>
+                <span style="{{ styles.threadIdCell }}">{{ th.managedId }}</span>
+                <span style="{{ styles.threadOsCell }}">{{ th.osId }}</span>
+                <span style="{{ styles.threadAliveCell }}">{{ th.aliveLabel }}</span>
+                <sc-if value="{{ th.blocked }}" hint-placeholder-val="{{ false }}">
+                  <span style="{{ styles.blockedBadge }}">blocked</span>
+                </sc-if>
+                <sc-if value="{{ th.hasException }}" hint-placeholder-val="{{ false }}">
+                  <span style="{{ styles.badgeDanger }}">{{ th.exceptionLabel }}</span>
+                </sc-if>
+                <sc-if value="{{ !th.hasException }}" hint-placeholder-val="{{ true }}">
+                  <span style="{{ styles.threadAliveCell }}">—</span>
+                </sc-if>
+              </div>
+              <sc-if value="{{ th.expanded }}" hint-placeholder-val="{{ false }}">
+                <sc-if value="{{ th.hasFrames }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ styles.framesBlock }}">
+                    <sc-for list="{{ th.frames }}" as="fr" hint-placeholder-count="4">
+                      <div style="{{ styles.frameRowShell }}">{{ fr }}</div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ !th.hasFrames }}" hint-placeholder-val="{{ true }}">
+                  <div style="{{ styles.idleNote }}">Idle — parked in the ThreadPool, no distinguishing managed frames.</div>
+                </sc-if>
+              </sc-if>
+            </div>
+          </sc-for>
+          <div style="{{ styles.threadRowIdle }}" onClick="{{ toggleIdle }}">
+            <span style="{{ styles.threadToggle }}">{{ idleGlyph }}</span>
+            <span>312 idle worker threads</span>
+          </div>
+          <sc-if value="{{ expandedIdleNote }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ styles.idleNote }}">All parked in the ThreadPool at <code style="{{ styles.code }}">System.Threading.WaitHandle.WaitOneNative()</code> — no unique stacks to inspect, grouped rather than listed individually.</div>
+          </sc-if>
+        </div>
+
+        <sc-if value="{{ deadlockBanner }}" hint-placeholder-val="{{ false }}">
+          <div style="{{ styles.lockDeadlockBanner }}">{{ deadlockBanner }}</div>
+        </sc-if>
+
+        <div style="{{ styles.locksHead }}">Held locks (syncblk)</div>
+        <table style="{{ styles.table }}">
+          <thead><tr>
+            <th scope="col" style="{{ styles.thMono }}">Lock object</th>
+            <th scope="col" style="{{ styles.thText }}">Type</th>
+            <th scope="col" style="{{ styles.thText }}">Owner thread</th>
+            <th scope="col" style="{{ styles.thText }}">Waiting threads</th>
+          </tr></thead>
+          <tbody>
+            <sc-for list="{{ lockRows }}" as="lk" hint-placeholder-count="2">
+              <tr style="{{ styles.tr }}">
+                <td style="{{ styles.tdMono }}"><span style="{{ styles.addrSpan }}" onMouseEnter="{{ lk.addrHover.onEnter }}" onMouseLeave="{{ lk.addrHover.onLeave }}">{{ lk.address }}</span></td>
+                <td style="{{ styles.tdMono }}" onMouseEnter="{{ lk.typeHover.onEnter }}" onMouseLeave="{{ lk.typeHover.onLeave }}">{{ lk.type }}</td>
+                <td style="{{ styles.tdMono }}">{{ lk.ownerManagedId }}</td>
+                <td style="{{ styles.tdMono }}">{{ lk.waitersLabel }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ view.eq.exceptions }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ styles.viewHeader }}">
+        <div>
+          <div style="{{ styles.viewTitle }}">Exceptions</div>
+          <div style="{{ styles.viewDesc }}">SOS <code style="{{ styles.code }}">dumpheap -type Exception</code> — exception objects found on the heap.</div>
+        </div>
+        <div style="{{ styles.viewCount }}">{{ exceptionRows.length }} of {{ exceptionRows.length }} exception objects</div>
+      </div>
+
+      <sc-if value="{{ !selectedException }}" hint-placeholder-val="{{ true }}">
+        <div style="{{ styles.tableWrap }}">
+          <table style="{{ styles.table }}">
+            <thead><tr>
+              <th scope="col" style="{{ styles.thMono }}">Address</th>
+              <th scope="col" style="{{ styles.thText }}">Type</th>
+              <th scope="col" style="{{ styles.thText }}">Thread</th>
+              <th scope="col" style="{{ styles.thText }}">Message</th>
+            </tr></thead>
+            <tbody>
+              <sc-for list="{{ exceptionRows }}" as="ex" hint-placeholder-count="1">
+                <tr style="{{ styles.tr }}" onClick="{{ ex.onSelect }}">
+                  <td style="{{ styles.tdMono }}"><span style="{{ styles.addrSpan }}" onMouseEnter="{{ ex.addrHover.onEnter }}" onMouseLeave="{{ ex.addrHover.onLeave }}">{{ ex.address }}</span></td>
+                  <td style="{{ styles.tdMono }}">{{ ex.type }}</td>
+                  <td style="{{ styles.tdMono }}">{{ ex.threadManagedId }}</td>
+                  <td style="{{ styles.tdType }}">{{ ex.messagePreview }}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ selectedException }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ styles.viewPad }}">
+          <button onClick="{{ backToExceptionList }}" style="{{ styles.backLink }}">← All exceptions</button>
+          <div style="{{ styles.excCard }}">
+            <div style="{{ styles.excHead }}">
+              <span style="{{ styles.badgeDanger }}" onMouseEnter="{{ selectedException.typeHover.onEnter }}" onMouseLeave="{{ selectedException.typeHover.onLeave }}">{{ selectedException.type }}</span>
+              <button onClick="{{ goToFaultingThread }}" style="{{ styles.secondaryBtn }}">View thread {{ selectedException.threadManagedId }} →</button>
+            </div>
+            <div style="{{ styles.excBody }}">
+              <div style="{{ styles.excRow }}"><span style="{{ styles.excKey }}">Address</span><span style="{{ styles.addrSpanSm }}" onMouseEnter="{{ selectedException.addrHover.onEnter }}" onMouseLeave="{{ selectedException.addrHover.onLeave }}">{{ selectedException.address }}</span></div>
+              <div style="{{ styles.excRow }}"><span style="{{ styles.excKey }}">Message</span><span style="{{ styles.mono }}">{{ selectedException.message }}</span></div>
+              <div style="{{ styles.excRow }}"><span style="{{ styles.excKey }}">HRESULT</span><span style="{{ styles.mono }}">{{ selectedException.hresult }}</span></div>
+            </div>
+            <div style="{{ styles.stackBlock }}">
+              <sc-for list="{{ selectedException.frames }}" as="fr" hint-placeholder-count="4">
+                <div style="{{ styles.monoMuted }}">{{ fr }}</div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ selectedException.inner }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ styles.innerWrap }}">
+                <span onClick="{{ toggleInner }}" style="{{ styles.innerToggle }}">{{ innerToggleLabel }}</span>
+                <sc-if value="{{ innerExpanded }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ styles.excHead }}"><span style="{{ styles.badgeNeutral }}">{{ selectedException.inner.type }}</span></div>
+                  <div style="{{ styles.excBody }}">
+                    <div style="{{ styles.excRow }}"><span style="{{ styles.excKey }}">Message</span><span style="{{ styles.mono }}">{{ selectedException.inner.message }}</span></div>
+                    <div style="{{ styles.excRow }}"><span style="{{ styles.excKey }}">HRESULT</span><span style="{{ styles.mono }}">{{ selectedException.inner.hresult }}</span></div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+    </sc-if>
+
+    <sc-if value="{{ view.eq.metadata }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ styles.viewHeader }}">
+        <div>
+          <div style="{{ styles.viewTitle }}">Metadata</div>
+          <div style="{{ styles.viewDesc }}">SOS <code style="{{ styles.code }}">info</code>, <code style="{{ styles.code }}">eeheap</code>, <code style="{{ styles.code }}">threadpool</code> — runtime and process metadata.</div>
+        </div>
+      </div>
+      <div style="{{ styles.viewPad }}">
+        <div style="{{ styles.kvGrid }}">
+          <sc-for list="{{ metadataBlocks }}" as="blk" hint-placeholder-count="3">
+            <div style="{{ styles.kvCard }}">
+              <div style="{{ styles.kvCardTitle }}">{{ blk.title }}</div>
+              <sc-for list="{{ blk.rows }}" as="row" hint-placeholder-count="5">
+                <div style="{{ row.rowStyle }}"><span style="{{ styles.kvKey }}">{{ row.k }}</span><span style="{{ styles.kvVal }}">{{ row.v }}</span></div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ view.eq.modules }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ styles.viewHeader }}">
+        <div>
+          <div style="{{ styles.viewTitle }}">Modules</div>
+          <div style="{{ styles.viewDesc }}">SOS <code style="{{ styles.code }}">lm</code> — native and managed modules loaded into the process.</div>
+        </div>
+        <div style="{{ styles.viewCount }}">{{ moduleCountLabel }}</div>
+      </div>
+      <div style="{{ styles.filterBar }}">
+        <input value="{{ moduleSearch }}" onInput="{{ onModuleSearch }}" placeholder="Module name contains…" style="{{ styles.searchInput }}"/>
+      </div>
+      <div style="{{ styles.tableWrap }}">
+        <table style="{{ styles.table }}">
+          <thead><tr>
+            <th scope="col" style="{{ styles.thMono }}">Base address</th>
+            <th scope="col" style="{{ styles.thText }}">Name</th>
+            <th scope="col" style="{{ styles.thText }}">Version</th>
+            <th scope="col" style="{{ styles.thText }}">Kind</th>
+          </tr></thead>
+          <tbody>
+            <sc-for list="{{ moduleRows }}" as="m" hint-placeholder-count="8">
+              <tr style="{{ styles.tr }}">
+                <td style="{{ styles.tdMono }}"><span style="{{ styles.addrSpan }}" onMouseEnter="{{ m.addrHover.onEnter }}" onMouseLeave="{{ m.addrHover.onLeave }}">{{ m.address }}</span></td>
+                <td style="{{ styles.tdMono }}">{{ m.name }}</td>
+                <td style="{{ styles.tdMono }}">{{ m.version }}</td>
+                <td style="{{ styles.tdAction }}"><span style="{{ m.kindStyle }}">{{ m.kindLabel }}</span></td>
+              </tr>
+            </sc-for>
+            <sc-if value="{{ moduleRowsEmpty }}" hint-placeholder-val="{{ false }}">
+              <tr><td colspan="4" style="{{ styles.emptyCell }}">
+                <div style="{{ styles.emptyTitle }}">No modules match this filter</div>
+              </td></tr>
+            </sc-if>
+          </tbody>
+        </table>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ view.eq.overview }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ styles.viewHeader }}">
+        <div>
+          <div style="{{ styles.viewTitle }}">Overview</div>
+          <div style="{{ styles.viewDesc }}">Dump-level summary — open any view below to investigate.</div>
+        </div>
+      </div>
+      <div style="{{ styles.viewPad }}">
+        <div style="{{ styles.kvCard }}">
+          <sc-for list="{{ overviewDumpRows }}" as="row" hint-placeholder-count="8">
+            <div style="{{ row.rowStyle }}"><span style="{{ styles.kvKey }}">{{ row.k }}</span><span style="{{ styles.kvVal }}">{{ row.v }}</span></div>
+          </sc-for>
+        </div>
+        <div style="{{ styles.ovSectionLabel }}">Views</div>
+        <sc-for list="{{ overviewLinks }}" as="lnk" hint-placeholder-count="5">
+          <div style="{{ styles.ovLinkRow }}" onClick="{{ lnk.onGo }}">
+            <div style="{{ styles.ovLinkLeft }}">
+              <span style="{{ styles.ovLinkLabel }}">{{ lnk.label }}</span>
+              <span style="{{ styles.ovLinkDesc }}">{{ lnk.desc }}</span>
+            </div>
+            <span style="{{ styles.ovLinkGo }}">Open →</span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+  </div>
+
+  <sc-if value="{{ menu }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ menu.style }}" onMouseEnter="{{ cancelMenuClose }}" onMouseLeave="{{ scheduleMenuClose }}">
+      <div style="{{ styles.menuValueLabel }}">{{ menu.valueLabel }}</div>
+      <sc-for list="{{ menu.actions }}" as="act" hint-placeholder-count="2">
+        <div onClick="{{ act.onClick }}" style="{{ styles.menuItem }}">{{ act.label }}</div>
+      </sc-for>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+function themeTokens(mode) {
+  if (mode === 'light') {
+    return {
+      bg: '#f7f8fc', surface: '#ffffff', surfaceAlt: '#eef0f9', border: '#d7dae8', borderStrong: '#b7bbd2',
+      text: '#22232d', textMuted: '#5b5f74', textFaint: '#8a8ea3',
+      accent: '#6e63b0', accentSoft: '#efedfb', accentText: '#5d5294',
+      warnBase: '#a3762a', warnSoft: '#faf1de', warnText: '#7a5820',
+      dangerBase: '#b0453f', dangerSoft: '#fbeceb',
+      okBase: '#3f8a55', okSoft: '#eaf6ee',
+      mono: "'JetBrains Mono', ui-monospace, monospace"
+    };
+  }
+  return {
+    bg: '#161826', surface: '#232532', surfaceAlt: '#2c2f3e', border: '#3f424d', borderStrong: '#595d6c',
+    text: '#e9e9ed', textMuted: '#9397ab', textFaint: '#75798c',
+    accent: '#9184d9', accentSoft: 'rgba(145,132,217,0.14)', accentText: '#d2cefd',
+    warnBase: '#caa053', warnSoft: 'rgba(202,160,83,0.14)', warnText: '#e8cd94',
+    dangerBase: '#d16a6a', dangerSoft: 'rgba(209,106,106,0.14)',
+    okBase: '#6fae7f', okSoft: 'rgba(111,174,127,0.14)',
+    mono: "'JetBrains Mono', ui-monospace, monospace"
+  };
+}
+
+function formatInt(n) { return n.toLocaleString('en-US'); }
+function formatBytes(n) {
+  if (n < 1024) return n + ' B';
+  const units = ['KB','MB','GB','TB']; let u = -1; let v = n;
+  do { v /= 1024; u++; } while (v >= 1024 && u < units.length - 1);
+  return v.toFixed(1) + ' ' + units[u];
+}
+function parseSizeInput(s) {
+  if (!s) return null;
+  const m = String(s).trim().toLowerCase().match(/^([\d.]+)\s*(b|kb|mb|gb)?$/);
+  if (!m) return null;
+  const n = parseFloat(m[1]); const unit = m[2] || 'b';
+  const mult = { b: 1, kb: 1024, mb: 1024*1024, gb: 1024*1024*1024 }[unit];
+  return n * mult;
+}
+
+const HEAP_ROWS_RAW = [
+  { methodTable: '00007F2C1A4B2E30', count: 4182344, size: 267670016, type: 'System.String' },
+  { methodTable: '00007F2C1A4C0918', count: 1204881, size: 115668576, type: 'System.Byte[]' },
+  { methodTable: '00007F2C1B2E4440', count: 982110, size: 47141280, type: 'System.Collections.Generic.Dictionary<System.String,MyApp.Domain.CacheEntry>+Entry[]' },
+  { methodTable: '00007F2C1C081A50', count: 3, size: 24, type: 'MyApp.Infrastructure.Telemetry.MetricsCollector' },
+];
+
+const OBJECTS = {
+  '00007F2C14A20918': {
+    address: '00007F2C14A20918', type: 'MyApp.Domain.CacheEntry', size: '72 bytes', methodTable: '00007F2C1B2E4440', isLeaf: false,
+    fields: [
+      { offset: '0x08', type: 'System.String', name: '_key', value: '"tenant:8842:profile"', nav: null },
+      { offset: '0x10', type: 'System.Byte[]', name: '_payload', value: '00007F2C14A22100', nav: '00007F2C14A22100' },
+      { offset: '0x18', type: 'System.DateTime', name: '_createdUtc', value: '2026-07-27 21:16:44Z', nav: null },
+      { offset: '0x20', type: 'MyApp.Domain.CacheEntry', name: '_next', value: '00007F2C14A20A40', nav: '00007F2C14A20A40' },
+      { offset: '0x28', type: 'System.Int32', name: '_hitCount', value: '14', nav: null },
+    ]
+  },
+  '00007F2C14A20A40': {
+    address: '00007F2C14A20A40', type: 'MyApp.Domain.CacheEntry', size: '72 bytes', methodTable: '00007F2C1B2E4440', isLeaf: false,
+    fields: [
+      { offset: '0x08', type: 'System.String', name: '_key', value: '"tenant:9010:profile"', nav: null },
+      { offset: '0x10', type: 'System.Byte[]', name: '_payload', value: '00007F2C14A22740', nav: '00007F2C14A22740' },
+      { offset: '0x18', type: 'System.DateTime', name: '_createdUtc', value: '2026-07-27 21:17:02Z', nav: null },
+      { offset: '0x20', type: 'MyApp.Domain.CacheEntry', name: '_next', value: '00007F2C14A20918', nav: '00007F2C14A20918' },
+      { offset: '0x28', type: 'System.Int32', name: '_hitCount', value: '3', nav: null },
+    ]
+  },
+  '00007F2C14A22100': { address: '00007F2C14A22100', type: 'System.Byte[]', size: '512 bytes', methodTable: null, isLeaf: true, fields: [] },
+  '00007F2C14A22740': { address: '00007F2C14A22740', type: 'System.Byte[]', size: '512 bytes', methodTable: null, isLeaf: true, fields: [] },
+};
+
+const ROOT_GROUPS_RAW = [
+  {
+    id: 'g1', kind: '[static var]', name: 'MyApp.Infrastructure.CacheHost.s_instance', pinned: true,
+    nodes: [
+      { level: 1, address: '00007F2C0E110220', type: 'MyApp.Infrastructure.CacheHost', size: '40 B', shared: false },
+      { level: 2, address: '00007F2C0E110300', type: 'Dictionary<String, CacheEntry>', size: '80 B', shared: false },
+      { level: 3, address: '00007F2C0E118880', type: 'Dictionary<String, CacheEntry>+Entry[]', size: '4.1 MB', shared: true },
+      { level: 4, address: '00007F2C14A20918', type: 'MyApp.Domain.CacheEntry', size: '72 B', shared: false, target: true },
+    ],
+  },
+  {
+    id: 'g2', kind: '[local var]', name: 'Thread 14 · ReportController.Generate', pinned: false,
+    nodes: [
+      { level: 1, address: '00007F2C0E120040', type: 'System.Collections.Generic.List<CacheEntry>', size: '32 B', shared: false },
+      { level: 2, address: '00007F2C0E118880', type: 'Dictionary<String, CacheEntry>+Entry[]', size: '4.1 MB', shared: true },
+      { level: 3, address: '00007F2C14A20918', type: 'MyApp.Domain.CacheEntry', size: '72 B', shared: false, target: true },
+    ],
+  },
+  {
+    id: 'g3', kind: '[gc handle]', name: 'Strong handle #4412', pinned: true,
+    nodes: [
+      { level: 1, address: '00007F2C14A20918', type: 'MyApp.Domain.CacheEntry', size: '72 B', shared: false, target: true },
+    ],
+  },
+];
+
+const THREADS_RAW = [
+  { managedId: 1, osId: 24591, alive: true, exception: null, blocked: false,
+    frames: [] },
+  { managedId: 7, osId: 24601, alive: true, exception: null, blocked: true,
+    frames: [
+      'MyApp.Domain.CacheHost.Evict(String)',
+      'System.Threading.Monitor.Enter(Object)',
+    ] },
+  { managedId: 9, osId: 24605, alive: true, exception: null, blocked: true,
+    frames: [
+      'MyApp.Domain.ReportBuilder.Flush()',
+      'System.Threading.Monitor.Enter(Object)',
+    ] },
+  { managedId: 14, osId: 24610, alive: true, exception: 'System.OutOfMemoryException', blocked: false,
+    frames: [
+      'MyApp.Api.Controllers.ReportController.Generate(ReportRequest)',
+      'System.Linq.Enumerable+SelectListIterator`2.MoveNext()',
+      'System.Collections.Generic.List`1.AddWithResize(T)',
+      'System.Array.Resize[T](T[] ByRef, Int32)',
+    ] },
+  { managedId: 22, osId: 24618, alive: false, exception: null, blocked: false, frames: [] },
+];
+const LOCKS_RAW = [
+  { id: 'L1', address: '00007F2C0E200010', type: 'MyApp.Infrastructure.CacheHost', ownerManagedId: 7, waiters: [9] },
+  { id: 'L2', address: '00007F2C0E200090', type: 'MyApp.Domain.ReportBuilder', ownerManagedId: 9, waiters: [7] },
+];
+
+const EXCEPTIONS_RAW = [
+  {
+    address: '00007F2C1D004A10', type: 'System.OutOfMemoryException', threadManagedId: 14,
+    message: 'Insufficient memory to continue the execution of the program.', hresult: '0x8007000E',
+    inner: {
+      type: 'System.AggregateException', message: 'One or more errors occurred.', hresult: '0x80131500',
+      inner: null,
+    },
+  },
+];
+
+const METADATA_BLOCKS = [
+  { title: 'Runtime (info)', rows: [
+    ['CLR version', '8.0.7.32013'], ['Architecture', 'x64'], ['OS', 'linux-x64'], ['Process id', '24571'], ['GC mode', 'Server, concurrent'],
+  ] },
+  { title: 'GC heap (eeheap)', rows: [
+    ['Heap segments', '4'], ['Gen0', '186.2 MB'], ['Gen1', '94.7 MB'], ['Gen2', '1.8 GB'], ['LOH', '198.3 MB'], ['POH', '0 B'], ['Total committed', '2.6 GB'],
+  ] },
+  { title: 'ThreadPool', rows: [
+    ['Worker threads', '12 / 12 busy'], ['Completion port threads', '2 / 2 busy'], ['Queue length', '842'], ['Min / max workers', '4 / 32767'],
+  ] },
+];
+
+const MODULES_RAW = [
+  { address: '00007F2C00010000', name: 'MyApp.Api.dll', version: '1.0.0.0', kind: 'managed' },
+  { address: '00007F2C00120000', name: 'MyApp.Domain.dll', version: '1.0.0.0', kind: 'managed' },
+  { address: '00007F2C00230000', name: 'MyApp.Infrastructure.dll', version: '1.0.0.0', kind: 'managed' },
+  { address: '00007F2C00340000', name: 'System.Private.CoreLib.dll', version: '8.0.7.32013', kind: 'managed' },
+  { address: '00007F2C00450000', name: 'System.Runtime.dll', version: '8.0.7.32013', kind: 'managed' },
+  { address: '00007F2C00560000', name: 'Microsoft.Extensions.Caching.Abstractions.dll', version: '8.0.0.0', kind: 'managed' },
+  { address: '00007F2BFC000000', name: 'libcoreclr.so', version: '8.0.7.32013', kind: 'native' },
+  { address: '00007F2BFB800000', name: 'libc.so.6', version: '2.35', kind: 'native' },
+];
+
+class Component extends DCLogic {
+  state = {
+    theme: 'dark', navCollapsed: false, view: 'pending',
+    pendingCount: 0, pendingElapsedMs: 0,
+    filters: { search: '', sizeMin: '', countMin: '' },
+    sort: { key: 'size', dir: 'desc' },
+    currentAddress: '00007F2C14A20918', breadcrumbAddrs: [],
+    rootExpanded: { g1: true, g2: false, g3: false },
+    truncated: true, retentionMode: 'list',
+    expandedThreads: { '14': true }, idleExpanded: false, selectedExceptionId: null, innerExpanded: false,
+    moduleSearch: '', menu: null,
+  };
+
+  componentDidMount() {
+    this._pendingTimer = setInterval(() => {
+      this.setState(s => {
+        if (s.view !== 'pending') return null;
+        const nextCount = Math.min(10238441, s.pendingCount + Math.round(10238441 / 34));
+        const nextElapsed = s.pendingElapsedMs + 120;
+        if (nextCount >= 10238441) {
+          clearInterval(this._pendingTimer);
+          setTimeout(() => this.setState({ view: 'heap' }), 500);
+        }
+        return { pendingCount: nextCount, pendingElapsedMs: nextElapsed };
+      });
+    }, 120);
+  }
+  componentWillUnmount() { clearInterval(this._pendingTimer); }
+
+  copyToClipboard(text) {
+    if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
+  }
+
+  buildActions(kind, value) {
+    if (kind === 'address') {
+      const actions = [{ label: 'Copy address', run: () => this.copyToClipboard(value) }];
+      if (OBJECTS[value]) actions.push({ label: 'Open object detail →', run: () => this.setState({ view: 'detail', currentAddress: value, breadcrumbAddrs: [] }) });
+      if (value === '00007F2C14A20918') actions.push({ label: 'Find GC roots →', run: () => this.setState({ view: 'retention' }) });
+      return actions;
+    }
+    if (kind === 'methodtable') {
+      const match = HEAP_ROWS_RAW.find(r => r.methodTable === value);
+      const actions = [{ label: 'Copy MethodTable', run: () => this.copyToClipboard(value) }];
+      if (match) actions.push({ label: 'View in Heap Types →', run: () => this.setState({ view: 'heap' }) });
+      return actions;
+    }
+    if (kind === 'type') {
+      const shortName = value.split('.').pop().split('<')[0].split('+')[0];
+      return [
+        { label: 'Copy full type name', run: () => this.copyToClipboard(value) },
+        { label: `Filter Heap Types by "${shortName}" →`, run: () => this.setState(s => ({ view: 'heap', filters: { ...s.filters, search: shortName } })) },
+      ];
+    }
+    return [{ label: 'Copy', run: () => this.copyToClipboard(value) }];
+  }
+
+  openMenu(kind, value, rect) {
+    clearTimeout(this._closeTimer);
+    const actions = this.buildActions(kind, value);
+    const menuW = 220;
+    let x = rect.left;
+    if (typeof window !== 'undefined') x = Math.min(x, window.innerWidth - menuW - 12);
+    this.setState({ menu: { kind, value, actions, x, y: rect.bottom + 6 } });
+  }
+  scheduleMenuClose() { this._closeTimer = setTimeout(() => this.setState({ menu: null }), 220); }
+  cancelMenuClose() { clearTimeout(this._closeTimer); }
+  hoverProps(kind, value) {
+    return {
+      onEnter: e => this.openMenu(kind, value, e.currentTarget.getBoundingClientRect()),
+      onLeave: () => this.scheduleMenuClose(),
+    };
+  }
+
+  renderVals() {
+    const t = themeTokens(this.state.theme);
+    const mono = t.mono;
+
+    const styles = {
+      root: `position:fixed;inset:0;display:flex;background:${t.bg};color:${t.text};font-family:var(--font-body,'Inter',sans-serif);font-size:13px;overflow:hidden`,
+      nav: `width:${this.state.navCollapsed ? '52px' : '200px'};flex-shrink:0;display:flex;flex-direction:column;background:${t.surface};border-right:1px solid ${t.border};transition:width 150ms ease`,
+      navHead: `display:flex;align-items:center;justify-content:space-between;padding:14px 12px;border-bottom:1px solid ${t.border}`,
+      navToggle: `background:transparent;border:1px solid ${t.border};color:${t.textMuted};border-radius:6px;width:24px;height:24px;cursor:pointer;font-size:11px;flex-shrink:0`,
+      navGroups: `flex:1;padding:8px;display:flex;flex-direction:column;gap:2px`,
+      navFoot: `padding:10px;border-top:1px solid ${t.border}`,
+      themeBtn: `width:100%;background:transparent;border:1px solid ${t.border};color:${t.textMuted};border-radius:6px;padding:7px 8px;cursor:pointer;font-size:12px;text-align:left`,
+      main: `flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden`,
+      dumpBar: `display:flex;align-items:center;justify-content:space-between;padding:9px 20px;background:${t.surfaceAlt};border-bottom:1px solid ${t.border};font-size:11.5px;color:${t.textMuted};gap:16px`,
+      dumpBarLeft: `display:flex;align-items:center;gap:10px;min-width:0;overflow:hidden`,
+      dumpBarRight: `display:flex;align-items:center;gap:12px;flex-shrink:0`,
+      dumpFile: `font-family:${mono};color:${t.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis`,
+      dumpSep: `color:${t.textFaint}`,
+      dumpMeta: `white-space:nowrap`,
+      viewPad: `padding:20px 24px;overflow:auto;flex:1`,
+      viewHeader: `display:flex;align-items:flex-start;justify-content:space-between;padding:18px 24px 12px;border-bottom:1px solid ${t.border};gap:16px`,
+      viewTitle: `font-family:var(--font-heading);font-weight:500;font-size:20px;margin-bottom:2px`,
+      viewDesc: `color:${t.textMuted};font-size:12.5px`,
+      viewCount: `color:${t.textMuted};font-size:12px;white-space:nowrap;padding-top:4px`,
+      code: `font-family:${mono};background:${t.surfaceAlt};padding:1px 5px;border-radius:4px;font-size:11.5px`,
+      filterBar: `display:flex;align-items:center;gap:10px;padding:12px 24px;flex-wrap:wrap`,
+      searchInput: `background:${t.surface};border:1px solid ${t.border};color:${t.text};border-radius:6px;padding:7px 10px;font-size:12.5px;width:220px;font-family:var(--font-body)`,
+      filterField: `display:flex;align-items:center;gap:6px`,
+      filterLabel: `color:${t.textMuted};font-size:11.5px`,
+      filterInput: `background:${t.surface};border:1px solid ${t.border};color:${t.text};border-radius:6px;padding:7px 10px;font-size:12.5px;width:100px;font-family:${mono}`,
+      clearBtn: `background:transparent;border:1px solid ${t.border};color:${t.textMuted};border-radius:6px;padding:6px 10px;font-size:11.5px;cursor:pointer`,
+      chipRow: `display:flex;gap:6px;padding:0 24px 12px;flex-wrap:wrap`,
+      chip: `display:inline-flex;align-items:center;gap:6px;background:${t.accentSoft};color:${t.accentText};border:1px solid ${t.accent};border-radius:100px;padding:3px 6px 3px 10px;font-size:11.5px`,
+      chipX: `cursor:pointer;opacity:0.7;padding:0 3px`,
+      tableWrap: `padding:0 24px 24px`,
+      table: `width:100%;border-collapse:collapse;font-size:12.5px`,
+      thMono: `text-align:left;font-family:${mono};font-weight:500;color:${t.textMuted};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;padding:8px 10px;border-bottom:1px solid ${t.borderStrong};position:sticky;top:0;background:${t.bg}`,
+      thNum: `text-align:right;font-weight:500;color:${t.textMuted};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;padding:8px 10px;border-bottom:1px solid ${t.borderStrong};cursor:pointer;white-space:nowrap;position:sticky;top:0;background:${t.bg}`,
+      thText: `text-align:left;font-weight:500;color:${t.textMuted};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;padding:8px 10px;border-bottom:1px solid ${t.borderStrong};position:sticky;top:0;background:${t.bg}`,
+      thAction: `border-bottom:1px solid ${t.borderStrong};position:sticky;top:0;background:${t.bg}`,
+      tr: `border-bottom:1px solid ${t.border}`,
+      tdMono: `padding:8px 10px;font-family:${mono};color:${t.text};white-space:nowrap`,
+      tdNum: `padding:8px 10px;text-align:right;font-family:${mono};color:${t.text};white-space:nowrap`,
+      tdType: `padding:8px 10px;font-family:${mono};color:${t.textMuted};max-width:1px;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`,
+      tdAction: `padding:8px 10px;text-align:right;white-space:nowrap`,
+      addrSpan: `cursor:pointer;border-bottom:1px dashed ${t.textFaint}`,
+      addrSpanSm: `cursor:pointer;font-family:${mono};font-size:12px;border-bottom:1px dashed ${t.textFaint};color:${t.text}`,
+      sampleBtn: `background:transparent;border:1px solid ${t.accent};color:${t.accentText};border-radius:6px;padding:5px 10px;font-size:11.5px;cursor:pointer;white-space:nowrap`,
+      emptyCell: `padding:32px;text-align:center;color:${t.textMuted}`,
+      emptyTitle: `margin-bottom:10px;font-size:13px`,
+      endOfData: `color:${t.textFaint};font-size:11.5px;padding:10px 0;text-align:center`,
+      breadcrumb: `display:flex;align-items:center;gap:6px;font-size:11.5px;color:${t.textMuted};margin-bottom:8px`,
+      crumbLink: `cursor:pointer;color:${t.accentText}`,
+      crumbSep: `color:${t.textFaint}`,
+      primaryBtn: `background:transparent;border:1px solid ${t.accent};color:${t.accentText};border-radius:6px;padding:8px 14px;font-size:12.5px;cursor:pointer;white-space:nowrap;flex-shrink:0`,
+      primaryBtnSm: `background:transparent;border:1px solid ${t.warnBase};color:${t.warnText};border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0`,
+      secondaryBtn: `background:transparent;border:1px solid ${t.border};color:${t.textMuted};border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0`,
+      detailCard: `background:${t.surface};border:1px solid ${t.border};border-radius:8px;max-width:900px`,
+      detailHead: `padding:16px 18px;border-bottom:1px solid ${t.border};display:flex;flex-direction:column;gap:6px`,
+      detailHeadRow: `display:flex;gap:10px;align-items:baseline;font-size:12.5px`,
+      detailHeadLabel: `color:${t.textMuted};width:100px;flex-shrink:0`,
+      monoStrong: `font-family:${mono};color:${t.text};font-weight:600`,
+      mono: `font-family:${mono};color:${t.text}`,
+      monoMuted: `font-family:${mono};color:${t.textMuted};font-size:12px`,
+      sizeMuted: `font-family:${mono};color:${t.textFaint};font-size:11.5px;margin-left:auto`,
+      leafNote: `padding:16px 18px;color:${t.textMuted};font-size:12.5px`,
+      tree: `display:flex;flex-direction:column;gap:1px;max-width:900px`,
+      badgeWarning: `background:${t.warnSoft};color:${t.warnText};border:1px solid ${t.warnBase};border-radius:4px;padding:1px 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:0.03em`,
+      badgeNeutral: `background:${t.surfaceAlt};color:${t.textMuted};border:1px solid ${t.border};border-radius:4px;padding:1px 6px;font-size:10.5px;white-space:nowrap`,
+      toggleOpen: `display:inline-block;width:16px;cursor:pointer;color:${t.textFaint};font-size:11px`,
+      targetTag: `color:${t.warnText};font-size:11.5px;font-weight:500;margin-left:6px;white-space:nowrap;flex-shrink:0`,
+      graphCard: `background:${t.surface};border:1px solid ${t.border};border-radius:8px;max-width:820px;overflow:hidden`,
+      graphSummary: `display:flex;align-items:center;justify-content:space-between;padding:10px 16px;color:${t.textMuted};font-size:12px;border-bottom:1px solid ${t.border}`,
+      expandAllLink: `color:${t.accentText};cursor:pointer`,
+      rootGroup: `border-bottom:1px solid ${t.border}`,
+      rootGroupHead: `display:flex;align-items:center;gap:8px;padding:9px 16px;cursor:pointer;font-size:12.5px`,
+      rootGroupName: `color:${t.text};flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`,
+      rootGroupHops: `color:${t.textFaint};font-size:11px;font-family:${mono};flex-shrink:0`,
+      sharedTag: `color:${t.textFaint};font-size:11px;font-style:italic;margin-left:auto`,
+      retentionModeGroup: `display:flex;gap:2px;background:${t.surfaceAlt};border:1px solid ${t.border};border-radius:6px;padding:2px;flex-shrink:0`,
+      threadRow: `display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid ${t.border};cursor:pointer;font-size:12.5px`,
+      threadRowIdle: `display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid ${t.border};cursor:pointer;font-size:12.5px;color:${t.textFaint}`,
+      threadToggle: `display:inline-block;width:14px;color:${t.textFaint};font-size:11px`,
+      threadIdCell: `font-family:${mono};color:${t.text};width:70px`,
+      threadOsCell: `font-family:${mono};color:${t.textMuted};width:90px`,
+      threadAliveCell: `width:60px;color:${t.textMuted}`,
+      framesBlock: `padding:6px 10px 12px 40px;display:flex;flex-direction:column;gap:2px`,
+      frameRowShell: `font-family:${mono};font-size:12px;color:${t.textMuted};white-space:nowrap;overflow-x:auto`,
+      idleNote: `padding:6px 10px 12px 40px;color:${t.textFaint};font-size:12px;font-style:italic`,
+      blockedBadge: `background:${t.dangerSoft};color:${t.dangerBase};border:1px solid ${t.dangerBase};border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap`,
+      lockDeadlockBanner: `background:${t.dangerSoft};border:1px solid ${t.dangerBase};border-radius:8px;padding:14px 16px;margin:16px 0;color:${t.text};font-size:12.5px;line-height:1.5`,
+      locksHead: `color:${t.textMuted};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;margin:24px 0 8px;padding-top:12px;border-top:1px solid ${t.border}`,
+      badgeDanger: `background:${t.dangerSoft};color:${t.dangerBase};border:1px solid ${t.dangerBase};border-radius:4px;padding:1px 6px;font-size:10.5px;white-space:nowrap`,
+      excCard: `background:${t.surface};border:1px solid ${t.border};border-radius:8px;max-width:820px`,
+      excHead: `padding:14px 18px;border-bottom:1px solid ${t.border};display:flex;align-items:center;justify-content:space-between;gap:12px`,
+      excBody: `padding:12px 18px;display:flex;flex-direction:column;gap:8px`,
+      excRow: `display:flex;gap:16px;font-size:12.5px`,
+      excKey: `color:${t.textMuted};width:100px;flex-shrink:0`,
+      stackBlock: `padding:12px 18px;border-top:1px solid ${t.border};display:flex;flex-direction:column;gap:2px`,
+      innerWrap: `border-top:1px solid ${t.border}`,
+      innerToggle: `padding:10px 18px;color:${t.accentText};font-size:12px;cursor:pointer`,
+      backLink: `background:transparent;border:1px solid ${t.border};color:${t.textMuted};border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap`,
+      kvGrid: `display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px`,
+      kvCard: `background:${t.surface};border:1px solid ${t.border};border-radius:8px;padding:4px 18px`,
+      kvCardTitle: `padding:12px 0 8px;color:${t.textMuted};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid ${t.border}`,
+      kvRow: `display:flex;gap:16px;padding:8px 0;border-bottom:1px solid ${t.border};font-size:12.5px`,
+      kvRowLast: `display:flex;gap:16px;padding:8px 0;font-size:12.5px`,
+      kvKey: `color:${t.textMuted};width:170px;flex-shrink:0`,
+      kvVal: `font-family:${mono};color:${t.text}`,
+      badgeManaged: `background:${t.accentSoft};color:${t.accentText};border:1px solid ${t.accent};border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap`,
+      badgeNative: `background:${t.surfaceAlt};color:${t.textMuted};border:1px solid ${t.border};border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap`,
+      ovLinkRow: `display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid ${t.border};cursor:pointer`,
+      ovLinkLeft: `display:flex;flex-direction:column;gap:2px;min-width:0`,
+      ovLinkLabel: `color:${t.text};font-size:13.5px;font-family:var(--font-heading);font-weight:500`,
+      ovLinkDesc: `color:${t.textMuted};font-size:12px`,
+      ovLinkGo: `color:${t.accentText};font-size:12px;white-space:nowrap;flex-shrink:0`,
+      ovSectionLabel: `color:${t.textMuted};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;margin:24px 0 4px`,
+      menuValueLabel: `font-family:${mono};color:${t.textFaint};font-size:10.5px;padding:6px 8px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`,
+      menuItem: `padding:7px 8px;font-size:12.5px;color:${t.text};border-radius:5px;cursor:pointer`,
+      pendingWrap: `max-width:520px;margin:60px auto 0;text-align:center`,
+      pendingTitle: `font-family:var(--font-heading);font-weight:500;font-size:22px;margin-bottom:8px`,
+      pendingSub: `color:${t.textMuted};font-size:13px;margin-bottom:24px;line-height:1.5`,
+      progressTrack: `height:6px;border-radius:100px;background:${t.surfaceAlt};overflow:hidden;margin-bottom:10px`,
+      pendingStats: `display:flex;justify-content:space-between;color:${t.textFaint};font-size:11.5px;font-family:${mono}`,
+      truncBanner: `background:${t.warnSoft};border:1px solid ${t.warnBase};border-radius:8px;padding:16px 18px;max-width:640px;display:flex;flex-direction:column;gap:8px;align-items:flex-start`,
+      truncTitle: `color:${t.warnText};font-weight:600;font-size:13.5px;white-space:nowrap`,
+      truncBody: `color:${t.text};font-size:12.5px;line-height:1.5`,
+    };
+
+    // heap filtering + sorting
+    const search = this.state.filters.search.toLowerCase();
+    const sizeMin = parseSizeInput(this.state.filters.sizeMin);
+    const countMin = parseInt(this.state.filters.countMin, 10);
+    let rows = HEAP_ROWS_RAW.filter(r =>
+      (!search || r.type.toLowerCase().includes(search)) &&
+      (sizeMin === null || r.size >= sizeMin) &&
+      (isNaN(countMin) || r.count >= countMin)
+    );
+    rows.sort((a, b) => (a[this.state.sort.key] - b[this.state.sort.key]) * (this.state.sort.dir === 'asc' ? 1 : -1));
+
+    const heapRows = rows.map(r => ({
+      methodTable: r.methodTable,
+      countLabel: formatInt(r.count),
+      sizeHuman: formatBytes(r.size),
+      sizeExactLabel: formatInt(r.size),
+      typeDisplay: r.type.length > 58 ? r.type.slice(0, 38) + '…' + r.type.slice(-14) : r.type,
+      typeFull: r.type,
+      sampleable: r.type.includes('Entry['),
+      onCopy: () => this.copyToClipboard(r.methodTable),
+      onSample: () => this.setState({ view: 'detail', currentAddress: '00007F2C14A20918', breadcrumbAddrs: [] }),
+      mtHover: this.hoverProps('methodtable', r.methodTable),
+      typeHover: this.hoverProps('type', r.type),
+    }));
+
+    const activeChips = [];
+    if (this.state.filters.search) activeChips.push({ label: `type contains "${this.state.filters.search}"`, onRemove: () => this.setState(s => ({ filters: { ...s.filters, search: '' } })) });
+    if (this.state.filters.sizeMin) activeChips.push({ label: `size ≥ ${this.state.filters.sizeMin}`, onRemove: () => this.setState(s => ({ filters: { ...s.filters, sizeMin: '' } })) });
+    if (this.state.filters.countMin) activeChips.push({ label: `count ≥ ${this.state.filters.countMin}`, onRemove: () => this.setState(s => ({ filters: { ...s.filters, countMin: '' } })) });
+
+    const obj = OBJECTS[this.state.currentAddress];
+    const current = {
+      address: obj.address, type: obj.type, size: obj.size, methodTable: obj.methodTable, isLeaf: obj.isLeaf,
+      onCopyAddr: () => this.copyToClipboard(obj.address),
+      addrHover: this.hoverProps('address', obj.address),
+      typeHover: this.hoverProps('type', obj.type),
+      mtHover: obj.methodTable ? this.hoverProps('methodtable', obj.methodTable) : null,
+      fields: obj.fields.map(f => ({
+        offset: f.offset, type: f.type, name: f.name, value: f.value,
+        valueStyle: f.nav
+          ? `padding:8px 10px;font-family:${mono};color:${t.accentText};cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px`
+          : `padding:8px 10px;font-family:${mono};color:${t.text}`,
+        onNavigate: f.nav ? () => this.setState(s => ({ currentAddress: f.nav, breadcrumbAddrs: [...s.breadcrumbAddrs, s.currentAddress] })) : null,
+        hover: f.nav ? this.hoverProps('address', f.nav) : { onEnter: null, onLeave: null },
+      })),
+    };
+
+    const breadcrumb = this.state.breadcrumbAddrs.map(addr => ({
+      label: addr, style: `${styles.crumbLink}`,
+      onGo: () => this.setState(s => ({ currentAddress: addr, breadcrumbAddrs: s.breadcrumbAddrs.slice(0, s.breadcrumbAddrs.indexOf(addr)) })),
+    }));
+
+    const rootGroups = ROOT_GROUPS_RAW.map(g => {
+      const expanded = this.state.rootExpanded[g.id];
+      return {
+        id: g.id, kind: g.kind, name: g.name, pinned: g.pinned, hopCount: g.nodes.length, expanded,
+        glyph: expanded ? '▾' : '▸',
+        onToggle: () => this.setState(s => ({ rootExpanded: { ...s.rootExpanded, [g.id]: !s.rootExpanded[g.id] } })),
+        nodes: g.nodes.map(n => ({
+          level: n.level, address: n.address, type: n.type, size: n.size, shared: n.shared, isTarget: !!n.target,
+          rowStyle: `display:flex;align-items:center;gap:8px;padding:4px 16px;padding-left:${16 + n.level * 16}px;font-size:12px`,
+          addrHover: this.hoverProps('address', n.address), typeHover: this.hoverProps('type', n.type),
+        })),
+      };
+    });
+    const allRootsExpanded = rootGroups.every(g => g.expanded);
+
+    const threadRows = THREADS_RAW.map(th => {
+      const idStr = String(th.managedId);
+      const expanded = !!this.state.expandedThreads[idStr];
+      return {
+        managedId: th.managedId, osId: th.osId, aliveLabel: th.alive ? 'yes' : 'no',
+        exceptionLabel: th.exception || '—',
+        hasException: !!th.exception, blocked: th.blocked,
+        expanded, hasFrames: th.frames.length > 0, frames: th.frames,
+        toggleGlyph: expanded ? '▾' : '▸',
+        onToggle: () => this.setState(s => ({ expandedThreads: { ...s.expandedThreads, [idStr]: !s.expandedThreads[idStr] } })),
+      };
+    });
+
+    const lockRows = LOCKS_RAW.map(l => ({
+      address: l.address, type: l.type, ownerManagedId: l.ownerManagedId,
+      waitersLabel: l.waiters.join(', '),
+      addrHover: this.hoverProps('address', l.address), typeHover: this.hoverProps('type', l.type),
+    }));
+    // simple cycle check: does owner of any lock wait on a lock held by a thread waiting on it back?
+    const ownerOf = {}; LOCKS_RAW.forEach(l => { ownerOf[l.ownerManagedId] = l; });
+    let deadlockCycle = null;
+    for (const l of LOCKS_RAW) {
+      for (const waiterId of l.waiters) {
+        const waiterLock = ownerOf[waiterId];
+        if (waiterLock && waiterLock.waiters.includes(l.ownerManagedId)) {
+          deadlockCycle = { threadA: l.ownerManagedId, lockA: l.address, threadB: waiterId, lockB: waiterLock.address };
+        }
+      }
+    }
+
+    const exceptionRows = EXCEPTIONS_RAW.map(ex => ({
+      address: ex.address, type: ex.type, threadManagedId: ex.threadManagedId,
+      messagePreview: ex.message.length > 60 ? ex.message.slice(0, 57) + '…' : ex.message,
+      onSelect: () => this.setState({ selectedExceptionId: ex.address }),
+      addrHover: this.hoverProps('address', ex.address),
+    }));
+    const selectedException = EXCEPTIONS_RAW.find(ex => ex.address === this.state.selectedExceptionId) || null;
+    const faultingThread = selectedException ? THREADS_RAW.find(th => th.managedId === selectedException.threadManagedId) : null;
+
+    const menu = this.state.menu ? {
+      style: `position:fixed;left:${this.state.menu.x}px;top:${this.state.menu.y}px;background:${t.surface};border:1px solid ${t.borderStrong};border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.45);min-width:200px;z-index:1000;padding:6px;box-sizing:border-box`,
+      valueLabel: this.state.menu.value,
+      actions: this.state.menu.actions.map(a => ({ label: a.label, onClick: () => { a.run(); this.setState({ menu: null }); } })),
+    } : null;
+
+    return {
+      t, styles, menu,
+      cancelMenuClose: () => this.cancelMenuClose(),
+      scheduleMenuClose: () => this.scheduleMenuClose(),
+      navCollapsed: this.state.navCollapsed,
+      toggleNav: () => this.setState(s => ({ navCollapsed: !s.navCollapsed })),
+      navToggleGlyph: this.state.navCollapsed ? '»' : '«',
+      navGroups: ['Overview', 'Heap', 'Threads', 'Exceptions', 'Modules', 'Metadata'].map(label => {
+        const active = label === 'Overview' || label === 'Heap' || label === 'Threads' || label === 'Exceptions' || label === 'Metadata' || label === 'Modules';
+        const targetView = label === 'Overview' ? 'overview' : label === 'Heap' ? 'heap' : label === 'Threads' ? 'threads' : label === 'Exceptions' ? 'exceptions' : label === 'Metadata' ? 'metadata' : label === 'Modules' ? 'modules' : null;
+        const selected = label === 'Overview' ? this.state.view === 'overview' : label === 'Heap' ? ['pending', 'heap', 'detail', 'retention'].includes(this.state.view) : label === 'Threads' ? this.state.view === 'threads' : label === 'Exceptions' ? this.state.view === 'exceptions' : label === 'Metadata' ? this.state.view === 'metadata' : label === 'Modules' ? this.state.view === 'modules' : false;
+        return {
+          label,
+          style: `display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;font-size:12.5px;cursor:${active ? 'pointer' : 'default'};color:${selected ? t.text : (active ? t.textMuted : t.textFaint)};background:${selected ? t.accentSoft : 'transparent'}`,
+          dotStyle: `width:5px;height:5px;border-radius:100px;background:${selected ? t.accent : t.textFaint};flex-shrink:0`,
+          onClick: targetView ? () => this.setState({ view: targetView }) : null,
+        };
+      }),
+      theme: this.state.theme,
+      toggleTheme: () => this.setState(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
+      themeGlyph: this.state.theme === 'dark' ? '☾' : '☀',
+      themeLabel: this.state.theme === 'dark' ? 'Dark' : 'Light',
+      dumpMeta: {
+        filename: 'webapi_2026-07-27_211644.dmp', runtime: '.NET 8.0.7', arch: 'x64', os: 'linux-x64', pid: '24571',
+        totalHeapLabel: '2.3 GB', objectCountLabel: '10,238,441',
+      },
+      cacheBadgeLabel: this.state.view === 'pending' ? 'Computing…' : 'Analyzed',
+      cacheBadgeStyle: `font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;padding:2px 7px;border-radius:100px;border:1px solid ${this.state.view === 'pending' ? t.warnBase : t.okBase};color:${this.state.view === 'pending' ? t.warnText : t.okBase}`,
+      view: { eq: { pending: this.state.view === 'pending', heap: this.state.view === 'heap', detail: this.state.view === 'detail', retention: this.state.view === 'retention', threads: this.state.view === 'threads', exceptions: this.state.view === 'exceptions', metadata: this.state.view === 'metadata', modules: this.state.view === 'modules', overview: this.state.view === 'overview' } },
+      threadRows, lockRows, expandedIdleNote: this.state.idleExpanded,
+      deadlockBanner: deadlockCycle ? `⚠ Deadlock: thread ${deadlockCycle.threadA} holds ${deadlockCycle.lockA} and waits on thread ${deadlockCycle.threadB}, which holds ${deadlockCycle.lockB} and waits on thread ${deadlockCycle.threadA}.` : null,
+      idleGlyph: this.state.idleExpanded ? '▾' : '▸',
+      toggleIdle: () => this.setState(s => ({ idleExpanded: !s.idleExpanded })),
+      exceptionRows,
+      selectedException: selectedException ? {
+        address: selectedException.address, type: selectedException.type, message: selectedException.message, hresult: selectedException.hresult,
+        threadManagedId: selectedException.threadManagedId,
+        frames: faultingThread ? faultingThread.frames : [],
+        inner: selectedException.inner,
+        addrHover: this.hoverProps('address', selectedException.address),
+        typeHover: this.hoverProps('type', selectedException.type),
+      } : null,
+      backToExceptionList: () => this.setState({ selectedExceptionId: null }),
+      goToFaultingThread: () => this.setState({ view: 'threads' }),
+      innerExpanded: this.state.innerExpanded,
+      innerToggleLabel: this.state.innerExpanded ? 'Hide inner exception' : 'Show inner exception →',
+      toggleInner: () => this.setState(s => ({ innerExpanded: !s.innerExpanded })),
+      metadataBlocks: METADATA_BLOCKS.map(b => ({
+        title: b.title,
+        rows: b.rows.map((r, i) => ({ k: r[0], v: r[1], rowStyle: i === b.rows.length - 1 ? styles.kvRowLast : styles.kvRow })),
+      })),
+      moduleSearch: this.state.moduleSearch,
+      onModuleSearch: e => { const v = e.target.value; this.setState({ moduleSearch: v }); },
+      moduleRows: MODULES_RAW.filter(m => m.name.toLowerCase().includes(this.state.moduleSearch.toLowerCase())).map(m => ({
+        address: m.address, name: m.name, version: m.version,
+        kindLabel: m.kind, kindStyle: m.kind === 'managed' ? styles.badgeManaged : styles.badgeNative,
+        addrHover: this.hoverProps('address', m.address),
+      })),
+      moduleCountLabel: MODULES_RAW.filter(m => m.name.toLowerCase().includes(this.state.moduleSearch.toLowerCase())).length + ' of ' + MODULES_RAW.length + ' modules',
+      moduleRowsEmpty: MODULES_RAW.filter(m => m.name.toLowerCase().includes(this.state.moduleSearch.toLowerCase())).length === 0,
+      overviewDumpRows: [
+        ['Filename', 'webapi_2026-07-27_211644.dmp'], ['Captured', '2026-07-27 21:16:44Z'], ['Runtime', '.NET 8.0.7'],
+        ['Architecture', 'x64'], ['OS', 'linux-x64'], ['Process id', '24571'],
+        ['Total heap size', '2.3 GB (2,468,724,736 bytes)'], ['Object count', '10,238,441'],
+      ].map((r, i, arr) => ({ k: r[0], v: r[1], rowStyle: i === arr.length - 1 ? styles.kvRowLast : styles.kvRow })),
+      overviewLinks: [
+        { label: 'Heap Types', desc: 'dumpheap -stat — object types sorted by total size.', onGo: () => this.setState({ view: 'heap' }) },
+        { label: 'Threads', desc: 'clrthreads — every managed thread and its stack.', onGo: () => this.setState({ view: 'threads' }) },
+        { label: 'Exceptions', desc: 'dumpheap -type Exception — exception objects on the heap.', onGo: () => this.setState({ view: 'exceptions' }) },
+        { label: 'Modules', desc: 'lm — native and managed modules loaded into the process.', onGo: () => this.setState({ view: 'modules' }) },
+        { label: 'Metadata', desc: 'info, eeheap, threadpool — runtime and process metadata.', onGo: () => this.setState({ view: 'metadata' }) },
+      ],
+      pendingCountLabel: formatInt(this.state.pendingCount),
+      pendingTotalLabel: '10,238,441',
+      pendingElapsedLabel: (this.state.pendingElapsedMs / 1000).toFixed(1) + 's',
+      progressFillStyle: `height:100%;background:${t.accent};width:${(this.state.pendingCount / 10238441 * 100).toFixed(1)}%;transition:width 120ms linear`,
+      heapCountLabel: `${heapRows.length} of 1,502 types`,
+      filters: this.state.filters,
+      onSearchInput: e => { const v = e.target.value; this.setState(s => ({ filters: { ...s.filters, search: v } })); },
+      onSizeMinInput: e => { const v = e.target.value; this.setState(s => ({ filters: { ...s.filters, sizeMin: v } })); },
+      onCountMinInput: e => { const v = e.target.value; this.setState(s => ({ filters: { ...s.filters, countMin: v } })); },
+      hasActiveFilters: activeChips.length > 0,
+      clearFilters: () => this.setState({ filters: { search: '', sizeMin: '', countMin: '' } }),
+      activeChips,
+      sortAria: { count: this.state.sort.key === 'count' ? this.state.sort.dir : 'none', size: this.state.sort.key === 'size' ? this.state.sort.dir : 'none' },
+      sortGlyph: {
+        count: this.state.sort.key === 'count' ? (this.state.sort.dir === 'asc' ? '↑' : '↓') : '',
+        size: this.state.sort.key === 'size' ? (this.state.sort.dir === 'asc' ? '↑' : '↓') : '',
+      },
+      sortByCount: () => this.setState(s => ({ sort: { key: 'count', dir: s.sort.key === 'count' && s.sort.dir === 'desc' ? 'asc' : 'desc' } })),
+      sortBySize: () => this.setState(s => ({ sort: { key: 'size', dir: s.sort.key === 'size' && s.sort.dir === 'desc' ? 'asc' : 'desc' } })),
+      heapRows,
+      current, breadcrumb,
+      backToHeap: () => this.setState({ view: 'heap' }),
+      backToDetail: () => this.setState({ view: 'detail' }),
+      goToRetention: () => this.setState({ view: 'retention' }),
+      truncated: this.state.truncated,
+      truncateToggleLabel: this.state.truncated ? 'Show full result (demo)' : 'Simulate truncation (demo)',
+      toggleTruncated: () => this.setState(s => ({ truncated: !s.truncated })),
+      rerunUnlimited: () => this.setState({ truncated: false }),
+      rootGroups, allRootsExpanded,
+      expandAllLabel: allRootsExpanded ? 'Collapse all' : 'Expand all',
+      retentionMode: this.state.retentionMode,
+      showListMode: this.state.retentionMode === 'list',
+      showGraphMode: this.state.retentionMode === 'graph',
+      setModeList: () => this.setState({ retentionMode: 'list' }),
+      setModeGraph: () => this.setState({ retentionMode: 'graph' }),
+      modeListBtnStyle: `background:${this.state.retentionMode === 'list' ? t.accentSoft : 'transparent'};color:${this.state.retentionMode === 'list' ? t.accentText : t.textMuted};border:none;border-radius:4px;padding:5px 12px;font-size:11.5px;cursor:pointer`,
+      modeGraphBtnStyle: `background:${this.state.retentionMode === 'graph' ? t.accentSoft : 'transparent'};color:${this.state.retentionMode === 'graph' ? t.accentText : t.textMuted};border:none;border-radius:4px;padding:5px 12px;font-size:11.5px;cursor:pointer`,
+      toggleAllRoots: () => this.setState(s => {
+        const next = !ROOT_GROUPS_RAW.every(g => s.rootExpanded[g.id]);
+        const rootExpanded = {}; ROOT_GROUPS_RAW.forEach(g => rootExpanded[g.id] = next);
+        return { rootExpanded };
+      }),
+    };
+  }
+}
+
+</script>
+</body>
+</html>

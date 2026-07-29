@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="stylesheet" href="_ds/nocturne-a13f0cb8-d758-4cf1-afdc-e9b822f5c322/styles.css">
+  <script src="_ds/nocturne-a13f0cb8-d758-4cf1-afdc-e9b822f5c322/_ds_bundle.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>body{margin:0}</style>
+</helmet>
+
+<div style="{{ styles.page }}">
+  <div style="{{ styles.toolbar }}">
+    <sc-if value="{{ !embedded }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div style="{{ styles.title }}">Retention Graph</div>
+        <div style="{{ styles.subtitle }}">SOS <code style="{{ styles.code }}">gcroot -all 00007F2C14A20918</code> — every path from a root to this object. Drag any box to rearrange.</div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ embedded }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ styles.subtitleCompact }}">Drag any box to rearrange.</div>
+    </sc-if>
+    <div style="{{ styles.toolbarRight }}">
+      <div style="{{ styles.layoutGroup }}">
+        <span onClick="{{ setLayoutLR }}" style="{{ layoutLRBtnStyle }}">Left → Right</span>
+        <span onClick="{{ setLayoutTB }}" style="{{ layoutTBBtnStyle }}">Top → Down</span>
+      </div>
+      <button onClick="{{ resetPositions }}" style="{{ styles.btn }}">Reset layout</button>
+      <button onClick="{{ toggleAllCollapse }}" style="{{ styles.btn }}">{{ collapseAllLabel }}</button>
+    </div>
+  </div>
+
+  <div style="{{ styles.canvasWrap }}">
+    <div style="{{ styles.canvas }}">
+      <svg width="{{ canvasSize.w }}" height="{{ canvasSize.h }}" style="{{ styles.svg }}">
+        <sc-for list="{{ edges }}" as="e" hint-placeholder-count="6">
+          <path d="{{ e.d }}" stroke="{{ e.stroke }}" stroke-width="1.5" fill="none" stroke-dasharray="{{ e.dash }}"></path>
+        </sc-for>
+      </svg>
+
+      <sc-for list="{{ nodes }}" as="n" hint-placeholder-count="8">
+        <div style="{{ n.boxStyle }}" onMouseDown="{{ n.onDragStart }}">
+          <sc-if value="{{ n.isRoot }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ styles.nodeRow1 }}">
+              <span style="{{ styles.badgeNeutral }}">{{ n.kindLabel }}</span>
+              <sc-if value="{{ n.pinned }}" hint-placeholder-val="{{ false }}"><span style="{{ styles.badgeWarn }}">pinned</span></sc-if>
+            </div>
+            <div style="{{ styles.nodeName }}" title="{{ n.name }}">{{ n.name }}</div>
+            <sc-if value="{{ n.collapsible }}" hint-placeholder-val="{{ false }}">
+              <span onMouseDown="{{ n.stopProp }}" onClick="{{ n.onToggleCollapse }}" style="{{ styles.collapseLink }}">{{ n.collapseLabel }}</span>
+            </sc-if>
+          </sc-if>
+
+          <sc-if value="{{ n.isTarget }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ styles.targetChip }}">target</div>
+            <div style="{{ styles.mono }}">{{ n.address }}</div>
+            <div style="{{ styles.monoMuted }}">{{ n.type }}</div>
+            <div style="{{ styles.sizeMuted }}">{{ n.size }}</div>
+          </sc-if>
+
+          <sc-if value="{{ n.isObject }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ styles.mono }}">{{ n.address }}</div>
+            <div style="{{ styles.monoMuted }}" title="{{ n.type }}">{{ n.typeDisplay }}</div>
+            <div style="{{ styles.sizeMuted }}">{{ n.size }}</div>
+          </sc-if>
+
+          <sc-if value="{{ n.isCluster }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ styles.clusterCount }}">{{ n.countLabel }}</div>
+            <div style="{{ styles.monoMuted }}">{{ n.type }}</div>
+            <div style="{{ styles.clusterNote }}">not on the highlighted path</div>
+            <span onMouseDown="{{ n.stopProp }}" onClick="{{ n.onToggleExpand }}" style="{{ styles.collapseLink }}">{{ n.expandLabel }}</span>
+          </sc-if>
+        </div>
+      </sc-for>
+
+      <sc-if value="{{ clusterPanel }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ clusterPanel.style }}">
+          <div style="{{ styles.panelHead }}">Sample of {{ clusterPanel.total }} instances (not exhaustive)</div>
+          <sc-for list="{{ clusterPanel.rows }}" as="r" hint-placeholder-count="6">
+            <div style="{{ styles.panelRow }}">{{ r }}</div>
+          </sc-for>
+          <div style="{{ styles.panelFoot }}">+{{ clusterPanel.remaining }} more — browse in Heap Types → Objects, not graphed individually</div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+const T = {
+  bg: '#161826', surface: '#232532', surfaceAlt: '#2c2f3e', border: '#3f424d', borderStrong: '#595d6c',
+  text: '#e9e9ed', textMuted: '#9397ab', textFaint: '#75798c',
+  accent: '#9184d9', accentSoft: 'rgba(145,132,217,0.14)', accentText: '#d2cefd',
+  warnBase: '#caa053', warnSoft: 'rgba(202,160,83,0.14)', warnText: '#e8cd94',
+  mono: "'JetBrains Mono', ui-monospace, monospace"
+};
+
+const NODES = [
+  { id: 'root_static', kind: 'root', rank: 0, kindLabel: '[static var]', name: 'MyApp.Infrastructure.CacheHost.s_instance', pinned: true, chain: ['cachehost', 'dict'], mergeInto: 'entryarr' },
+  { id: 'root_thread', kind: 'root', rank: 0, kindLabel: '[local var]', name: 'Thread 14 · ReportController.Generate', pinned: false, chain: ['list'], mergeInto: 'entryarr' },
+  { id: 'root_handle', kind: 'root', rank: 3, kindLabel: '[gc handle]', name: 'Strong handle #4412', pinned: true, chain: [], mergeInto: 'target' },
+  { id: 'cachehost', kind: 'object', rank: 1, address: '00007F2C0E110220', type: 'MyApp.Infrastructure.CacheHost', size: '40 B' },
+  { id: 'dict', kind: 'object', rank: 2, address: '00007F2C0E110300', type: 'Dictionary<String, CacheEntry>', size: '80 B' },
+  { id: 'list', kind: 'object', rank: 1, address: '00007F2C0E120040', type: 'List<CacheEntry>', size: '32 B' },
+  { id: 'entryarr', kind: 'object', rank: 3, address: '00007F2C0E118880', type: 'Dictionary<String, CacheEntry>+Entry[]', size: '4.1 MB' },
+  { id: 'target', kind: 'target', rank: 4, address: '00007F2C14A20918', type: 'MyApp.Domain.CacheEntry', size: '72 B' },
+  { id: 'cluster', kind: 'cluster', rank: 4, type: 'MyApp.Domain.CacheEntry', count: 1847 },
+];
+const STATIC_EDGES = [
+  ['root_static', 'cachehost'], ['cachehost', 'dict'], ['dict', 'entryarr'],
+  ['root_thread', 'list'], ['list', 'entryarr'],
+  ['entryarr', 'target'], ['entryarr', 'cluster'],
+  ['root_handle', 'target'],
+];
+
+const COL_W = 220, ROW_H = 76, BOX_W = 188, BOX_H = 60;
+
+class Component extends DCLogic {
+  state = { collapsedRoots: { root_static: false, root_thread: false }, clusterExpanded: false, layoutMode: 'lr', dragOverrides: {} };
+
+  componentDidMount() {
+    this._onMove = e => {
+      if (!this._dragId) return;
+      const dx = e.clientX - this._dragStart.clientX, dy = e.clientY - this._dragStart.clientY;
+      const id = this._dragId;
+      this.setState(s => ({ dragOverrides: { ...s.dragOverrides, [id]: { x: this._dragStart.x + dx, y: this._dragStart.y + dy } } }));
+    };
+    this._onUp = () => { this._dragId = null; };
+    window.addEventListener('mousemove', this._onMove);
+    window.addEventListener('mouseup', this._onUp);
+  }
+  componentWillUnmount() {
+    window.removeEventListener('mousemove', this._onMove);
+    window.removeEventListener('mouseup', this._onUp);
+  }
+
+  renderVals() {
+    const t = T;
+    const embedded = this.props.embedded === 'true' || this.props.embedded === true;
+    const styles = {
+      page: `background:${t.bg};color:${t.text};font-family:var(--font-body,'Inter',sans-serif);font-size:13px;min-height:520px;height:100%;display:flex;flex-direction:column;box-sizing:border-box`,
+      toolbar: `display:flex;align-items:${embedded ? 'center' : 'flex-start'};justify-content:space-between;padding:${embedded ? '10px 16px' : '18px 24px'};border-bottom:1px solid ${t.border};gap:16px;flex-shrink:0;flex-wrap:wrap`,
+      title: `font-family:var(--font-heading);font-weight:500;font-size:18px;margin-bottom:2px`,
+      subtitle: `color:${t.textMuted};font-size:12.5px`,
+      subtitleCompact: `color:${t.textFaint};font-size:11.5px`,
+      code: `font-family:${t.mono};background:${t.surfaceAlt};padding:1px 5px;border-radius:4px;font-size:11.5px`,
+      toolbarRight: `display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap`,
+      layoutGroup: `display:flex;gap:2px;background:${t.surfaceAlt};border:1px solid ${t.border};border-radius:6px;padding:2px`,
+      btn: `background:transparent;border:1px solid ${t.border};color:${t.textMuted};border-radius:6px;padding:7px 12px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0`,
+      canvasWrap: `flex:1;overflow:auto;padding:24px`,
+      canvas: `position:relative`,
+      svg: `position:absolute;left:0;top:0;pointer-events:none`,
+      nodeRow1: `display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap`,
+      badgeNeutral: `background:${t.surfaceAlt};color:${t.textMuted};border:1px solid ${t.border};border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap`,
+      badgeWarn: `background:${t.warnSoft};color:${t.warnText};border:1px solid ${t.warnBase};border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap`,
+      nodeName: `font-size:11.5px;color:${t.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px`,
+      collapseLink: `color:${t.accentText};font-size:11px;cursor:pointer;white-space:nowrap`,
+      mono: `font-family:${t.mono};color:${t.text};font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`,
+      monoMuted: `font-family:${t.mono};color:${t.textMuted};font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`,
+      sizeMuted: `font-family:${t.mono};color:${t.textFaint};font-size:11px;margin-top:2px`,
+      targetChip: `display:inline-block;background:${t.warnSoft};color:${t.warnText};border:1px solid ${t.warnBase};border-radius:4px;padding:1px 6px;font-size:10px;margin-bottom:4px`,
+      clusterCount: `font-family:${t.mono};font-size:13px;color:${t.accentText};font-weight:600`,
+      clusterNote: `color:${t.textFaint};font-size:10.5px;margin:2px 0 4px`,
+      panelHead: `color:${t.textMuted};font-size:11px;margin-bottom:6px`,
+      panelRow: `font-family:${t.mono};font-size:11.5px;color:${t.text};padding:2px 0`,
+      panelFoot: `color:${t.textFaint};font-size:10.5px;margin-top:6px;padding-top:6px;border-top:1px solid ${t.border}`,
+    };
+
+    const hidden = new Set();
+    NODES.filter(n => n.kind === 'root').forEach(r => {
+      if (this.state.collapsedRoots[r.id]) r.chain.forEach(id => hidden.add(id));
+    });
+    const visible = NODES.filter(n => !hidden.has(n.id));
+
+    const ranksPresent = [...new Set(visible.map(n => n.rank))].sort((a, b) => a - b);
+    const rankToCol = {}; ranksPresent.forEach((r, i) => rankToCol[r] = i);
+
+    const byCol = {};
+    visible.forEach(n => { const c = rankToCol[n.rank]; (byCol[c] = byCol[c] || []).push(n); });
+    const maxRows = Math.max(...Object.values(byCol).map(a => a.length));
+    const totalCross = maxRows * ROW_H;
+    const isTB = this.state.layoutMode === 'tb';
+
+    const pos = {};
+    Object.entries(byCol).forEach(([col, arr]) => {
+      const crossLen = arr.length * ROW_H;
+      const offsetCross = (totalCross - crossLen) / 2;
+      arr.forEach((n, i) => {
+        const along = Number(col) * COL_W;
+        const cross = offsetCross + i * ROW_H;
+        pos[n.id] = isTB ? { x: cross, y: along } : { x: along, y: cross };
+      });
+    });
+    // apply drag overrides
+    Object.entries(this.state.dragOverrides).forEach(([id, p]) => { if (pos[id]) pos[id] = p; });
+
+    const startDrag = (id) => (e) => {
+      if (e.button !== 0) return;
+      this._dragId = id;
+      this._dragStart = { clientX: e.clientX, clientY: e.clientY, x: pos[id].x, y: pos[id].y };
+    };
+
+    const nodes = visible.map(n => {
+      const p = pos[n.id];
+      const base = `position:absolute;left:${p.x}px;top:${p.y}px;width:${BOX_W}px;min-height:${BOX_H}px;background:${t.surface};border:1px solid ${n.kind === 'target' ? t.warnBase : t.border};border-radius:8px;padding:9px 11px;box-sizing:border-box;cursor:grab;user-select:none`;
+      const common = {
+        isRoot: n.kind === 'root', isObject: n.kind === 'object', isTarget: n.kind === 'target', isCluster: n.kind === 'cluster',
+        boxStyle: base, onDragStart: startDrag(n.id), stopProp: e => e.stopPropagation(),
+      };
+      if (n.kind === 'root') {
+        const collapsible = n.chain.length > 0;
+        const collapsed = this.state.collapsedRoots[n.id];
+        return { ...common, kindLabel: n.kindLabel, name: n.name, pinned: n.pinned, collapsible,
+          collapseLabel: collapsed ? `show ${n.chain.length} hidden →` : 'collapse chain',
+          onToggleCollapse: () => this.setState(s => ({ collapsedRoots: { ...s.collapsedRoots, [n.id]: !s.collapsedRoots[n.id] } })) };
+      }
+      if (n.kind === 'target') return { ...common, address: n.address, type: n.type, size: n.size };
+      if (n.kind === 'cluster') {
+        return { ...common, countLabel: formatInt(n.count) + ' more', type: n.type,
+          expandLabel: this.state.clusterExpanded ? 'hide sample' : 'show sample',
+          onToggleExpand: () => this.setState(s => ({ clusterExpanded: !s.clusterExpanded })) };
+      }
+      return { ...common, address: n.address, type: n.type, typeDisplay: n.type, size: n.size };
+    });
+
+    const edgeList = [];
+    STATIC_EDGES.forEach(([from, to]) => { if (!hidden.has(from) && !hidden.has(to)) edgeList.push({ from, to, dashed: false }); });
+    NODES.filter(n => n.kind === 'root').forEach(r => {
+      if (this.state.collapsedRoots[r.id] && r.chain.length > 0) edgeList.push({ from: r.id, to: r.mergeInto, dashed: true });
+    });
+
+    const edges = edgeList.map(e => {
+      const a = pos[e.from], b = pos[e.to];
+      let d;
+      if (isTB) {
+        const x1 = a.x + BOX_W / 2, y1 = a.y + BOX_H, x2 = b.x + BOX_W / 2, y2 = b.y;
+        const dy = Math.max(30, (y2 - y1) / 2);
+        d = `M ${x1},${y1} C ${x1},${y1 + dy} ${x2},${y2 - dy} ${x2},${y2}`;
+      } else {
+        const x1 = a.x + BOX_W, y1 = a.y + BOX_H / 2, x2 = b.x, y2 = b.y + BOX_H / 2;
+        const dx = Math.max(40, (x2 - x1) / 2);
+        d = `M ${x1},${y1} C ${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+      }
+      return { d, stroke: e.dashed ? t.textFaint : t.accent, dash: e.dashed ? '4,4' : 'none' };
+    });
+
+    const numCols = ranksPresent.length;
+    const allX = Object.values(pos).map(p => p.x);
+    const allY = Object.values(pos).map(p => p.y);
+    const canvasSize = { w: Math.max(...allX, 0) + BOX_W + 40, h: Math.max(...allY, 0) + BOX_H + 40 };
+
+    const CLUSTER_SAMPLE = ['00007F2C1F001040', '00007F2C1F0010B0', '00007F2C1F001120', '00007F2C1F001190', '00007F2C1F001200', '00007F2C1F001270'];
+    let clusterPanel = null;
+    if (this.state.clusterExpanded) {
+      const p = pos['cluster'];
+      clusterPanel = {
+        style: `position:absolute;left:${p.x}px;top:${p.y + BOX_H + 8}px;width:${BOX_W + 40}px;background:${t.surface};border:1px solid ${t.borderStrong};border-radius:8px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,0.4)`,
+        total: formatInt(1847), rows: CLUSTER_SAMPLE, remaining: formatInt(1841),
+      };
+    }
+
+    return {
+      embedded, styles, nodes, edges, canvasSize, clusterPanel,
+      collapseAllLabel: Object.values(this.state.collapsedRoots).some(v => v) ? 'Expand all chains' : 'Collapse all chains',
+      toggleAllCollapse: () => this.setState(s => {
+        const anyOpen = Object.values(s.collapsedRoots).some(v => v);
+        const next = {}; Object.keys(s.collapsedRoots).forEach(k => next[k] = !anyOpen);
+        return { collapsedRoots: next };
+      }),
+      layoutLRBtnStyle: `padding:5px 12px;border-radius:4px;font-size:11.5px;cursor:pointer;background:${!isTB ? t.accentSoft : 'transparent'};color:${!isTB ? t.accentText : t.textMuted}`,
+      layoutTBBtnStyle: `padding:5px 12px;border-radius:4px;font-size:11.5px;cursor:pointer;background:${isTB ? t.accentSoft : 'transparent'};color:${isTB ? t.accentText : t.textMuted}`,
+      setLayoutLR: () => this.setState({ layoutMode: 'lr', dragOverrides: {} }),
+      setLayoutTB: () => this.setState({ layoutMode: 'tb', dragOverrides: {} }),
+      resetPositions: () => this.setState({ dragOverrides: {} }),
+    };
+  }
+}
+function formatInt(n) { return n.toLocaleString('en-US'); }
+
+</script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="stylesheet" href="_ds/nocturne-a13f0cb8-d758-4cf1-afdc-e9b822f5c322/styles.css">
+  <script src="_ds/nocturne-a13f0cb8-d758-4cf1-afdc-e9b822f5c322/_ds_bundle.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>body{margin:0}</style>
+</helmet>
+
+<div style="{{ styles.page }}">
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Pending / progress panel</div>
+    <div style="{{ styles.pendingWrap }}">
+      <div style="{{ styles.pendingTitle }}">Analyzing heap</div>
+      <div style="{{ styles.pendingSub }}">Walking the managed heap to build the object index. This happens once per dump — after this, every view is instant.</div>
+      <div style="{{ styles.progressTrack }}"><div style="{{ styles.progressFill }}"></div></div>
+      <div style="{{ styles.pendingStats }}"><span>6,012,441 of 10,238,441 objects walked</span><span>4.2s elapsed</span></div>
+    </div>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Truncation banner</div>
+    <div style="{{ styles.truncBanner }}">
+      <div style="{{ styles.truncTitle }}">⚠ Search truncated after 2,000,000 nodes</div>
+      <div style="{{ styles.truncBody }}">The root search gave up before proving a path. This object may still be rooted — this is not a "not rooted" result.</div>
+      <button style="{{ styles.primaryBtnSm }}">Re-run without a limit</button>
+    </div>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Error state</div>
+    <div style="{{ styles.errorBox }}">
+      <div style="{{ styles.errorTitle }}">Analysis failed</div>
+      <div style="{{ styles.errorBody }}">DAC could not resolve MethodTable 00007F2C1B2E4440 — the module may not match this runtime version.</div>
+      <button style="{{ styles.secondaryBtn }}">Retry</button>
+    </div>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Empty states</div>
+    <div style="{{ styles.emptyRow }}">
+      <div style="{{ styles.emptyBox }}"><div style="{{ styles.emptyTitle }}">No objects on this heap</div><div style="{{ styles.emptySub }}">This generation is empty in this dump.</div></div>
+      <div style="{{ styles.emptyBox }}"><div style="{{ styles.emptyTitle }}">No rows match this filter</div><div style="{{ styles.emptySub }}">3 filters applied.</div><button style="{{ styles.clearBtn }}">Clear filters</button></div>
+      <div style="{{ styles.emptyBox }}"><div style="{{ styles.emptyTitle }}">Not applicable to this dump</div><div style="{{ styles.emptySub }}">No POH segment was captured.</div></div>
+    </div>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Badges</div>
+    <div style="{{ styles.badgeRow }}">
+      <span style="{{ styles.badgeAccent }}">gen2</span>
+      <span style="{{ styles.badgeAccent }}">LOH</span>
+      <span style="{{ styles.badgeNeutral }}">thread 14</span>
+      <span style="{{ styles.badgeWarn }}">pinned</span>
+      <span style="{{ styles.badgeDanger }}">OutOfMemoryException</span>
+      <span style="{{ styles.badgeOk }}">alive</span>
+      <span style="{{ styles.badgeNeutralOutline }}">dead</span>
+      <span style="{{ styles.badgeNeutral }}">[static var]</span>
+      <span style="{{ styles.badgeNeutral }}">[local var]</span>
+      <span style="{{ styles.badgeNeutral }}">[gc handle]</span>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+const T = {
+  bg: '#161826', surface: '#232532', surfaceAlt: '#2c2f3e', border: '#3f424d', borderStrong: '#595d6c',
+  text: '#e9e9ed', textMuted: '#9397ab', textFaint: '#75798c',
+  accent: '#9184d9', accentSoft: 'rgba(145,132,217,0.14)', accentText: '#d2cefd',
+  warnBase: '#caa053', warnSoft: 'rgba(202,160,83,0.14)', warnText: '#e8cd94',
+  dangerBase: '#d16a6a', dangerSoft: 'rgba(209,106,106,0.14)',
+  okBase: '#6fae7f', okSoft: 'rgba(111,174,127,0.14)',
+  mono: "'JetBrains Mono', ui-monospace, monospace"
+};
+
+class Component extends DCLogic {
+  renderVals() {
+    const t = T;
+    const badgeBase = `font-size:11px;padding:2px 8px;border-radius:100px;border:1px solid;white-space:nowrap`;
+    const styles = {
+      page: `background:${t.bg};color:${t.text};font-family:var(--font-body,'Inter',sans-serif);font-size:13px;padding:24px;display:flex;flex-direction:column;gap:28px`,
+      section: `display:flex;flex-direction:column;gap:10px`,
+      h: `font-family:var(--font-heading);font-weight:500;font-size:13px;color:${t.textMuted};text-transform:uppercase;letter-spacing:0.04em`,
+      pendingWrap: `max-width:480px;background:${t.surface};border:1px solid ${t.border};border-radius:8px;padding:24px;text-align:center`,
+      pendingTitle: `font-family:var(--font-heading);font-weight:500;font-size:18px;margin-bottom:6px`,
+      pendingSub: `color:${t.textMuted};font-size:12.5px;margin-bottom:18px;line-height:1.5`,
+      progressTrack: `height:6px;border-radius:100px;background:${t.surfaceAlt};overflow:hidden;margin-bottom:10px`,
+      progressFill: `height:100%;background:${t.accent};width:58.7%`,
+      pendingStats: `display:flex;justify-content:space-between;color:${t.textFaint};font-size:11.5px;font-family:${t.mono}`,
+      truncBanner: `background:${t.warnSoft};border:1px solid ${t.warnBase};border-radius:8px;padding:16px 18px;max-width:560px;display:flex;flex-direction:column;gap:8px;align-items:flex-start`,
+      truncTitle: `color:${t.warnText};font-weight:600;font-size:13.5px;white-space:nowrap`,
+      truncBody: `color:${t.text};font-size:12.5px;line-height:1.5`,
+      primaryBtnSm: `background:transparent;border:1px solid ${t.warnBase};color:${t.warnText};border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0`,
+      errorBox: `background:${t.dangerSoft};border:1px solid ${t.dangerBase};border-radius:8px;padding:16px 18px;max-width:560px;display:flex;flex-direction:column;gap:8px;align-items:flex-start`,
+      errorTitle: `color:${t.text};font-weight:600;font-size:13.5px`,
+      errorBody: `color:${t.textMuted};font-size:12.5px;line-height:1.5;font-family:${t.mono}`,
+      secondaryBtn: `background:transparent;border:1px solid ${t.border};color:${t.textMuted};border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer`,
+      emptyRow: `display:flex;gap:12px;flex-wrap:wrap`,
+      emptyBox: `background:${t.surface};border:1px solid ${t.border};border-radius:8px;padding:18px;width:220px;display:flex;flex-direction:column;gap:8px;align-items:flex-start`,
+      emptyTitle: `font-size:13px;font-weight:500`,
+      emptySub: `color:${t.textMuted};font-size:12px`,
+      clearBtn: `background:transparent;border:1px solid ${t.border};color:${t.textMuted};border-radius:6px;padding:5px 10px;font-size:11.5px;cursor:pointer`,
+      badgeRow: `display:flex;gap:8px;flex-wrap:wrap`,
+      badgeAccent: `${badgeBase};background:${t.accentSoft};color:${t.accentText};border-color:${t.accent}`,
+      badgeNeutral: `${badgeBase};background:${t.surfaceAlt};color:${t.textMuted};border-color:${t.border}`,
+      badgeNeutralOutline: `${badgeBase};background:transparent;color:${t.textFaint};border-color:${t.border}`,
+      badgeWarn: `${badgeBase};background:${t.warnSoft};color:${t.warnText};border-color:${t.warnBase}`,
+      badgeDanger: `${badgeBase};background:${t.dangerSoft};color:${t.dangerBase};border-color:${t.dangerBase}`,
+      badgeOk: `${badgeBase};background:${t.okSoft};color:${t.okBase};border-color:${t.okBase}`,
+    };
+    return { styles };
+  }
+}
+
+</script>
+</body>
+</html>

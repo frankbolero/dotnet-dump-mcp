@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="stylesheet" href="_ds/nocturne-a13f0cb8-d758-4cf1-afdc-e9b822f5c322/styles.css">
+  <script src="_ds/nocturne-a13f0cb8-d758-4cf1-afdc-e9b822f5c322/_ds_bundle.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>body{margin:0}</style>
+</helmet>
+
+<div style="{{ styles.page }}">
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Object detail card</div>
+    <div style="{{ styles.card }}">
+      <div style="{{ styles.head }}">
+        <div style="{{ styles.headRow }}"><span style="{{ styles.headLabel }}">Address</span><span style="{{ styles.addrSpan }}">00007F2C14A20918</span></div>
+        <div style="{{ styles.headRow }}"><span style="{{ styles.headLabel }}">Type</span><span style="{{ styles.monoStrong }}">MyApp.Domain.CacheEntry</span></div>
+        <div style="{{ styles.headRow }}"><span style="{{ styles.headLabel }}">Size</span><span style="{{ styles.mono }}">72 bytes</span></div>
+        <div style="{{ styles.headRow }}"><span style="{{ styles.headLabel }}">MethodTable</span><span style="{{ styles.mono }}">00007F2C1B2E4440</span></div>
+      </div>
+      <table style="{{ styles.table }}">
+        <thead><tr><th scope="col" style="{{ styles.thMono }}">Offset</th><th scope="col" style="{{ styles.thText }}">Type</th><th scope="col" style="{{ styles.thText }}">Name</th><th scope="col" style="{{ styles.thText }}">Value</th></tr></thead>
+        <tbody>
+          <sc-for list="{{ fields }}" as="f" hint-placeholder-count="5">
+            <tr style="{{ styles.tr }}">
+              <td style="{{ styles.tdMono }}">{{ f.offset }}</td>
+              <td style="{{ styles.tdType }}">{{ f.type }}</td>
+              <td style="{{ styles.tdMono }}">{{ f.name }}</td>
+              <td style="{{ f.valueStyle }}">{{ f.value }}</td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Key–value block (info / threadpool / eeheap style)</div>
+    <div style="{{ styles.kvCard }}">
+      <sc-for list="{{ kv }}" as="row" hint-placeholder-count="6">
+        <div style="{{ styles.kvRow }}"><span style="{{ styles.kvKey }}">{{ row.k }}</span><span style="{{ styles.kvVal }}">{{ row.v }}</span></div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Exception detail (nested inner exceptions)</div>
+    <div style="{{ styles.card }}">
+      <div style="{{ styles.excHead }}">
+        <span style="{{ styles.badgeDanger }}">System.OutOfMemoryException</span>
+      </div>
+      <div style="{{ styles.excBody }}">
+        <div style="{{ styles.kvRow }}"><span style="{{ styles.kvKey }}">Message</span><span style="{{ styles.kvVal }}">Insufficient memory to continue the execution of the program.</span></div>
+        <div style="{{ styles.kvRow }}"><span style="{{ styles.kvKey }}">HRESULT</span><span style="{{ styles.mono }}">0x8007000E</span></div>
+      </div>
+      <div style="{{ styles.stackBlock }}">
+        <sc-for list="{{ frames }}" as="fr" hint-placeholder-count="4">
+          <div style="{{ styles.frameRow }}">{{ fr }}</div>
+        </sc-for>
+      </div>
+      <div style="{{ styles.innerWrap }}">
+        <div style="{{ styles.innerLabel }}">Inner exception</div>
+        <div style="{{ styles.excHead }}"><span style="{{ styles.badgeNeutral }}">System.AggregateException</span></div>
+        <div style="{{ styles.excBody }}"><div style="{{ styles.kvRow }}"><span style="{{ styles.kvKey }}">Message</span><span style="{{ styles.kvVal }}">One or more errors occurred.</span></div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+const T = {
+  bg: '#161826', surface: '#232532', surfaceAlt: '#2c2f3e', border: '#3f424d', borderStrong: '#595d6c',
+  text: '#e9e9ed', textMuted: '#9397ab', textFaint: '#75798c',
+  accent: '#9184d9', accentText: '#d2cefd',
+  dangerBase: '#d16a6a', dangerSoft: 'rgba(209,106,106,0.14)',
+  mono: "'JetBrains Mono', ui-monospace, monospace"
+};
+class Component extends DCLogic {
+  renderVals() {
+    const t = T;
+    const badgeBase = `font-size:11px;padding:2px 8px;border-radius:100px;border:1px solid;white-space:nowrap`;
+    const styles = {
+      page: `background:${t.bg};color:${t.text};font-family:var(--font-body,'Inter',sans-serif);font-size:13px;padding:24px;display:flex;flex-direction:column;gap:32px`,
+      section: `display:flex;flex-direction:column;gap:10px`,
+      h: `font-family:var(--font-heading);font-weight:500;font-size:13px;color:${t.textMuted};text-transform:uppercase;letter-spacing:0.04em`,
+      card: `background:${t.surface};border:1px solid ${t.border};border-radius:8px;max-width:820px`,
+      head: `padding:16px 18px;border-bottom:1px solid ${t.border};display:flex;flex-direction:column;gap:6px`,
+      headRow: `display:flex;gap:10px;align-items:baseline;font-size:12.5px`,
+      headLabel: `color:${t.textMuted};width:100px;flex-shrink:0`,
+      addrSpan: `cursor:pointer;font-family:${t.mono};border-bottom:1px dashed ${t.textFaint}`,
+      monoStrong: `font-family:${t.mono};color:${t.text};font-weight:600`,
+      mono: `font-family:${t.mono};color:${t.text}`,
+      table: `width:100%;border-collapse:collapse;font-size:12.5px`,
+      thMono: `text-align:left;font-family:${t.mono};font-weight:500;color:${t.textMuted};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;padding:8px 10px;border-bottom:1px solid ${t.borderStrong}`,
+      thText: `text-align:left;font-weight:500;color:${t.textMuted};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;padding:8px 10px;border-bottom:1px solid ${t.borderStrong}`,
+      tr: `border-bottom:1px solid ${t.border}`,
+      tdMono: `padding:8px 10px;font-family:${t.mono};color:${t.text}`,
+      tdType: `padding:8px 10px;font-family:${t.mono};color:${t.textMuted}`,
+      kvCard: `background:${t.surface};border:1px solid ${t.border};border-radius:8px;max-width:520px;padding:6px 18px`,
+      kvRow: `display:flex;gap:16px;padding:8px 0;border-bottom:1px solid ${t.border};font-size:12.5px`,
+      kvKey: `color:${t.textMuted};width:160px;flex-shrink:0`,
+      kvVal: `font-family:${t.mono};color:${t.text}`,
+      excHead: `padding:14px 18px;border-bottom:1px solid ${t.border}`,
+      excBody: `padding:4px 18px`,
+      badgeDanger: `${badgeBase};background:${t.dangerSoft};color:${t.dangerBase};border-color:${t.dangerBase}`,
+      badgeNeutral: `${badgeBase};background:${t.surfaceAlt};color:${t.textMuted};border-color:${t.border}`,
+      stackBlock: `padding:12px 18px;border-bottom:1px solid ${t.border};display:flex;flex-direction:column;gap:2px`,
+      frameRow: `font-family:${t.mono};font-size:12px;color:${t.textMuted};white-space:nowrap;overflow-x:auto`,
+      innerWrap: `padding-top:4px`,
+      innerLabel: `padding:10px 18px 0;color:${t.textFaint};font-size:11px;text-transform:uppercase;letter-spacing:0.04em`,
+    };
+    const fields = [
+      { offset: '0x08', type: 'System.String', name: '_key', value: '"tenant:8842:profile"', valueStyle: `padding:8px 10px;font-family:${t.mono};color:${t.text}` },
+      { offset: '0x10', type: 'System.Byte[]', name: '_payload', value: '00007F2C14A22100', valueStyle: `padding:8px 10px;font-family:${t.mono};color:${t.accentText};cursor:pointer;text-decoration:underline;text-decoration-style:dotted` },
+      { offset: '0x18', type: 'System.DateTime', name: '_createdUtc', value: '2026-07-27 21:16:44Z', valueStyle: `padding:8px 10px;font-family:${t.mono};color:${t.text}` },
+      { offset: '0x20', type: 'MyApp.Domain.CacheEntry', name: '_next', value: '00007F2C14A20A40', valueStyle: `padding:8px 10px;font-family:${t.mono};color:${t.accentText};cursor:pointer;text-decoration:underline;text-decoration-style:dotted` },
+      { offset: '0x28', type: 'System.Int32', name: '_hitCount', value: '14', valueStyle: `padding:8px 10px;font-family:${t.mono};color:${t.text}` },
+    ];
+    const kv = [
+      { k: 'CLR version', v: '8.0.7.32013' }, { k: 'GC mode', v: 'Server, concurrent' },
+      { k: 'Heap segments', v: '4' }, { k: 'Total committed', v: '2.6 GB' },
+      { k: 'ThreadPool workers', v: '12 / 12 busy' }, { k: 'ThreadPool queue length', v: '842' },
+    ];
+    const frames = [
+      'MyApp.Api.Controllers.ReportController.Generate(ReportRequest)',
+      'System.Linq.Enumerable+SelectListIterator`2.MoveNext()',
+      'System.Collections.Generic.List`1.AddWithResize(T)',
+      'System.Array.Resize[T](T[] ByRef, Int32)',
+    ];
+    return { styles, fields, kv, frames };
+  }
+}
+
+</script>
+</body>
+</html>

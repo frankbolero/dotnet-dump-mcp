@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="stylesheet" href="_ds/nocturne-a13f0cb8-d758-4cf1-afdc-e9b822f5c322/styles.css">
+  <script src="_ds/nocturne-a13f0cb8-d758-4cf1-afdc-e9b822f5c322/_ds_bundle.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>body{margin:0}</style>
+</helmet>
+
+<div style="{{ styles.page }}">
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Tree — namespace rollup (heap composition)</div>
+    <div role="tree" aria-label="Namespace rollup" style="{{ styles.tree }}">
+      <sc-for list="{{ nsNodes }}" as="n" hint-placeholder-count="6">
+        <div role="treeitem" aria-level="{{ n.level }}" aria-expanded="{{ n.expandedAttr }}" style="{{ n.rowStyle }}">
+          <span onClick="{{ n.onToggle }}" style="{{ n.toggleStyle }}">{{ n.toggleGlyph }}</span>
+          <span style="{{ n.nameStyle }}">{{ n.name }}</span>
+          <span style="{{ styles.nsCount }}">{{ n.countLabel }}</span>
+          <div style="{{ styles.nsBarTrack }}"><div style="{{ n.barFillStyle }}"></div></div>
+          <span style="{{ styles.nsSize }}">{{ n.sizeLabel }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Tree — thread → frames (idle threads collapsed as a group)</div>
+    <div role="tree" aria-label="Threads" style="{{ styles.tree }}">
+      <div role="treeitem" aria-level="1" aria-expanded="true" style="{{ styles.threadRow }}">
+        <span style="{{ styles.toggleOpen }}">▾</span>
+        <span style="{{ styles.threadLabel }}">Thread 14 (OS 24610)</span>
+        <span style="{{ styles.badgeDanger }}">OutOfMemoryException</span>
+      </div>
+      <sc-for list="{{ frames }}" as="fr" hint-placeholder-count="4">
+        <div role="treeitem" aria-level="2" style="{{ styles.frameRow }}">{{ fr }}</div>
+      </sc-for>
+      <div role="treeitem" aria-level="1" style="{{ styles.threadRowMuted }}">
+        <span style="{{ styles.toggleClosed }}">▸</span>
+        <span>312 idle worker threads</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Tree node variants — cycle &amp; truncation</div>
+    <div role="tree" style="{{ styles.tree }}">
+      <div role="treeitem" aria-level="1" style="{{ styles.rowBase }}">
+        <span style="{{ styles.toggleOpen }}">▾</span><span style="{{ styles.mono }}">00007F2C0E110300</span><span style="{{ styles.monoMuted }}">Dictionary&lt;String, Node&gt;</span>
+      </div>
+      <div role="treeitem" aria-level="2" style="{{ styles.cycleRow }}">
+        <span style="{{ styles.toggleNone }}">↻</span><span style="{{ styles.mono }}">00007F2C0E110300</span><span style="{{ styles.cycleLabel }}">already visited above — cycle, not expanded further</span>
+      </div>
+      <div role="treeitem" aria-level="2" style="{{ styles.truncRow }}">
+        <span style="{{ styles.toggleNone }}">…</span><span style="{{ styles.truncLabel }}">312 more children not shown (fan-out capped)</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Tree — retention graph (one object, all roots)</div>
+    <div style="{{ styles.graphCard }}">
+      <div style="{{ styles.graphTarget }}">
+        <span style="{{ styles.graphTargetLabel }}">Target</span>
+        <span style="{{ styles.mono }}">00007F2C14A20918</span>
+        <span style="{{ styles.monoMuted }}">MyApp.Domain.CacheEntry</span>
+        <span style="{{ styles.monoMuted }}">72 B</span>
+      </div>
+      <div style="{{ styles.graphSummary }}">
+        <span>{{ rootGroups.length }} GC roots keep this object alive</span>
+        <span onClick="{{ toggleAllRoots }}" style="{{ styles.expandAllLink }}">{{ expandAllLabel }}</span>
+      </div>
+      <sc-for list="{{ rootGroups }}" as="grp" hint-placeholder-count="3">
+        <div style="{{ styles.rootGroup }}">
+          <div style="{{ styles.rootGroupHead }}" onClick="{{ grp.onToggle }}">
+            <span style="{{ styles.toggleOpen }}">{{ grp.glyph }}</span>
+            <span style="{{ styles.badgeNeutral }}">{{ grp.kind }}</span>
+            <sc-if value="{{ grp.pinned }}" hint-placeholder-val="{{ false }}"><span style="{{ styles.badgeWarn }}">pinned</span></sc-if>
+            <span style="{{ styles.rootGroupName }}">{{ grp.name }}</span>
+            <span style="{{ styles.rootGroupHops }}">{{ grp.hopCount }} hops</span>
+          </div>
+          <sc-if value="{{ grp.expanded }}" hint-placeholder-val="{{ false }}">
+            <div role="tree" style="{{ styles.tree }}">
+              <sc-for list="{{ grp.nodes }}" as="node" hint-placeholder-count="3">
+                <div role="treeitem" aria-level="{{ node.level }}" style="{{ node.rowStyle }}">
+                  <span style="{{ styles.mono }}">{{ node.address }}</span>
+                  <span style="{{ styles.monoMuted }}">{{ node.type }}</span>
+                  <span style="{{ styles.sizeMuted }}">{{ node.size }}</span>
+                  <sc-if value="{{ node.shared }}" hint-placeholder-val="{{ false }}"><span style="{{ styles.sharedTag }}">shared with other roots</span></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Breadcrumb</div>
+    <div style="{{ styles.breadcrumb }}">
+      <span style="{{ styles.crumbLink }}">Heap Types</span><span style="{{ styles.crumbSep }}">›</span>
+      <span style="{{ styles.crumbLink }}">CacheEntry @ 00007F2C14A20918</span><span style="{{ styles.crumbSep }}">›</span>
+      <span style="{{ styles.crumbCurrent }}">Byte[] @ 00007F2C14A22100</span>
+    </div>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+const T = {
+  bg: '#161826', surface: '#232532', surfaceAlt: '#2c2f3e', border: '#3f424d', borderStrong: '#595d6c',
+  text: '#e9e9ed', textMuted: '#9397ab', textFaint: '#75798c',
+  accent: '#9184d9', accentSoft: 'rgba(145,132,217,0.14)', accentText: '#d2cefd',
+  dangerBase: '#d16a6a', dangerSoft: 'rgba(209,106,106,0.14)',
+  mono: "'JetBrains Mono', ui-monospace, monospace"
+};
+const NS_RAW = [
+  { id: 'a', level: 1, name: 'System', count: 3891204, size: 432847360, pct: 22, hasChildren: true },
+  { id: 'a1', level: 2, name: 'System.Collections.Generic', count: 982140, size: 49478860, pct: 3, hasChildren: false },
+  { id: 'a2', level: 2, name: 'System.Text', count: 44201, size: 8493465, pct: 0.4, hasChildren: false },
+  { id: 'b', level: 1, name: 'MyApp', count: 1204551, size: 2040109465, pct: 46, hasChildren: true },
+  { id: 'b1', level: 2, name: 'MyApp.Domain', count: 1198220, size: 2030198374, pct: 45, hasChildren: true },
+  { id: 'b2', level: 3, name: 'MyApp.Domain.CacheEntry', count: 1180004, size: 1932746240, pct: 44, hasChildren: false },
+];
+const ROOT_GROUPS_RAW = [
+  {
+    id: 'g1', kind: '[static var]', name: 'MyApp.Infrastructure.CacheHost.s_instance', pinned: true,
+    nodes: [
+      { level: 1, address: '00007F2C0E110220', type: 'MyApp.Infrastructure.CacheHost', size: '40 B', shared: false },
+      { level: 2, address: '00007F2C0E110300', type: 'Dictionary<String, CacheEntry>', size: '80 B', shared: false },
+      { level: 3, address: '00007F2C0E118880', type: 'Dictionary<String, CacheEntry>+Entry[]', size: '4.1 MB', shared: true },
+    ],
+  },
+  {
+    id: 'g2', kind: '[local var]', name: 'Thread 14 · ReportController.Generate', pinned: false,
+    nodes: [
+      { level: 1, address: '00007F2C0E120040', type: 'System.Collections.Generic.List<CacheEntry>', size: '32 B', shared: false },
+      { level: 2, address: '00007F2C0E118880', type: 'Dictionary<String, CacheEntry>+Entry[]', size: '4.1 MB', shared: true },
+    ],
+  },
+  {
+    id: 'g3', kind: '[gc handle]', name: 'Strong handle #4412', pinned: true,
+    nodes: [
+      { level: 1, address: '00007F2C14A20918', type: 'MyApp.Domain.CacheEntry', size: '72 B', shared: false },
+    ],
+  },
+];
+
+class Component extends DCLogic {
+  state = { expanded: { a: true, b: true, b1: true }, rootExpanded: { g1: true, g2: false, g3: false } };
+  renderVals() {
+    const t = T;
+    const badgeBase = `font-size:11px;padding:2px 8px;border-radius:100px;border:1px solid;white-space:nowrap`;
+    const styles = {
+      page: `background:${t.bg};color:${t.text};font-family:var(--font-body,'Inter',sans-serif);font-size:13px;padding:24px;display:flex;flex-direction:column;gap:32px`,
+      section: `display:flex;flex-direction:column;gap:10px`,
+      h: `font-family:var(--font-heading);font-weight:500;font-size:13px;color:${t.textMuted};text-transform:uppercase;letter-spacing:0.04em`,
+      tree: `display:flex;flex-direction:column;gap:1px;max-width:760px`,
+      nsCount: `font-family:${t.mono};color:${t.textMuted};font-size:11.5px;width:120px;text-align:right`,
+      nsBarTrack: `width:120px;height:5px;border-radius:100px;background:${t.surfaceAlt};overflow:hidden;flex-shrink:0`,
+      nsSize: `font-family:${t.mono};color:${t.text};font-size:12px;width:80px;text-align:right`,
+      threadRow: `display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:12.5px`,
+      threadRowMuted: `display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:12.5px;color:${t.textFaint};cursor:pointer`,
+      threadLabel: `color:${t.text}`,
+      frameRow: `padding:4px 8px 4px 32px;font-family:${t.mono};font-size:12px;color:${t.textMuted};white-space:nowrap;overflow-x:auto`,
+      toggleOpen: `display:inline-block;width:16px;color:${t.textFaint};font-size:11px;cursor:pointer`,
+      toggleClosed: `display:inline-block;width:16px;color:${t.textFaint};font-size:11px;cursor:pointer`,
+      toggleNone: `display:inline-block;width:16px;color:${t.textFaint};font-size:11px`,
+      rowBase: `display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:12.5px`,
+      mono: `font-family:${t.mono};color:${t.text}`,
+      monoMuted: `font-family:${t.mono};color:${t.textMuted};font-size:12px`,
+      cycleRow: `display:flex;align-items:center;gap:8px;padding:5px 8px 5px 28px;font-size:12px;opacity:0.7`,
+      cycleLabel: `color:${t.textFaint};font-style:italic`,
+      truncRow: `display:flex;align-items:center;gap:8px;padding:5px 8px 5px 28px;font-size:12px`,
+      truncLabel: `color:${t.accentText};cursor:pointer`,
+      badgeDanger: `${badgeBase};background:${t.dangerSoft};color:${t.dangerBase};border-color:${t.dangerBase}`,
+      breadcrumb: `display:flex;align-items:center;gap:6px;font-size:12.5px;color:${t.textMuted};font-family:${t.mono}`,
+      crumbLink: `cursor:pointer;color:${t.accentText}`,
+      crumbSep: `color:${t.textFaint}`,
+      crumbCurrent: `color:${t.text}`,
+      graphCard: `background:${t.surface};border:1px solid ${t.border};border-radius:8px;max-width:760px;overflow:hidden`,
+      graphTarget: `display:flex;align-items:center;gap:10px;padding:12px 16px;background:${t.accentSoft};border-bottom:1px solid ${t.border};font-size:12.5px`,
+      graphTargetLabel: `color:${t.accentText};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;font-weight:600`,
+      graphSummary: `display:flex;align-items:center;justify-content:space-between;padding:8px 16px;color:${t.textMuted};font-size:12px;border-bottom:1px solid ${t.border}`,
+      expandAllLink: `color:${t.accentText};cursor:pointer`,
+      rootGroup: `border-bottom:1px solid ${t.border}`,
+      rootGroupHead: `display:flex;align-items:center;gap:8px;padding:9px 16px;cursor:pointer;font-size:12.5px`,
+      rootGroupName: `color:${t.text};flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`,
+      rootGroupHops: `color:${t.textFaint};font-size:11px;font-family:${t.mono};flex-shrink:0`,
+      sharedTag: `color:${t.textFaint};font-size:11px;font-style:italic;margin-left:auto`,
+    };
+    const nsNodes = NS_RAW.map(n => ({
+      level: n.level, expandedAttr: this.state.expanded[n.id] ? 'true' : 'false',
+      name: n.name, countLabel: formatInt(n.count) + ' obj', sizeLabel: formatBytes(n.size),
+      nameStyle: `flex:1;min-width:0;font-family:${n.level > 1 ? t.mono : 'var(--font-body)'};color:${n.level === 1 ? t.text : t.textMuted};font-size:12.5px`,
+      toggleGlyph: n.hasChildren ? (this.state.expanded[n.id] ? '▾' : '▸') : '•',
+      toggleStyle: `display:inline-block;width:16px;cursor:${n.hasChildren ? 'pointer' : 'default'};color:${t.textFaint};font-size:11px`,
+      onToggle: n.hasChildren ? () => this.setState(s => ({ expanded: { ...s.expanded, [n.id]: !s.expanded[n.id] } })) : null,
+      rowStyle: `display:flex;align-items:center;gap:8px;padding:5px 8px;padding-left:${(n.level - 1) * 20 + 8}px`,
+      barFillStyle: `height:100%;width:${n.pct}%;background:${t.accent}`,
+    })).filter(n => n.level === 1 || this.state.expanded[NS_RAW.find(r => r.level === n.level - 1 && NS_RAW.indexOf(r) < NS_RAW.findIndex(x => x.name === n.name))?.id] !== false || true);
+    const frames = [
+      'MyApp.Api.Controllers.ReportController.Generate(ReportRequest)',
+      'System.Linq.Enumerable+SelectListIterator`2.MoveNext()',
+      'System.Collections.Generic.List`1.AddWithResize(T)',
+      'System.Array.Resize[T](T[] ByRef, Int32)',
+    ];
+    const rootGroups = ROOT_GROUPS_RAW.map(g => {
+      const expanded = this.state.rootExpanded[g.id];
+      return {
+        id: g.id, kind: g.kind, name: g.name, pinned: g.pinned, hopCount: g.nodes.length, expanded,
+        glyph: expanded ? '▾' : '▸',
+        onToggle: () => this.setState(s => ({ rootExpanded: { ...s.rootExpanded, [g.id]: !s.rootExpanded[g.id] } })),
+        nodes: g.nodes.map(n => ({
+          level: n.level, address: n.address, type: n.type, size: n.size, shared: n.shared,
+          rowStyle: `display:flex;align-items:center;gap:8px;padding:4px 16px;padding-left:${16 + n.level * 16}px;font-size:12px`,
+        })),
+      };
+    });
+    const allRootsExpanded = rootGroups.every(g => g.expanded);
+    return {
+      styles, nsNodes, frames, rootGroups, allRootsExpanded,
+      expandAllLabel: allRootsExpanded ? 'Collapse all' : 'Expand all',
+      toggleAllRoots: () => this.setState(s => {
+        const next = !ROOT_GROUPS_RAW.every(g => s.rootExpanded[g.id]);
+        const rootExpanded = {}; ROOT_GROUPS_RAW.forEach(g => rootExpanded[g.id] = next);
+        return { rootExpanded };
+      }),
+    };
+  }
+}
+function formatInt(n){ return n.toLocaleString('en-US'); }
+function formatBytes(n){ if(n<1024) return n+' B'; const u=['KB','MB','GB','TB']; let i=-1,v=n; do{v/=1024;i++;}while(v>=1024&&i<u.length-1); return v.toFixed(1)+' '+u[i]; }
+
+</script>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="stylesheet" href="_ds/nocturne-a13f0cb8-d758-4cf1-afdc-e9b822f5c322/styles.css">
+  <script src="_ds/nocturne-a13f0cb8-d758-4cf1-afdc-e9b822f5c322/_ds_bundle.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>body{margin:0}</style>
+</helmet>
+
+<div style="{{ styles.page }}">
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Data table — 4-column (heap types)</div>
+    <table style="{{ styles.table }}">
+      <thead><tr>
+        <th scope="col" style="{{ styles.thMono }}">MethodTable</th>
+        <th scope="col" aria-sort="descending" style="{{ styles.thNum }}">Count ↓</th>
+        <th scope="col" style="{{ styles.thNum }}">Total size</th>
+        <th scope="col" style="{{ styles.thText }}">Type</th>
+      </tr></thead>
+      <tbody>
+        <sc-for list="{{ heapRows }}" as="row" hint-placeholder-count="4">
+          <tr style="{{ row.trStyle }}" onMouseEnter="{{ row.onHover }}" onMouseLeave="{{ row.onUnhover }}" onClick="{{ row.onSelect }}">
+            <td style="{{ styles.tdMono }}"><span style="{{ styles.addrSpan }}">{{ row.methodTable }}</span></td>
+            <td style="{{ styles.tdNum }}">{{ row.countLabel }}</td>
+            <td style="{{ styles.tdNum }}" title="{{ row.sizeExact }}">{{ row.sizeHuman }}</td>
+            <td style="{{ styles.tdType }}" title="{{ row.typeFull }}">{{ row.typeDisplay }}</td>
+          </tr>
+        </sc-for>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Data table — 9-column (objects, 10.2M rows) + infinite-scroll sentinel</div>
+    <table style="{{ styles.table }}">
+      <thead><tr>
+        <th scope="col" style="{{ styles.thMono }}">Address</th>
+        <th scope="col" style="{{ styles.thMono }}">MethodTable</th>
+        <th scope="col" style="{{ styles.thNum }}">Size</th>
+        <th scope="col" style="{{ styles.thText }}">Type</th>
+        <th scope="col" style="{{ styles.thText }}">Gen</th>
+        <th scope="col" style="{{ styles.thText }}">Root?</th>
+        <th scope="col" style="{{ styles.thText }}">Pinned</th>
+        <th scope="col" style="{{ styles.thNum }}">Age (s)</th>
+        <th scope="col" style="{{ styles.thAction }}"></th>
+      </tr></thead>
+      <tbody>
+        <sc-for list="{{ objectRows }}" as="row" hint-placeholder-count="2">
+          <tr style="{{ styles.tr }}">
+            <td style="{{ styles.tdMono }}"><span style="{{ styles.addrSpan }}">{{ row.address }}</span></td>
+            <td style="{{ styles.tdMono }}">{{ row.methodTable }}</td>
+            <td style="{{ styles.tdNum }}">{{ row.size }}</td>
+            <td style="{{ styles.tdType }}">{{ row.type }}</td>
+            <td style="{{ styles.tdText }}">gen2</td>
+            <td style="{{ styles.tdText }}">no</td>
+            <td style="{{ styles.tdText }}">—</td>
+            <td style="{{ styles.tdNum }}">412</td>
+            <td style="{{ styles.tdAction }}"><button style="{{ styles.sampleBtn }}">Open →</button></td>
+          </tr>
+        </sc-for>
+        <tr><td colspan="9" style="{{ styles.sentinel }}">Loading more… <span style="{{ styles.sentinelMuted }}">(50 of 10,238,441 shown)</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Cell treatments</div>
+    <div style="{{ styles.cellGrid }}">
+      <div style="{{ styles.cellCard }}"><div style="{{ styles.cellLabel }}">Address (monospace, copyable, navigable)</div><span style="{{ styles.addrSpan }}">00007F2C14A20918</span></div>
+      <div style="{{ styles.cellCard }}"><div style="{{ styles.cellLabel }}">Type name (middle-truncated, full on hover)</div><span style="{{ styles.mono }}" title="System.Collections.Generic.Dictionary&lt;System.String,MyApp.Domain.CacheEntry&gt;+Entry[]">System.Collections.Ge…CacheEntry&gt;+Entry[]</span></div>
+      <div style="{{ styles.cellCard }}"><div style="{{ styles.cellLabel }}">Size (humanized + exact on hover)</div><span title="267,670,016 bytes" style="{{ styles.mono }}">255.3 MB</span></div>
+      <div style="{{ styles.cellCard }}"><div style="{{ styles.cellLabel }}">Count (right-aligned, thousands-separated)</div><span style="{{ styles.mono }}">4,182,344</span></div>
+      <div style="{{ styles.cellCard }}">
+        <div style="{{ styles.cellLabel }}">Proportion bar cell</div>
+        <div style="{{ styles.propTrack }}"><div style="{{ styles.propFill }}"></div></div>
+        <div style="{{ styles.propLabel }}">1.9 GB · 46% of heap</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Empty states (within a table)</div>
+    <table style="{{ styles.table }}">
+      <thead><tr><th scope="col" style="{{ styles.thMono }}">MethodTable</th><th scope="col" style="{{ styles.thNum }}">Count</th><th scope="col" style="{{ styles.thNum }}">Total size</th><th scope="col" style="{{ styles.thText }}">Type</th></tr></thead>
+      <tbody><tr><td colspan="4" style="{{ styles.emptyCell }}">
+        <div style="{{ styles.emptyTitle }}">No types match "gen3"</div>
+        <button style="{{ styles.clearBtn }}">Clear filters</button>
+      </td></tr></tbody>
+    </table>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+const T = {
+  bg: '#161826', surface: '#232532', surfaceAlt: '#2c2f3e', border: '#3f424d', borderStrong: '#595d6c',
+  text: '#e9e9ed', textMuted: '#9397ab', textFaint: '#75798c',
+  accent: '#9184d9', accentSoft: 'rgba(145,132,217,0.14)', accentText: '#d2cefd',
+  mono: "'JetBrains Mono', ui-monospace, monospace"
+};
+function formatInt(n){ return n.toLocaleString('en-US'); }
+function formatBytes(n){ if(n<1024) return n+' B'; const u=['KB','MB','GB','TB']; let i=-1,v=n; do{v/=1024;i++;}while(v>=1024&&i<u.length-1); return v.toFixed(1)+' '+u[i]; }
+
+const RAW = [
+  { methodTable: '00007F2C1A4B2E30', count: 4182344, size: 267670016, type: 'System.String' },
+  { methodTable: '00007F2C1A4C0918', count: 1204881, size: 115668576, type: 'System.Byte[]' },
+  { methodTable: '00007F2C1B2E4440', count: 982110, size: 47141280, type: 'System.Collections.Generic.Dictionary<System.String,MyApp.Domain.CacheEntry>+Entry[]' },
+  { methodTable: '00007F2C1C081A50', count: 3, size: 24, type: 'MyApp.Infrastructure.Telemetry.MetricsCollector' },
+];
+
+class Component extends DCLogic {
+  state = { hovered: null };
+  renderVals() {
+    const t = T;
+    const styles = {
+      page: `background:${t.bg};color:${t.text};font-family:var(--font-body,'Inter',sans-serif);font-size:13px;padding:24px;display:flex;flex-direction:column;gap:32px`,
+      section: `display:flex;flex-direction:column;gap:10px`,
+      h: `font-family:var(--font-heading);font-weight:500;font-size:13px;color:${t.textMuted};text-transform:uppercase;letter-spacing:0.04em`,
+      table: `width:100%;border-collapse:collapse;font-size:12.5px`,
+      thMono: `text-align:left;font-family:${t.mono};font-weight:500;color:${t.textMuted};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;padding:8px 10px;border-bottom:1px solid ${t.borderStrong}`,
+      thNum: `text-align:right;font-weight:500;color:${t.textMuted};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;padding:8px 10px;border-bottom:1px solid ${t.borderStrong}`,
+      thText: `text-align:left;font-weight:500;color:${t.textMuted};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;padding:8px 10px;border-bottom:1px solid ${t.borderStrong}`,
+      thAction: `border-bottom:1px solid ${t.borderStrong}`,
+      tr: `border-bottom:1px solid ${t.border}`,
+      tdMono: `padding:8px 10px;font-family:${t.mono};color:${t.text};white-space:nowrap`,
+      tdNum: `padding:8px 10px;text-align:right;font-family:${t.mono};color:${t.text};white-space:nowrap`,
+      tdText: `padding:8px 10px;color:${t.textMuted}`,
+      tdType: `padding:8px 10px;font-family:${t.mono};color:${t.textMuted};max-width:1px;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`,
+      tdAction: `padding:8px 10px;text-align:right;white-space:nowrap`,
+      addrSpan: `cursor:pointer;font-family:${t.mono};border-bottom:1px dashed ${t.textFaint}`,
+      mono: `font-family:${t.mono};color:${t.text}`,
+      sampleBtn: `background:transparent;border:1px solid ${t.accent};color:${t.accentText};border-radius:6px;padding:5px 10px;font-size:11.5px;cursor:pointer`,
+      sentinel: `padding:12px;text-align:center;color:${t.textMuted};font-size:12px`,
+      sentinelMuted: `color:${t.textFaint}`,
+      cellGrid: `display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px`,
+      cellCard: `background:${t.surface};border:1px solid ${t.border};border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px`,
+      cellLabel: `color:${t.textFaint};font-size:11px`,
+      propTrack: `height:6px;border-radius:100px;background:${t.surfaceAlt};overflow:hidden`,
+      propFill: `height:100%;width:46%;background:${t.accent}`,
+      propLabel: `color:${t.textMuted};font-size:11px;font-family:${t.mono}`,
+      emptyCell: `padding:28px;text-align:center;color:${t.textMuted}`,
+      emptyTitle: `margin-bottom:10px;font-size:13px`,
+      clearBtn: `background:transparent;border:1px solid ${t.border};color:${t.textMuted};border-radius:6px;padding:5px 10px;font-size:11.5px;cursor:pointer`,
+    };
+    const heapRows = RAW.map((r, i) => ({
+      methodTable: r.methodTable, countLabel: formatInt(r.count), sizeHuman: formatBytes(r.size), sizeExact: formatInt(r.size) + ' bytes',
+      typeDisplay: r.type.length > 58 ? r.type.slice(0, 38) + '…' + r.type.slice(-14) : r.type, typeFull: r.type,
+      trStyle: `border-bottom:1px solid ${t.border};background:${this.state.hovered === i ? t.surfaceAlt : 'transparent'};cursor:pointer`,
+      onHover: () => this.setState({ hovered: i }), onUnhover: () => this.setState({ hovered: null }), onSelect: () => {},
+    }));
+    const objectRows = [
+      { address: '00007F2C14A20918', methodTable: '00007F2C1A4B2E30', size: '96', type: 'System.String' },
+      { address: '00007F2C14A20978', methodTable: '00007F2C1A4B2E30', size: '1,024', type: 'System.String' },
+    ];
+    return { styles, heapRows, objectRows };
+  }
+}
+
+</script>
+</body>
+</html>

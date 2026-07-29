@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="stylesheet" href="_ds/nocturne-a13f0cb8-d758-4cf1-afdc-e9b822f5c322/styles.css">
+  <script src="_ds/nocturne-a13f0cb8-d758-4cf1-afdc-e9b822f5c322/_ds_bundle.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>body{margin:0}</style>
+</helmet>
+
+<div style="{{ styles.page }}">
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Filter bar — Heap Types view (composes: search, size range, count range)</div>
+    <div style="{{ styles.bar }}">
+      <input value="{{ f1.search }}" onInput="{{ onSearch }}" placeholder="Type name contains…" style="{{ styles.search }}"/>
+      <div style="{{ styles.field }}"><label style="{{ styles.label }}">Size</label><input placeholder="4kb" style="{{ styles.input }}" value="{{ f1.sizeMin }}" onInput="{{ onSizeMin }}"/><span style="{{ styles.rangeDash }}">–</span><input placeholder="2gb" style="{{ styles.input }}"/></div>
+      <div style="{{ styles.field }}"><label style="{{ styles.label }}">Count ≥</label><input placeholder="1000" style="{{ styles.input }}"/></div>
+      <div style="{{ styles.field }}"><label style="{{ styles.label }}">Gen</label>
+        <select style="{{ styles.select }}"><option>Any</option><option>gen0</option><option>gen1</option><option>gen2</option><option>LOH</option><option>POH</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Filter bar — Threads view (composes: thread id, has-exception toggle)</div>
+    <div style="{{ styles.bar }}">
+      <div style="{{ styles.field }}"><label style="{{ styles.label }}">Thread id</label><input placeholder="14" style="{{ styles.input }}"/></div>
+      <label style="{{ styles.toggleRow }}"><input type="checkbox" checked style="{{ styles.checkbox }}"/> has exception</label>
+    </div>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Active-filter chips + clear-all</div>
+    <div style="{{ styles.chipRow }}">
+      <span style="{{ styles.chip }}">type contains "cache" <span style="{{ styles.chipX }}">×</span></span>
+      <span style="{{ styles.chip }}">size ≥ 1mb <span style="{{ styles.chipX }}">×</span></span>
+      <span style="{{ styles.chip }}">gen: LOH <span style="{{ styles.chipX }}">×</span></span>
+      <button style="{{ styles.clearBtn }}">Clear all</button>
+    </div>
+  </div>
+
+  <div style="{{ styles.section }}">
+    <div style="{{ styles.h }}">Sort control — narrow layouts</div>
+    <div style="{{ styles.sortRow }}">
+      <label style="{{ styles.label }}">Sort by</label>
+      <select style="{{ styles.select }}"><option>Total size (desc)</option><option>Total size (asc)</option><option>Count (desc)</option><option>Count (asc)</option><option>Type name (A–Z)</option></select>
+    </div>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+const T = {
+  bg: '#161826', surface: '#232532', surfaceAlt: '#2c2f3e', border: '#3f424d', borderStrong: '#595d6c',
+  text: '#e9e9ed', textMuted: '#9397ab', textFaint: '#75798c',
+  accent: '#9184d9', accentSoft: 'rgba(145,132,217,0.14)', accentText: '#d2cefd',
+  mono: "'JetBrains Mono', ui-monospace, monospace"
+};
+class Component extends DCLogic {
+  state = { search: '', sizeMin: '' };
+  renderVals() {
+    const t = T;
+    const styles = {
+      page: `background:${t.bg};color:${t.text};font-family:var(--font-body,'Inter',sans-serif);font-size:13px;padding:24px;display:flex;flex-direction:column;gap:32px`,
+      section: `display:flex;flex-direction:column;gap:10px`,
+      h: `font-family:var(--font-heading);font-weight:500;font-size:13px;color:${t.textMuted};text-transform:uppercase;letter-spacing:0.04em`,
+      bar: `display:flex;align-items:center;gap:12px;flex-wrap:wrap`,
+      search: `background:${t.surface};border:1px solid ${t.border};color:${t.text};border-radius:6px;padding:7px 10px;font-size:12.5px;width:220px;font-family:var(--font-body)`,
+      field: `display:flex;align-items:center;gap:6px`,
+      label: `color:${t.textMuted};font-size:11.5px`,
+      input: `background:${t.surface};border:1px solid ${t.border};color:${t.text};border-radius:6px;padding:7px 10px;font-size:12.5px;width:80px;font-family:${t.mono}`,
+      rangeDash: `color:${t.textFaint}`,
+      select: `background:${t.surface};border:1px solid ${t.border};color:${t.text};border-radius:6px;padding:7px 10px;font-size:12.5px`,
+      toggleRow: `display:flex;align-items:center;gap:6px;color:${t.textMuted};font-size:12.5px;cursor:pointer`,
+      checkbox: `accent-color:${t.accent}`,
+      chipRow: `display:flex;align-items:center;gap:8px;flex-wrap:wrap`,
+      chip: `display:inline-flex;align-items:center;gap:6px;background:${t.accentSoft};color:${t.accentText};border:1px solid ${t.accent};border-radius:100px;padding:3px 6px 3px 10px;font-size:11.5px`,
+      chipX: `cursor:pointer;opacity:0.7;padding:0 3px`,
+      clearBtn: `background:transparent;border:1px solid ${t.border};color:${t.textMuted};border-radius:6px;padding:6px 10px;font-size:11.5px;cursor:pointer`,
+      sortRow: `display:flex;align-items:center;gap:10px`,
+    };
+    return {
+      styles,
+      f1: { search: this.state.search, sizeMin: this.state.sizeMin },
+      onSearch: e => this.setState({ search: e.target.value }),
+      onSizeMin: e => this.setState({ sizeMin: e.target.value }),
+    };
+  }
+}
+
+</script>
+</body>
+</html>
