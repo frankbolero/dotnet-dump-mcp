@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 
-namespace DotNetDump.Cli;
+namespace DotNetDump.Core.Utilities;
 
 /// <summary>
 /// Persisted contents of <c>.dndump/session.json</c> (CLI_DESIGN.md &#0167;3.1), written by <c>use</c>

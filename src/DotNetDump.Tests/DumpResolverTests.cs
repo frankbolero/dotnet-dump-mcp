@@ -1,4 +1,7 @@
 using DotNetDump.Cli;
+using DotNetDump.Core.Utilities;
+// Prefer the CLI DumpResolver since these tests check for CliUsageException
+using DumpResolver = DotNetDump.Cli.DumpResolver;
 
 namespace DotNetDump.Tests;
 
@@ -7,7 +10,8 @@ namespace DotNetDump.Tests;
 /// <c>DNDUMP_PATH</c>, then <c>.dndump/session.json</c> searched upward) as a pure function --
 /// <see cref="DumpResolver.Resolve"/> takes the starting directory and an environment-variable
 /// lookup as parameters specifically so these tests need not touch the real process environment
-/// or working directory.
+/// or working directory. Tests the CLI facade which wraps the Core implementation and maps
+/// exceptions appropriately.
 /// </summary>
 public class DumpResolverTests : IDisposable {
 	private readonly string _tempRoot;

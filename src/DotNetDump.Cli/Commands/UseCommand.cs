@@ -3,6 +3,7 @@ using System.CommandLine;
 using System.IO;
 
 using DotNetDump.Core;
+using DotNetDump.Core.Utilities;
 
 namespace DotNetDump.Cli.Commands;
 

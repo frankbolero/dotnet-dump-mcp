@@ -1,4 +1,5 @@
 using DotNetDump.Cli;
+using DotNetDump.Core.Utilities;
 
 namespace DotNetDump.Tests;
 
