@@ -56,6 +56,9 @@ namespace DotNetDump.Core.Formatting {
 			[JsonPropertyName("total")]
 			public int Total { get; init; }
 
+			[JsonPropertyName("totalUnfiltered")]
+			public int TotalUnfiltered { get; init; }
+
 			[JsonPropertyName("offset")]
 			public int Offset { get; init; }
 
@@ -68,11 +71,13 @@ namespace DotNetDump.Core.Formatting {
 			/// <summary>
 			/// For a collection that reaches this layer already sliced by its analyzer, with no
 			/// <c>PagedResult&lt;T&gt;</c> to report the true pre-pagination total. <c>total</c> and
-			/// <c>limit</c> collapse to what is actually in <c>data</c>, and <c>hasMore</c> is reported
-			/// <c>false</c> rather than guessed -- this is honestly all that is known at this layer.
+			/// <c>totalUnfiltered</c> both collapse to what is actually in <c>data</c>, <c>limit</c>
+			/// collapses to the same, and <c>hasMore</c> is reported <c>false</c> rather than guessed
+			/// -- this is honestly all that is known at this layer.
 			/// </summary>
 			public static PaginationInfo FromItemsOnly(int count) => new() {
 				Total = count,
+				TotalUnfiltered = count,
 				Offset = 0,
 				Limit = count,
 				HasMore = false,
@@ -81,6 +86,7 @@ namespace DotNetDump.Core.Formatting {
 			/// <summary>The real thing: total/offset/limit as computed by the analyzer, hasMore derived from them.</summary>
 			public static PaginationInfo FromPagedResult<T>(PagedResult<T> result) => new() {
 				Total = result.TotalAvailable,
+				TotalUnfiltered = result.TotalUnfiltered,
 				Offset = result.Offset,
 				Limit = result.Limit,
 				HasMore = result.HasMore,

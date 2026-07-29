@@ -49,9 +49,33 @@ public class JsonFormatterTests {
 		var pagination = doc.RootElement.GetProperty("pagination");
 
 		Assert.Equal(500, pagination.GetProperty("total").GetInt32());
+		Assert.Equal(650, pagination.GetProperty("totalUnfiltered").GetInt32());
 		Assert.Equal(10, pagination.GetProperty("offset").GetInt32());
 		Assert.Equal(1, pagination.GetProperty("limit").GetInt32());
 		Assert.True(pagination.GetProperty("hasMore").GetBoolean());
+	}
+
+	[Fact]
+	public void CollectionMethods_ReportTotalUnfilteredWhenUnfiltered() {
+		// When TotalAvailable equals TotalUnfiltered, both are reported in the JSON.
+		// This represents a case where all rows have been retrieved (unfiltered).
+		var page = new PagedResult<HeapStatItem>(
+			new[] { new HeapStatItem { TypeName = "System.String", MethodTable = 0x1, Count = 100, TotalSize = 1000 } },
+			totalAvailable: 1,
+			totalUnfiltered: 1,
+			offset: 0,
+			limit: 50);
+
+		string output = JsonFormatter.FormatHeapStatistics(page);
+
+		using var doc = JsonDocument.Parse(output);
+		var pagination = doc.RootElement.GetProperty("pagination");
+
+		Assert.Equal(1, pagination.GetProperty("total").GetInt32());
+		Assert.Equal(1, pagination.GetProperty("totalUnfiltered").GetInt32());
+		Assert.Equal(0, pagination.GetProperty("offset").GetInt32());
+		Assert.Equal(50, pagination.GetProperty("limit").GetInt32());
+		Assert.False(pagination.GetProperty("hasMore").GetBoolean());
 	}
 
 	[Fact]
