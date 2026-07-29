@@ -105,6 +105,7 @@ public class CliRunnerTests {
 
 	[Theory]
 	[InlineData("dumpheap")]
+	[InlineData("listobj")]
 	public async Task MalformedFilter_OnEveryWiredListCommand_ReturnsUsageErrorExitCode_WithoutADump(string command) {
 		var stdout = new StringWriter();
 		var stderr = new StringWriter();

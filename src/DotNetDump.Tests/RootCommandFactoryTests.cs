@@ -1,5 +1,6 @@
 using DotNetDump.Cli;
 using DotNetDump.Cli.Commands;
+using DotNetDump.Core.Models;
 
 namespace DotNetDump.Tests;
 
@@ -112,6 +113,73 @@ public class RootCommandFactoryTests {
 		Assert.Equal("Count", parseResult.GetValue(DumpHeapCommand.SortOption));
 		Assert.Equal("asc", parseResult.GetValue(DumpHeapCommand.OrderOption));
 		Assert.Equal(5, parseResult.GetValue(DumpHeapCommand.TopOption));
+	}
+
+	[Fact]
+	public void DumpHeap_Filter_DefaultsToEmpty() {
+		var parseResult = RootCommandFactory.Create().Parse(new[] { "dumpheap" });
+
+		Assert.Empty(parseResult.GetValue(DumpHeapCommand.FilterOption)!);
+	}
+
+	[Fact]
+	public void DumpHeap_Filter_IsRepeatable() {
+		var parseResult = RootCommandFactory.Create().Parse(new[] {
+			"dumpheap", "--filter", "type~Http", "--filter", "size>100mb",
+		});
+
+		Assert.Empty(parseResult.Errors);
+		Assert.Equal(new[] { "type~Http", "size>100mb" }, parseResult.GetValue(DumpHeapCommand.FilterOption));
+	}
+
+	// ---- listobj: --type (scope) and --filter 'type~' (filter) are two options, not one --------
+	//
+	// DATA_CONTRACT.md §2.4, "listobj --type is not an alias for --filter 'type~'": --type narrows
+	// the heap walk and is part of the cache key; --filter runs after the (possibly narrowed) walk
+	// and is excluded from it. These assertions parse both together and check each binds to its own
+	// option value, independent of the other -- proving the CLI layer never merges or rewrites one
+	// into the other, which is the specific regression the plan calls out.
+
+	[Fact]
+	public void ListObj_Type_And_Filter_BindToIndependentOptions_WhenOnlyTypeGiven() {
+		var parseResult = RootCommandFactory.Create().Parse(new[] { "listobj", "--type", "MyApp.Cache" });
+
+		Assert.Empty(parseResult.Errors);
+		Assert.Equal("MyApp.Cache", parseResult.GetValue(ListObjCommand.TypeOption));
+		Assert.Empty(parseResult.GetValue(ListObjCommand.FilterOption)!);
+	}
+
+	[Fact]
+	public void ListObj_Type_And_Filter_BindToIndependentOptions_WhenOnlyFilterGiven() {
+		var parseResult = RootCommandFactory.Create().Parse(new[] { "listobj", "--filter", "type~MyApp.Cache" });
+
+		Assert.Empty(parseResult.Errors);
+		Assert.Null(parseResult.GetValue(ListObjCommand.TypeOption));
+		Assert.Equal(new[] { "type~MyApp.Cache" }, parseResult.GetValue(ListObjCommand.FilterOption));
+	}
+
+	[Fact]
+	public void ListObj_Type_And_Filter_ComposeWithoutEitherOverwritingTheOther() {
+		// Both given together: the scope (--type) and the filter (--filter 'type~') keep their own
+		// distinct values, exactly as HeapAnalyzer.GetObjects(parameters, typeFilter) takes them as
+		// two independent parameters. Neither is derived from or collapsed into the other.
+		var parseResult = RootCommandFactory.Create().Parse(new[] {
+			"listobj", "--type", "MyApp.Cache", "--filter", "type~Entry",
+		});
+
+		Assert.Empty(parseResult.Errors);
+		Assert.Equal("MyApp.Cache", parseResult.GetValue(ListObjCommand.TypeOption));
+		Assert.Equal(new[] { "type~Entry" }, parseResult.GetValue(ListObjCommand.FilterOption));
+	}
+
+	[Fact]
+	public void ListObj_Filter_ParsesIntoTypeNameNotTypeScope() {
+		FilterSpec filter = FilterExpressionParser.Parse(new[] { "type~Entry" });
+
+		// The parsed FilterSpec carries TypeName (the post-walk filter field) -- there is no
+		// property on FilterSpec that could be confused with --type's walk-time scope, since --type
+		// never goes through FilterExpressionParser at all.
+		Assert.Equal("Entry", filter.TypeName);
 	}
 
 	[Fact]
