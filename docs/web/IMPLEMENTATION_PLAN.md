@@ -159,11 +159,91 @@ Depends on 5 and 6.
 investigate a leak end to end. `dotnet format --verify-no-changes` and the full test suite pass on
 all three target frameworks.
 
+## Delegation
+
+Most of this plan is well-specified enough to hand to a subagent. What follows is the division and
+the model for each task. The organising principle: **an agent gets a task when the task has an
+oracle** — a compiler, a test, or a grammar in [`DATA_CONTRACT.md`](DATA_CONTRACT.md) that says
+unambiguously whether the work is right. Tasks whose correctness is a judgment call about what the
+rest of the system will have to live with stay with the lead.
+
+### Working agreement
+
+Applies to every delegated task without exception.
+
+* **Worktree per agent**, branched from `feature/web-interface`, named `web/<task>-<slug>` (e.g.
+  `web/0.4-filter-parser`). No agent commits to `feature/web-interface`; the lead merges.
+* **Atomic commits.** One logical change per commit. The solution builds and the full test suite
+  passes at *every* commit, not just the last one. `dotnet format` before each. No "WIP" commits and
+  no commit whose only purpose is fixing the one before it — rewrite that history before handing
+  the branch back.
+* **All three target frameworks.** `net8.0;net9.0;net10.0`. Code that compiles on one is not done.
+* **One owner per file.** Where a phase fans out over near-identical items, the shared files —
+  command registration, `_Layout`, navigation, DI wiring — are edited *once by the lead before
+  fan-out*. Parallel agents editing a shared registration file produce merge conflicts that cost
+  more than the parallelism saved.
+* **Agents do not run measurements.** Every measurement here needs a real dump and a warm cache on
+  the developer's machine. An agent reporting a timing it could not have produced is worse than no
+  number.
+* **The deliverable includes what was not done.** An agent hands back the branch plus an explicit
+  list of anything it skipped, stubbed, or could not verify.
+
+### Task assignment
+
+| Task | Model | Rationale |
+| :--- | :--- | :--- |
+| 0.1 `FilterSpec` | **Lead / Opus** | The type every later phase binds to. Cheap to write, expensive to change once eight analyzers and a query binder depend on it. |
+| 0.2 Filter application + honored fields | **Sonnet** | Repetitive across analyzers once 0.1 exists. **The lead decides the honored-field matrix first** — which fields each method accepts is a product decision, not an implementation detail — and the agent implements it. |
+| 0.3 `TotalUnfiltered` + `SchemaVersion` bump | **Haiku** | Mechanical, compiler-guided. |
+| 0.4 `FilterExpressionParser` + `--filter` wiring | **Sonnet** | A pure parser against a written grammar, with unit tests as the oracle. The single best-shaped delegation in the plan. |
+| 0.5 `IEnumerable<T>` → `PagedResult<T>` (5 methods) | **Sonnet** | Repetitive and compiler-guided, but `JsonFormatter` must stop using `FromItemsOnly` and start reporting real totals — that part is easy to miss. |
+| 0.6 Move `DumpResolver`/`SessionFile` to Core | **Haiku** | Pure relocation. The oracle is "the build passes and the CLI tests are untouched". |
+| 0.7 `IProgress<WalkProgress>` on the walk methods | **Sonnet** | Threading a parameter through five methods without changing any existing behaviour. |
+| Phase 1 (all) | **Not delegated** | Design iteration in Claude Design, plus taste calls a subagent has no basis for. |
+| 2.1 `DotNetDump.Web.csproj` + solution entry | **Haiku** | Scaffolding. |
+| 2.2 `dndump serve` | **Sonnet** | Ordinary command wiring on top of 0.6's shared resolver. |
+| 2.3 **`IAnalysisQueue`** | **Lead / Opus** | The correctness spine of the whole server. Serialization, cancellation and job identity have to be right before any handler exists, and the failure mode — ClrMD corruption under concurrency — does not present as an obvious bug. |
+| 2.4 Security middleware | **Opus** | Small, and the one thing in the project that cannot be subtly wrong. |
+| 2.5 Vendor htmx | **Haiku** | Download, pin, hash. |
+| 2.6 `ViewRequestBinder` | **Sonnet** | Spec'd in [`DATA_CONTRACT.md`](DATA_CONTRACT.md), fully unit-testable. |
+| 2.7 First route end to end | **Sonnet** | Placeholder markup by definition; the plumbing is the point. |
+| 3.1 Razor conversion pattern | **Lead / Opus** | Sets the template every later view copies. "Keep templates dumb" is precisely the constraint an agent will violate to make one view nicer. Do the first component yourself, then delegate against it. |
+| 3.2 App shell + navigation | **Sonnet** | Shared files — do this before any 3.3/3.4 fan-out. |
+| 3.3 Eight list views | **Sonnet**, then **Haiku** | First two by Sonnet to prove the pattern generalises; the remaining six are copy-and-adapt. Fan out at most three agents, partitioned by view. |
+| 3.4 Eleven detail views | **Sonnet**, then **Haiku** | Same shape as 3.3. |
+| 3.5 Resync procedure | **Sonnet** | Documenting a boundary the agent has just worked inside. |
+| 4.1–4.3 Filter bar, chips, sortable headers | **Sonnet** | Well-specified htmx wiring. **The lead writes the filter-preservation test first** (see the risk register) and the agent makes it pass; an agent asked to test its own work here will write the test that passes. |
+| 4.4 Infinite scroll | **Sonnet** | Sentinel protocol is fully specified. |
+| 4.5 Out-of-band updates | **Sonnet** | |
+| 4.6 URL state round-trip | **Sonnet** | Round-trip property is its own oracle. |
+| 5.1 Namespace rollup | **Sonnet** | Pure grouping over cached data. The "split on `.` only outside `<>`" rule is fiddly and deserves a dedicated test set. |
+| 5.2 Thread → frames | **Sonnet** | Note the explicit permission to drop locals — an agent will otherwise burn effort proving ClrMD can do something it cannot. |
+| 5.3 gcroot retention paths | **Opus** | Truncation semantics carry the plan's most consequential correctness requirement, and the tempting shortcut is to ship the tree and defer the banner. |
+| 5.4 Object reference navigator | **Opus** | Cycle detection, visited-set node identity and the depth cap against a routinely-cyclic graph. A **High** risk row. |
+| 6.1 Startup cache warm | **Sonnet** | |
+| 6.2 Progress plumbing | **Sonnet** | Consumes 0.7's interface. |
+| 6.3 Pending-state protocol | **Sonnet** | |
+| 6.4 Cache-hit fast path | **Opus** | Deliberately bypasses the queue. Whether that is safe for a given result type is exactly the reasoning 2.3 exists to protect. |
+| 6.5 Cache-state indicator | **Haiku** | |
+| 7.1 Docker | **Sonnet** | Loopback prefix in every emitted example — verify, don't assume. |
+| 7.2 Security tests + cyclic-graph fixture | **Opus** | The last line of defence for two **High** risks. A weak test here is worse than no test, because it reads as coverage. |
+| 7.2 Remaining tests | **Sonnet** | |
+| 7.3 README section | **Sonnet** | |
+| 7.4 `dndump` skill update | **Sonnet** | |
+| 7.5 Rewrite `CLI_DESIGN.md` §10 | **Haiku** | Replacing a section with a pointer. |
+
+### Never delegated
+
+Every **Measurement** and **Decision point** block in this plan, the honored-field matrix in 0.2,
+and the acceptance of any phase's exit criterion. Those are the points where the plan can change,
+and an agent working inside a single task has no standing to change it.
+
 ## Risk register
 
 | Risk | Likelihood | Mitigation |
 | :--- | :--- | :--- |
 | ClrMD thread-safety violated by a handler that bypasses the queue | Medium | The queue lands in Phase 2 before any real handler exists. Analyzers are not registered in DI as request-scoped services, so a handler cannot reach one except through the queue. |
+| A delegated agent reports a measurement or an exit criterion it did not verify | Medium | Agents do not run measurements, and do not accept exit criteria. Both are the lead's, per the delegation working agreement. |
 | A sort or page action silently drops the active filter | **High** | Per-view tests in Phase 4. This bug returns wrong data that looks right. |
 | Truncated `gcroot` read as a conclusive answer | Medium | Truncation banner is inside task 5.3, not a follow-up. `state.truncated` in the JSON envelope so API callers see it too. |
 | Object-reference tree expands forever on a cyclic graph | **High** — object graphs are routinely cyclic | Cycle detection and depth cap in 5.4, with a deliberately cyclic test fixture. |
