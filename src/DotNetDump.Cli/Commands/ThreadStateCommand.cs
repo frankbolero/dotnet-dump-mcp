@@ -2,6 +2,7 @@ using System.CommandLine;
 
 using DotNetDump.Core.Analyzers;
 using DotNetDump.Core.Formatting;
+using DotNetDump.Core.Models;
 
 namespace DotNetDump.Cli.Commands;
 
@@ -21,12 +22,21 @@ public static class ThreadStateCommand {
 		Description = "Sort direction: asc or desc (default desc).",
 	};
 
+	// Honored set: ThreadAnalyzer.GetThreadStates -> ThreadStateInfoFilter.Honored
+	// (DATA_CONTRACT.md §2.3). 'text' here also matches state flag names -- deliberately more than
+	// clrthreads' 'text', which has no state flags to search.
+	public static readonly Option<string[]> FilterOption = GlobalOptions.CreateFilterOption(
+		"Filter expression '<field><op><value>', repeatable and ANDed. Honored fields: " +
+		"thread, osthread, exception (true/false), text (across the current exception's type name " +
+		"and state flag names).");
+
 	public static Command Create() {
 		var command = new Command("threadstate", "Thread state and synchronization details.");
 		command.Options.Add(LimitOption);
 		command.Options.Add(OffsetOption);
 		command.Options.Add(SortOption);
 		command.Options.Add(OrderOption);
+		command.Options.Add(FilterOption);
 
 		command.SetAction((ParseResult parseResult) => {
 			string? dumpOption = parseResult.GetValue(GlobalOptions.Dump);
@@ -38,10 +48,11 @@ public static class ThreadStateCommand {
 			int offset = parseResult.GetValue(OffsetOption);
 			string? sort = parseResult.GetValue(SortOption);
 			string? order = parseResult.GetValue(OrderOption);
+			FilterSpec filter = FilterExpressionParser.Parse(parseResult.GetValue(FilterOption));
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
 			var analyzer = new ThreadAnalyzer(context, AnalysisCacheProvider.Default);
-			var parameters = QueryParametersBuilder.Build(sort, order, limit, offset);
+			var parameters = QueryParametersBuilder.Build(sort, order, limit, offset, filter);
 			var states = analyzer.GetThreadStates(parameters);
 
 			System.Console.WriteLine(OutputFormatting.Render(format, states, MarkdownFormatter.FormatThreadStates, JsonFormatter.FormatThreadStates, TsvFormatter.FormatThreadStates));

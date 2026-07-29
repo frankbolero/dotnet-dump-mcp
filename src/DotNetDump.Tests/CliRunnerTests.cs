@@ -109,6 +109,9 @@ public class CliRunnerTests {
 	[InlineData("gchandles")]
 	[InlineData("syncblk")]
 	[InlineData("printexception")]
+	[InlineData("clrthreads")]
+	[InlineData("threadstate")]
+	[InlineData("dumpstack")]
 	public async Task MalformedFilter_OnEveryWiredListCommand_ReturnsUsageErrorExitCode_WithoutADump(string command) {
 		var stdout = new StringWriter();
 		var stderr = new StringWriter();
@@ -139,10 +142,17 @@ public class CliRunnerTests {
 	[InlineData("info")]
 	[InlineData("dumpobj")]
 	[InlineData("gcroot")]
+	[InlineData("clrstack")]
+	[InlineData("eestack")]
 	public async Task Filter_OnACommandThatHonorsNone_IsRejectedByTheParserNotAccepted(string command) {
-		// These commands must not advertise --filter at all (task 0.4 Part 2): System.CommandLine's
-		// own parser rejects the unknown option before the command action ever runs, which is a
-		// different (and stronger) guarantee than the command silently accepting and ignoring it.
+		// These commands must not advertise --filter at all: System.CommandLine's own parser
+		// rejects the unknown option before the command action ever runs, which is a different (and
+		// stronger) guarantee than the command silently accepting and ignoring it. eeheap,
+		// threadpool, verifyheap, info, dumpobj and gcroot honor no filter per DATA_CONTRACT.md
+		// §2.3's matrix. clrstack/eestack are a separate case (a finding reported in the 0.4
+		// hand-back, not a matrix entry): they call ThreadAnalyzer.GetStackTraceGroups, which has no
+		// QueryParameters/filter plumbing at all, unlike dumpstack which calls GetDetailedStacks and
+		// does get --filter wired.
 		var stdout = new StringWriter();
 		var stderr = new StringWriter();
 
