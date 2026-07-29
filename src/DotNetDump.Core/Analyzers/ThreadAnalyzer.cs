@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using DotNetDump.Core.Caching;
+using DotNetDump.Core.Filtering;
 using DotNetDump.Core.Models;
 using DotNetDump.Core.Utilities;
 
@@ -30,6 +31,8 @@ namespace DotNetDump.Core.Analyzers {
 		}
 
 		public PagedResult<ThreadInfo> GetThreads(QueryParameters parameters) {
+			parameters.Filter.EnsureSupported("clrthreads", ThreadInfoFilter.Honored);
+
 			var runtime = GetRuntime();
 			var threads = runtime.Threads.Select(t => new ThreadInfo {
 				ManagedThreadId = t.ManagedThreadId,
@@ -37,7 +40,7 @@ namespace DotNetDump.Core.Analyzers {
 				IsAlive = t.IsAlive,
 				ExceptionType = t.CurrentException?.Type?.Name,
 				ExceptionMessage = t.CurrentException?.Message
-			}).ToList();
+			}).Where(t => ThreadInfoFilter.Matches(t, parameters.Filter)).ToList();
 
 			// Sorting
 			IEnumerable<ThreadInfo> sorted = threads;
@@ -128,43 +131,73 @@ namespace DotNetDump.Core.Analyzers {
 		/// threads — materialising every stack to return fifty would make this the slowest command in
 		/// the tool. <see cref="PagedResult{T}.TotalAvailable"/> is the live thread count, which is known
 		/// without walking anything.
+		/// <para>
+		/// <c>Text</c> (frame method name) is the one honored filter field that cannot be tested without
+		/// a walk. <see cref="ThreadStackInfoFilter.MatchesThread"/> narrows on
+		/// <c>ManagedThreadId</c>/<c>OSThreadId</c>/<c>HasException</c> straight off <see cref="ClrThread"/>
+		/// before any walk, so those stay free; only when <see cref="FilterSpec.Text"/> is set does this
+		/// method walk every remaining candidate's stack to test it, rather than only the requested page.
+		/// </para>
 		/// </remarks>
 		public PagedResult<ThreadStackInfo> GetDetailedStacks(QueryParameters parameters, int maxFrames = 100) {
+			parameters.Filter.EnsureSupported("dumpstack", ThreadStackInfoFilter.Honored);
+			FilterSpec filter = parameters.Filter;
+
 			var runtime = GetRuntime();
-			var alive = runtime.Threads.Where(t => t.IsAlive).ToList();
+			IEnumerable<ClrThread> alive = runtime.Threads.Where(t => t.IsAlive);
+			if (!filter.IsEmpty) {
+				alive = alive.Where(t => ThreadStackInfoFilter.MatchesThread(t.ManagedThreadId, t.OSThreadId, t.CurrentException?.Type?.Name, filter));
+			}
+
+			var aliveList = alive.ToList();
 
 			// Sort by thread ID. Both keys come straight off the thread, so this is the same ordering
 			// the previous implementation produced from the projected rows.
-			IEnumerable<ClrThread> sorted = alive;
+			IEnumerable<ClrThread> sorted = aliveList;
 			if (parameters.SortBy?.ToLower() == "osthreadid") {
 				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(t => t.OSThreadId) : sorted.OrderByDescending(t => t.OSThreadId);
 			} else {
 				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(t => t.ManagedThreadId) : sorted.OrderByDescending(t => t.ManagedThreadId);
 			}
 
+			if (filter.Text != null) {
+				// Text matches frame method name, which is only known once a thread's stack is walked.
+				// Every remaining candidate has to be walked to test the filter, not just the requested
+				// page -- the walk-avoidance below no longer applies once Text is in play.
+				List<ThreadStackInfo> matched = sorted
+					.Select(t => BuildThreadStackInfo(t, maxFrames))
+					.Where(s => ThreadStackInfoFilter.MatchesFrameText(s.Frames, filter.Text))
+					.ToList();
+
+				var textFilteredPage = matched.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+				return new PagedResult<ThreadStackInfo>(textFilteredPage, matched.Count, parameters.Offset, parameters.Limit);
+			}
+
 			var page = sorted
 				.Skip(parameters.Offset)
 				.Take(parameters.Limit)
-				.Select(t => new ThreadStackInfo {
-					ManagedThreadId = t.ManagedThreadId,
-					OSThreadId = t.OSThreadId,
-					IsAlive = t.IsAlive,
-					ExceptionType = t.CurrentException?.Type?.Name,
-					Frames = t.EnumerateStackTrace(includeContext: false, maxFrames: maxFrames)
-						.Select(f => new StackFrameInfo {
-							InstructionPointer = f.InstructionPointer,
-							StackPointer = f.StackPointer,
-							FrameKind = f.Kind.ToString(),
-							MethodName = DescribeFrame(f),
-							ModuleName = SimpleModuleName(f.Method?.Type?.Module?.Name),
-							IsManaged = f.Kind == ClrStackFrameKind.ManagedMethod
-						})
-						.ToList()
-				})
+				.Select(t => BuildThreadStackInfo(t, maxFrames))
 				.ToList();
 
-			return new PagedResult<ThreadStackInfo>(page, alive.Count, parameters.Offset, parameters.Limit);
+			return new PagedResult<ThreadStackInfo>(page, aliveList.Count, parameters.Offset, parameters.Limit);
 		}
+
+		private static ThreadStackInfo BuildThreadStackInfo(ClrThread t, int maxFrames) => new() {
+			ManagedThreadId = t.ManagedThreadId,
+			OSThreadId = t.OSThreadId,
+			IsAlive = t.IsAlive,
+			ExceptionType = t.CurrentException?.Type?.Name,
+			Frames = t.EnumerateStackTrace(includeContext: false, maxFrames: maxFrames)
+				.Select(f => new StackFrameInfo {
+					InstructionPointer = f.InstructionPointer,
+					StackPointer = f.StackPointer,
+					FrameKind = f.Kind.ToString(),
+					MethodName = DescribeFrame(f),
+					ModuleName = SimpleModuleName(f.Method?.Type?.Module?.Name),
+					IsManaged = f.Kind == ClrStackFrameKind.ManagedMethod
+				})
+				.ToList()
+		};
 
 		/// <summary>
 		/// Names a stack frame. Managed frames are qualified with their declaring type — a bare method
@@ -197,6 +230,8 @@ namespace DotNetDump.Core.Analyzers {
 		}
 
 		public PagedResult<ThreadStateInfo> GetThreadStates(QueryParameters parameters) {
+			parameters.Filter.EnsureSupported("threadstate", ThreadStateInfoFilter.Honored);
+
 			var runtime = GetRuntime();
 			var threadStates = runtime.Threads.Select(t => new ThreadStateInfo {
 				ManagedThreadId = t.ManagedThreadId,
@@ -216,7 +251,7 @@ namespace DotNetDump.Core.Analyzers {
 				IsAborted = ThreadStateDecoder.IsAborted(t.State),
 				IsSuspendPending = ThreadStateDecoder.IsSuspendPending(t.State),
 				StateFlags = ThreadStateDecoder.FlagNames(t.State).ToList()
-			}).ToList();
+			}).Where(t => ThreadStateInfoFilter.Matches(t, parameters.Filter)).ToList();
 
 			// Sorting
 			IEnumerable<ThreadStateInfo> sorted = threadStates;
@@ -242,6 +277,11 @@ namespace DotNetDump.Core.Analyzers {
 			QueryParameters parameters,
 			bool onlyWithExceptions = true,
 			bool includeHeapExceptions = true) {
+
+			// The in-flight path: rows carry an owning thread, unlike HeapAnalyzer.GetHeapExceptions'
+			// heap-scan path, so ManagedThreadId/OSThreadId are honored here (DATA_CONTRACT.md §2.3).
+			parameters.Filter.EnsureSupported("printexception (in flight)", ThreadExceptionInfoFilter.Honored);
+			var typeNameMatcher = TypeNameMatcher.Create(parameters.Filter);
 
 			var runtime = GetRuntime();
 			var threads = runtime.Threads.AsEnumerable();
@@ -287,8 +327,12 @@ namespace DotNetDump.Core.Analyzers {
 				}
 			}
 
-			var page = results.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-			return new PagedResult<ThreadExceptionInfo>(page, results.Count, parameters.Offset, parameters.Limit);
+			// Filtered after both sources are merged, so TotalAvailable is honest about the combined
+			// result -- not just the (already-sorted) thread portion.
+			List<ThreadExceptionInfo> filtered = results.Where(r => ThreadExceptionInfoFilter.Matches(r, parameters.Filter, typeNameMatcher)).ToList();
+
+			var page = filtered.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+			return new PagedResult<ThreadExceptionInfo>(page, filtered.Count, parameters.Offset, parameters.Limit);
 		}
 
 		/// <summary>Reads a specific exception object by address, as SOS's <c>pe &lt;address&gt;</c> does.</summary>

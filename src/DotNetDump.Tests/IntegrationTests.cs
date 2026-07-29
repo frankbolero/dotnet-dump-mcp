@@ -266,6 +266,46 @@ public class IntegrationTests : IDisposable {
 	}
 
 	[SkippableFact]
+	public void ThreadAnalyzer_GetThreads_FilterSpecManagedThreadId_ReturnsOnlyThatThread() {
+		SkipIfNoDump();
+
+		var analyzer = new ThreadAnalyzer(_context);
+		var sample = analyzer.GetThreads(new QueryParameters { Limit = 1 }).Items;
+		Skip.If(sample.Count == 0, "No threads found in the dump.");
+
+		int targetId = sample[0].ManagedThreadId;
+		var filtered = analyzer.GetThreads(new QueryParameters {
+			Limit = 50,
+			Filter = new FilterSpec { ManagedThreadId = targetId }
+		}).Items;
+
+		Assert.NotEmpty(filtered);
+		Assert.All(filtered, t => Assert.Equal(targetId, t.ManagedThreadId));
+	}
+
+	[SkippableFact]
+	public void ThreadAnalyzer_GetDetailedStacks_FilterSpecText_MatchesOnlyFramesContainingIt() {
+		SkipIfNoDump();
+
+		var analyzer = new ThreadAnalyzer(_context);
+		var unfiltered = analyzer.GetDetailedStacks(new QueryParameters { Limit = 1000 }, maxFrames: 50);
+		var withKnownFrame = unfiltered.Items.SelectMany(s => s.Frames).FirstOrDefault(f => !string.IsNullOrEmpty(f.MethodName));
+		Skip.If(withKnownFrame == null, "No thread with a named frame found in the dump.");
+
+		// Search for a short, distinctive slice of the frame name -- exact copy avoids a false
+		// negative from a would-be substring that happens not to appear verbatim.
+		string needle = withKnownFrame!.MethodName!.Length > 6 ? withKnownFrame.MethodName![..6] : withKnownFrame.MethodName!;
+
+		var filtered = analyzer.GetDetailedStacks(new QueryParameters {
+			Limit = 1000,
+			Filter = new FilterSpec { Text = needle }
+		}, maxFrames: 50);
+
+		Assert.NotEmpty(filtered.Items);
+		Assert.All(filtered.Items, s => Assert.Contains(s.Frames, f => (f.MethodName ?? "").Contains(needle, StringComparison.OrdinalIgnoreCase)));
+	}
+
+	[SkippableFact]
 	public void ModuleAnalyzer_GetModules_ReturnsData() {
 		SkipIfNoDump();
 
