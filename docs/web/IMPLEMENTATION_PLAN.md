@@ -15,12 +15,21 @@ Read [`README.md` §3](README.md) first for why the ordering is what it is.
 | Task | Detail |
 | :--- | :--- |
 | 0.1 | `FilterSpec` in `DotNetDump.Core/Models/`, plus `QueryParameters.Filter`. [`DATA_CONTRACT.md` §2.2](DATA_CONTRACT.md) |
-| 0.2 | Apply the filter in each analyzer between the cached computation and the sort. Declare honored fields per method; throw `UnsupportedFilterException` otherwise. |
-| 0.3 | `PagedResult<T>.TotalUnfiltered`. Bump the cache `SchemaVersion` — the payload shape changed. |
+| 0.2 | Apply the filter in each analyzer between the cached computation and the sort, against the matrix in [`DATA_CONTRACT.md` §2.3](DATA_CONTRACT.md). Declare the honored set with `FilterField`; call `FilterSpec.EnsureSupported` first, so an unsupported filter costs nothing and fails identically cached or not. Includes capturing `Generation` on `HeapObjectItem` during the walk — `listobj` cannot honor the declared set without it. **Runs after 0.5**, see below. |
+| 0.3 | `PagedResult<T>.TotalUnfiltered`. Bump the cache `SchemaVersion` — the payload shape changed, and 0.2's new `Generation` field changes it again. One bump covers both. |
 | 0.4 | `FilterExpressionParser` in `DotNetDump.Cli` for the `--filter field~value` grammar; wire `--filter` (repeatable) into every list command. Keep `listobj --type` as an alias. |
-| 0.5 | Convert the remaining `IEnumerable<T>` analyzer methods to `PagedResult<T>`: `GetGCHandles`, `GetThreads`, `GetDetailedStacks`, `GetThreadStates`, `VerifyHeap`. Update `JsonFormatter` to use the real totals instead of `FromItemsOnly`. |
+| 0.5 | Convert the remaining `IEnumerable<T>` analyzer methods to `PagedResult<T>`: `GetGCHandles`, `GetThreads`, `GetDetailedStacks`, `GetThreadStates`, `GetModules`, `VerifyHeap`. Update `JsonFormatter` to use the real totals instead of `FromItemsOnly`. |
 | 0.6 | Move `DumpResolver` and `SessionFile` from `DotNetDump.Cli` to `DotNetDump.Core`. Pure relocation; the CLI keeps behaving identically. |
 | 0.7 | `IProgress<WalkProgress>` on the five walk-scale methods. The CLI passes `null`. |
+
+**Ordering inside the phase: 0.1 → 0.5 → 0.2 → 0.3 → 0.4 → 0.6 → 0.7.** 0.5 comes before 0.2
+because five of the ten filterable analyzer methods still return bare `IEnumerable<T>`. Filtering
+them first means writing the filter twice — once against a pre-sliced sequence and again after the
+conversion — and the second write is where a filter silently stops being applied. Convert to a
+uniform `PagedResult<T>` surface, then filter it once.
+
+`GetModules` belongs in 0.5 because §2.3 gives it a filter set; `VerifyHeap` belongs there for
+pagination alone, since it honors no filters.
 
 **Measurement (gates Phase 4).** On a real dump with a warm cache, time `dumpheap` with a filter
 that matches ~5% of rows versus unfiltered. Filtering happens after the cached walk, so the delta
@@ -193,10 +202,10 @@ Applies to every delegated task without exception.
 | Task | Model | Rationale |
 | :--- | :--- | :--- |
 | 0.1 `FilterSpec` | **Lead / Opus** | The type every later phase binds to. Cheap to write, expensive to change once eight analyzers and a query binder depend on it. |
-| 0.2 Filter application + honored fields | **Sonnet** | Repetitive across analyzers once 0.1 exists. **The lead decides the honored-field matrix first** — which fields each method accepts is a product decision, not an implementation detail — and the agent implements it. |
+| 0.2 Filter application + honored fields | **Sonnet** | Repetitive across analyzers once 0.1 and 0.5 exist. The honored-field matrix is settled in [`DATA_CONTRACT.md` §2.3](DATA_CONTRACT.md) and is not the agent's to change; a field that cannot be honored is a finding to report back, not a row to quietly drop. |
 | 0.3 `TotalUnfiltered` + `SchemaVersion` bump | **Haiku** | Mechanical, compiler-guided. |
 | 0.4 `FilterExpressionParser` + `--filter` wiring | **Sonnet** | A pure parser against a written grammar, with unit tests as the oracle. The single best-shaped delegation in the plan. |
-| 0.5 `IEnumerable<T>` → `PagedResult<T>` (5 methods) | **Sonnet** | Repetitive and compiler-guided, but `JsonFormatter` must stop using `FromItemsOnly` and start reporting real totals — that part is easy to miss. |
+| 0.5 `IEnumerable<T>` → `PagedResult<T>` (5 methods) | **Sonnet** | Repetitive and compiler-guided, but `JsonFormatter` must stop using `FromItemsOnly` and start reporting real totals — that part is easy to miss. Sequenced before 0.2. |
 | 0.6 Move `DumpResolver`/`SessionFile` to Core | **Haiku** | Pure relocation. The oracle is "the build passes and the CLI tests are untouched". |
 | 0.7 `IProgress<WalkProgress>` on the walk methods | **Sonnet** | Threading a parameter through five methods without changing any existing behaviour. |
 | Phase 1 (all) | **Not delegated** | Design iteration in Claude Design, plus taste calls a subagent has no basis for. |

@@ -95,20 +95,46 @@ exit code `2` (usage error); in the web UI the filter control for an unsupported
 rendered for that view, so the error is unreachable through the UI and exists to protect direct API
 callers.
 
-| View | Honored fields |
-| :--- | :--- |
-| `dumpheap` | `TypeName`, `TypeNameRegex`, `MinSize`, `MaxSize`, `MinCount`, `MaxCount`, `Text` |
-| `listobj` | `TypeName`, `TypeNameRegex`, `MinSize`, `MaxSize`, `Generation`, `Text` |
-| `gchandles` | `TypeName`, `TypeNameRegex`, `Text` |
-| `clrthreads`, `threadstate`, `dumpstack` | `ManagedThreadId`, `OSThreadId`, `HasException`, `Text` |
-| `syncblk` | `TypeName`, `ManagedThreadId`, `Text` |
-| `printexception` | `TypeName`, `TypeNameRegex`, `ManagedThreadId`, `Text` |
-| `clrmodules` | `Module`, `MinSize`, `MaxSize`, `Text` |
-| `eeheap`, `threadpool`, `dumpobj`, `dumpmt`, `dumpmd`, `dumpclass`, `name2ee`, `ip2md`, `info` | none — single-item or fixed-shape results |
+The matrix is keyed by **analyzer method**, not by view. A view is a presentation choice and can
+change; the honored set is a property of the data the method returns, and two views backed by the
+same method must not disagree about it. `FilterField` composites (`AnyTypeName`, `Size`, `Count`)
+are the declaration form — see `Models/FilterField.cs`.
 
-`Text` is defined per view as "the concatenation of the columns the view renders as text". It is
-what the web UI's single search box binds to, and it is the only field that needs no explanation in
-the design.
+| Analyzer method | View | Honored | `Size` / `Text` refer to |
+| :--- | :--- | :--- | :--- |
+| `HeapAnalyzer.GetHeapStatistics` | `dumpheap` | `AnyTypeName`, `Size`, `Count`, `Text` | `TotalSize` (**aggregate**), `TypeName` |
+| `HeapAnalyzer.GetObjects` | `listobj` | `AnyTypeName`, `Size`, `Generation`, `Text` | `Size` (**per instance**), `TypeName` |
+| `HeapAnalyzer.GetGCHandles` | `gchandles` | `AnyTypeName`, `Text` | — , `TypeName` + `Kind` |
+| `HeapAnalyzer.GetSyncBlocks` | `syncblk` | `TypeName`, `ManagedThreadId`, `Text` | — , `TypeName` |
+| `HeapAnalyzer.GetHeapExceptions` | `printexception` (heap scan) | `AnyTypeName`, `Text` | — , `TypeName` + `Message` |
+| `ThreadAnalyzer.GetThreadExceptions` | `printexception` (in flight) | `AnyTypeName`, `ManagedThreadId`, `OSThreadId`, `Text` | — , `TypeName` + `Message` |
+| `ThreadAnalyzer.GetThreads` | `clrthreads` | `ManagedThreadId`, `OSThreadId`, `HasException`, `Text` | — , `ExceptionType` |
+| `ThreadAnalyzer.GetThreadStates` | `threadstate` | `ManagedThreadId`, `OSThreadId`, `HasException`, `Text` | — , `ExceptionType` + `StateFlags` |
+| `ThreadAnalyzer.GetDetailedStacks` | `dumpstack`, `clrstack` | `ManagedThreadId`, `OSThreadId`, `HasException`, `Text` | — , frame `MethodName` |
+| `ModuleAnalyzer.GetModules` | `clrmodules` | `Module`, `Size`, `Text` | `Size` (image), `Name` |
+| everything else | `eeheap`, `threadpool`, `dumpobj`, `dumpmt`, `dumpmd`, `dumpclass`, `dumpassembly`, `name2ee`, `ip2md`, `info`, `verifyheap` | `None` | — |
+
+`Text` is the case-insensitive substring match across the columns named in the last column. It is
+what the web UI's single search box binds to.
+
+Four corrections against the models as they actually stand, found while settling this matrix:
+
+* **`Size` does not mean the same thing in two places.** On `dumpheap` it is the aggregate
+  `TotalSize` of every instance of a type; on `listobj` it is one object's own size. `size>100mb`
+  is a reasonable filter on both and means something different on each. The filter bar must label
+  it per view — "total size" and "object size", never just "size".
+* **`printexception` is two methods, and they honor different sets.** `GetThreadExceptions` returns
+  `ThreadExceptionInfo`, which carries the owning thread. `GetHeapExceptions` returns bare
+  `ExceptionDetails` for exception objects found by scanning the heap, and those have **no owning
+  thread** — many are garbage from long-completed operations. `ManagedThreadId` is therefore
+  unsupported on the heap-scan path rather than merely unpopulated.
+* **`Generation` on `listobj` requires a model change.** `HeapObjectItem` has no generation field
+  today. Honoring the field means capturing the generation during the walk and bumping the cache
+  schema — which 0.3 does anyway, so it costs one field, not one migration. Without it the
+  generation selector in [`DESIGN_BRIEF.md` §5](DESIGN_BRIEF.md) has nothing to bind to.
+* **`gchandles` could honor `Size` but does not.** `GCHandleInfo.Size` exists, so the filter would
+  be free. It is left out because a handle's "size" is the size of its target object, and a user
+  filtering handles by size almost certainly means the target — which is what `listobj` is for.
 
 ### 2.4 The CLI grammar
 
@@ -131,8 +157,33 @@ dndump listobj  --filter 'type=/^MyApp\.Cache/' --filter 'gen=2'
 dndump clrthreads --filter 'exception=true'
 ```
 
-`type~X` is exactly today's `listobj --type X`, which stays as an alias rather than a second
-mechanism.
+#### `listobj --type` is not an alias for `--filter 'type~'`
+
+An earlier draft of this document said it was. It is not, and making it one would be a large
+performance regression wearing a rename.
+
+`--type` is a **scope**: it narrows the heap walk itself, is part of the cache key, and produces a
+cache entry containing only the matching objects (`HeapAnalyzer.GetObjects`). `--filter 'type~'` is
+a **filter**: it runs over the full cached object list and is excluded from the cache key, per
+§2.1. Aliasing the first to the second would make `listobj --type Foo` walk and cache all 10.2M
+objects to return the same few hundred rows.
+
+Both must exist, because each is right for a different consumer:
+
+| | `--type` (scope) | `--filter 'type~'` (filter) |
+| :--- | :--- | :--- |
+| Cost, cold | Walks once, narrowed | Walks once, everything |
+| Cost, warm, changing the value | Another full walk | Free |
+| `TotalUnfiltered` | The narrowed walk — not the heap | The whole heap |
+| Right for | One-shot CLI and agent use | Filter-as-you-type in the web UI |
+
+The web UI uses the filter exclusively; that is what makes "1,284 of 10,238,441" honest and what
+[`IMPLEMENTATION_PLAN.md` Phase 4](IMPLEMENTATION_PLAN.md)'s exit criterion requires. The CLI keeps
+`--type` because walking 10.2M objects to print 50 rows is the wrong trade for a process that exits
+immediately afterwards.
+
+They compose: given both, the scope applies at walk time and the filter after, ANDed. The CLI must
+not silently rewrite one into the other in either direction — help text names the difference.
 
 Parsing lives in the CLI (`FilterExpressionParser`); the parsed `FilterSpec` is what crosses into
 Core. The web host never parses this grammar — it binds query parameters directly.
