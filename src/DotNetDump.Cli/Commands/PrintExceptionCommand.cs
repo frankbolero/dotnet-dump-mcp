@@ -71,7 +71,7 @@ public static class PrintExceptionCommand {
 				// Single-address mode: get one exception and wrap in PagedResult for formatter
 				ulong address = AddressParser.Parse(addressText, "address");
 				var singleResult = analyzer.GetExceptionByAddress(address);
-				var wrapped = new PagedResult<ThreadExceptionInfo>(new[] { singleResult }, 1, 0, 1);
+				var wrapped = new PagedResult<ThreadExceptionInfo>(new[] { singleResult }, 1, 1, 0, 1);
 				System.Console.WriteLine(OutputFormatting.Render(format, wrapped, MarkdownFormatter.FormatThreadExceptions, JsonFormatter.FormatThreadExceptions, TsvFormatter.FormatThreadExceptions));
 			} else {
 				// Collection mode: get all exceptions with pagination

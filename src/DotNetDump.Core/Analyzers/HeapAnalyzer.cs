@@ -91,7 +91,7 @@ namespace DotNetDump.Core.Analyzers {
 			}
 
 			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-			return new PagedResult<HeapStatItem>(page, filtered.Count, parameters.Offset, parameters.Limit);
+			return new PagedResult<HeapStatItem>(page, filtered.Count, stats.Count, parameters.Offset, parameters.Limit);
 		}
 
 		/// <summary>
@@ -137,7 +137,7 @@ namespace DotNetDump.Core.Analyzers {
 			}
 
 			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-			return new PagedResult<HeapObjectItem>(page, filtered.Count, parameters.Offset, parameters.Limit);
+			return new PagedResult<HeapObjectItem>(page, filtered.Count, objects.Count, parameters.Offset, parameters.Limit);
 		}
 
 		/// <summary>
@@ -432,7 +432,7 @@ namespace DotNetDump.Core.Analyzers {
 			}
 
 			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-			return new PagedResult<SyncBlockInfo>(page, filtered.Count, parameters.Offset, parameters.Limit);
+			return new PagedResult<SyncBlockInfo>(page, filtered.Count, blocks.Count, parameters.Offset, parameters.Limit);
 		}
 
 		private static IEnumerable<SyncBlockInfo> EnumerateThinLocks(ClrHeap heap) {
@@ -468,7 +468,7 @@ namespace DotNetDump.Core.Analyzers {
 			var runtime = _context.Runtime;
 			if (runtime == null) return PagedResult<GCHandleInfo>.Empty(parameters);
 
-			var handles = runtime.EnumerateHandles().Select(h => new GCHandleInfo {
+			var allHandles = runtime.EnumerateHandles().Select(h => new GCHandleInfo {
 				Address = h.Address,
 				Object = h.Object.Address,
 				Kind = h.HandleKind.ToString(),
@@ -478,9 +478,11 @@ namespace DotNetDump.Core.Analyzers {
 				DependentTarget = h.Dependent.Address,
 				AppDomainName = h.AppDomain?.Name,
 				Size = h.Object.IsNull ? 0 : h.Object.Size
-			}).Where(h => GCHandleInfoFilter.Matches(h, parameters.Filter, typeNameMatcher)).ToList();
+			}).ToList();
 
-			IEnumerable<GCHandleInfo> sorted = handles;
+			List<GCHandleInfo> filtered = allHandles.Where(h => GCHandleInfoFilter.Matches(h, parameters.Filter, typeNameMatcher)).ToList();
+
+			IEnumerable<GCHandleInfo> sorted = filtered;
 			if (parameters.SortBy?.ToLower() == "kind") {
 				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(h => h.Kind) : sorted.OrderByDescending(h => h.Kind);
 			} else if (parameters.SortBy?.ToLower() == "typename") {
@@ -490,7 +492,7 @@ namespace DotNetDump.Core.Analyzers {
 			}
 
 			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-			return new PagedResult<GCHandleInfo>(page, handles.Count, parameters.Offset, parameters.Limit);
+			return new PagedResult<GCHandleInfo>(page, filtered.Count, allHandles.Count, parameters.Offset, parameters.Limit);
 		}
 
 		/// <summary>
@@ -512,7 +514,7 @@ namespace DotNetDump.Core.Analyzers {
 			}).ToList();
 
 			var page = corruptions.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-			return new PagedResult<HeapCorruptionInfo>(page, corruptions.Count, parameters.Offset, parameters.Limit);
+			return new PagedResult<HeapCorruptionInfo>(page, corruptions.Count, corruptions.Count, parameters.Offset, parameters.Limit);
 		}
 
 		/// <summary>Verifies a single object, for following up on a suspect address.</summary>
@@ -563,7 +565,7 @@ namespace DotNetDump.Core.Analyzers {
 			List<ExceptionDetails> filtered = found.Where(e => ExceptionDetailsFilter.Matches(e, parameters.Filter, typeNameMatcher)).ToList();
 
 			var page = filtered.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-			return new PagedResult<ExceptionDetails>(page, filtered.Count, parameters.Offset, parameters.Limit);
+			return new PagedResult<ExceptionDetails>(page, filtered.Count, found.Count, parameters.Offset, parameters.Limit);
 		}
 	}
 }

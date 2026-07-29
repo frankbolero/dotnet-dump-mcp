@@ -12,7 +12,7 @@ namespace DotNetDump.Tests;
 /// </summary>
 public class JsonFormatterTests {
 	/// <summary>Wraps items as a single, un-split page — total/offset/limit all agree with what's given.</summary>
-	private static PagedResult<T> Page<T>(params T[] items) => new(items, items.Length, 0, items.Length);
+	private static PagedResult<T> Page<T>(params T[] items) => new(items, items.Length, items.Length, 0, items.Length);
 
 	[Fact]
 	public void CollectionMethods_WrapRowsInDataAndPagination() {
@@ -39,6 +39,7 @@ public class JsonFormatterTests {
 		var page = new PagedResult<HeapStatItem>(
 			new[] { new HeapStatItem { TypeName = "System.String", MethodTable = 0x1, Count = 1, TotalSize = 1 } },
 			totalAvailable: 500,
+			totalUnfiltered: 650,
 			offset: 10,
 			limit: 1);
 

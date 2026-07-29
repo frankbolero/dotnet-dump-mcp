@@ -46,7 +46,8 @@ public class ModuleAnalyzer {
 		// includeSystem is a scope, not a filter -- it decides what is under consideration at all
 		// (see the doc comment above). FilterSpec is applied on top of that scope, and
 		// TotalAvailable below reflects both together.
-		var inScope = modules.Where(m => ModuleInfoFilter.Matches(m, parameters.Filter)).ToList();
+		var modulesInScope = modules.ToList();
+		var inScope = modulesInScope.Where(m => ModuleInfoFilter.Matches(m, parameters.Filter)).ToList();
 
 		// Sorting
 		IEnumerable<DotNetDump.Core.Models.ModuleInfo> sorted = inScope;
@@ -59,7 +60,7 @@ public class ModuleAnalyzer {
 		}
 
 		var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-		return new PagedResult<DotNetDump.Core.Models.ModuleInfo>(page, inScope.Count, parameters.Offset, parameters.Limit);
+		return new PagedResult<DotNetDump.Core.Models.ModuleInfo>(page, inScope.Count, modulesInScope.Count, parameters.Offset, parameters.Limit);
 	}
 
 	public ModuleDetails GetModuleDetails(ulong address) {

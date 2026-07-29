@@ -20,6 +20,9 @@ public sealed class PagedResult<T> {
 	/// <summary>Total rows in the full result, before <see cref="Offset"/>/<see cref="Limit"/> were applied.</summary>
 	public int TotalAvailable { get; }
 
+	/// <summary>Rows before <see cref="FilterSpec"/> was applied. Equals TotalAvailable when unfiltered.</summary>
+	public int TotalUnfiltered { get; }
+
 	/// <summary>Rows skipped before this page started.</summary>
 	public int Offset { get; }
 
@@ -29,9 +32,10 @@ public sealed class PagedResult<T> {
 	/// <summary>Whether rows exist past the end of this page. Derived, not stored, so it can never disagree with the other three.</summary>
 	public bool HasMore => Offset + Items.Count < TotalAvailable;
 
-	public PagedResult(IReadOnlyList<T> items, int totalAvailable, int offset, int limit) {
+	public PagedResult(IReadOnlyList<T> items, int totalAvailable, int totalUnfiltered, int offset, int limit) {
 		Items = items;
 		TotalAvailable = totalAvailable;
+		TotalUnfiltered = totalUnfiltered;
 		Offset = offset;
 		Limit = limit;
 	}
@@ -41,5 +45,5 @@ public sealed class PagedResult<T> {
 	/// "nothing to report" reads the same as a genuinely empty result rather than as a zero-limit page.
 	/// </summary>
 	public static PagedResult<T> Empty(QueryParameters parameters) =>
-		new(Array.Empty<T>(), 0, parameters.Offset, parameters.Limit);
+		new(Array.Empty<T>(), 0, 0, parameters.Offset, parameters.Limit);
 }

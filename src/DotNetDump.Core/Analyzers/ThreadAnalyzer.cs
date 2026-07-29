@@ -34,16 +34,18 @@ namespace DotNetDump.Core.Analyzers {
 			parameters.Filter.EnsureSupported("clrthreads", ThreadInfoFilter.Honored);
 
 			var runtime = GetRuntime();
-			var threads = runtime.Threads.Select(t => new ThreadInfo {
+			var allThreads = runtime.Threads.Select(t => new ThreadInfo {
 				ManagedThreadId = t.ManagedThreadId,
 				OSThreadId = t.OSThreadId,
 				IsAlive = t.IsAlive,
 				ExceptionType = t.CurrentException?.Type?.Name,
 				ExceptionMessage = t.CurrentException?.Message
-			}).Where(t => ThreadInfoFilter.Matches(t, parameters.Filter)).ToList();
+			}).ToList();
+
+			List<ThreadInfo> filtered = allThreads.Where(t => ThreadInfoFilter.Matches(t, parameters.Filter)).ToList();
 
 			// Sorting
-			IEnumerable<ThreadInfo> sorted = threads;
+			IEnumerable<ThreadInfo> sorted = filtered;
 			if (parameters.SortBy?.ToLower() == "exception") {
 				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(t => t.ExceptionType == null) : sorted.OrderByDescending(t => t.ExceptionType != null);
 			} else if (parameters.SortBy?.ToLower() == "osthreadid") {
@@ -53,7 +55,7 @@ namespace DotNetDump.Core.Analyzers {
 			}
 
 			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-			return new PagedResult<ThreadInfo>(page, threads.Count, parameters.Offset, parameters.Limit);
+			return new PagedResult<ThreadInfo>(page, filtered.Count, allThreads.Count, parameters.Offset, parameters.Limit);
 		}
 
 		public IEnumerable<StackGroup> GetStackTraceGroups(int maxFrames = 20) {
@@ -144,16 +146,18 @@ namespace DotNetDump.Core.Analyzers {
 			FilterSpec filter = parameters.Filter;
 
 			var runtime = GetRuntime();
-			IEnumerable<ClrThread> alive = runtime.Threads.Where(t => t.IsAlive);
+			var allAlive = runtime.Threads.Where(t => t.IsAlive).ToList();
+
+			IEnumerable<ClrThread> filtered = allAlive;
 			if (!filter.IsEmpty) {
-				alive = alive.Where(t => ThreadStackInfoFilter.MatchesThread(t.ManagedThreadId, t.OSThreadId, t.CurrentException?.Type?.Name, filter));
+				filtered = filtered.Where(t => ThreadStackInfoFilter.MatchesThread(t.ManagedThreadId, t.OSThreadId, t.CurrentException?.Type?.Name, filter));
 			}
 
-			var aliveList = alive.ToList();
+			var filteredList = filtered.ToList();
 
 			// Sort by thread ID. Both keys come straight off the thread, so this is the same ordering
 			// the previous implementation produced from the projected rows.
-			IEnumerable<ClrThread> sorted = aliveList;
+			IEnumerable<ClrThread> sorted = filteredList;
 			if (parameters.SortBy?.ToLower() == "osthreadid") {
 				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(t => t.OSThreadId) : sorted.OrderByDescending(t => t.OSThreadId);
 			} else {
@@ -170,7 +174,7 @@ namespace DotNetDump.Core.Analyzers {
 					.ToList();
 
 				var textFilteredPage = matched.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-				return new PagedResult<ThreadStackInfo>(textFilteredPage, matched.Count, parameters.Offset, parameters.Limit);
+				return new PagedResult<ThreadStackInfo>(textFilteredPage, matched.Count, allAlive.Count, parameters.Offset, parameters.Limit);
 			}
 
 			var page = sorted
@@ -179,7 +183,7 @@ namespace DotNetDump.Core.Analyzers {
 				.Select(t => BuildThreadStackInfo(t, maxFrames))
 				.ToList();
 
-			return new PagedResult<ThreadStackInfo>(page, aliveList.Count, parameters.Offset, parameters.Limit);
+			return new PagedResult<ThreadStackInfo>(page, filteredList.Count, allAlive.Count, parameters.Offset, parameters.Limit);
 		}
 
 		private static ThreadStackInfo BuildThreadStackInfo(ClrThread t, int maxFrames) => new() {
@@ -233,7 +237,7 @@ namespace DotNetDump.Core.Analyzers {
 			parameters.Filter.EnsureSupported("threadstate", ThreadStateInfoFilter.Honored);
 
 			var runtime = GetRuntime();
-			var threadStates = runtime.Threads.Select(t => new ThreadStateInfo {
+			var allStates = runtime.Threads.Select(t => new ThreadStateInfo {
 				ManagedThreadId = t.ManagedThreadId,
 				OSThreadId = t.OSThreadId,
 				IsAlive = t.IsAlive,
@@ -251,10 +255,12 @@ namespace DotNetDump.Core.Analyzers {
 				IsAborted = ThreadStateDecoder.IsAborted(t.State),
 				IsSuspendPending = ThreadStateDecoder.IsSuspendPending(t.State),
 				StateFlags = ThreadStateDecoder.FlagNames(t.State).ToList()
-			}).Where(t => ThreadStateInfoFilter.Matches(t, parameters.Filter)).ToList();
+			}).ToList();
+
+			List<ThreadStateInfo> filtered = allStates.Where(t => ThreadStateInfoFilter.Matches(t, parameters.Filter)).ToList();
 
 			// Sorting
-			IEnumerable<ThreadStateInfo> sorted = threadStates;
+			IEnumerable<ThreadStateInfo> sorted = filtered;
 			if (parameters.SortBy?.ToLower() == "osthreadid") {
 				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(t => t.OSThreadId) : sorted.OrderByDescending(t => t.OSThreadId);
 			} else if (parameters.SortBy?.ToLower() == "lockcount") {
@@ -264,7 +270,7 @@ namespace DotNetDump.Core.Analyzers {
 			}
 
 			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-			return new PagedResult<ThreadStateInfo>(page, threadStates.Count, parameters.Offset, parameters.Limit);
+			return new PagedResult<ThreadStateInfo>(page, filtered.Count, allStates.Count, parameters.Offset, parameters.Limit);
 		}
 
 		/// <summary>
@@ -332,7 +338,7 @@ namespace DotNetDump.Core.Analyzers {
 			List<ThreadExceptionInfo> filtered = results.Where(r => ThreadExceptionInfoFilter.Matches(r, parameters.Filter, typeNameMatcher)).ToList();
 
 			var page = filtered.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-			return new PagedResult<ThreadExceptionInfo>(page, filtered.Count, parameters.Offset, parameters.Limit);
+			return new PagedResult<ThreadExceptionInfo>(page, filtered.Count, results.Count, parameters.Offset, parameters.Limit);
 		}
 
 		/// <summary>Reads a specific exception object by address, as SOS's <c>pe &lt;address&gt;</c> does.</summary>
