@@ -97,7 +97,11 @@ namespace DotNetDump.Core.Analyzers {
 					 Address = obj.Address,
 					 MethodTable = obj.Type?.MethodTable ?? 0,
 					 Size = obj.Size,
-					 TypeName = obj.Type?.Name
+					 TypeName = obj.Type?.Name,
+					 // GetSegmentByAddress keeps a last-segment fast path, and EnumerateObjects walks
+					 // segment-by-segment, so this stays effectively O(1) per object rather than
+					 // re-searching the segment list from scratch on every row.
+					 Generation = GenerationClassifier.ToFilter(heap.GetSegmentByAddress(obj.Address)?.GetGeneration(obj.Address) ?? Generation.Unknown)
 				 }).ToList();
 		}
 

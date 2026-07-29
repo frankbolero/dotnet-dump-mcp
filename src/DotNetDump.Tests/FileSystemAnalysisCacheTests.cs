@@ -1,4 +1,5 @@
 using DotNetDump.Core.Caching;
+using DotNetDump.Core.Models;
 
 namespace DotNetDump.Tests;
 
@@ -181,6 +182,28 @@ public class FileSystemAnalysisCacheTests : IDisposable {
 		} finally {
 			Environment.SetEnvironmentVariable(FileSystemAnalysisCache.CacheRootVariable, previous);
 		}
+	}
+
+	[Fact]
+	public void GetOrCompute_RoundTripsHeapObjectItemGenerationThroughJson() {
+		// HeapObjectItem.Generation (DATA_CONTRACT.md §2.3, added so listobj can honor a Generation
+		// filter) must survive the JSON cache serializer -- both a set value and the null case for an
+		// object ClrMD could not place in any generation.
+		var cache = NewCache();
+		var key = MakeKey("heap-objects");
+
+		var items = new List<HeapObjectItem> {
+			new() { Address = 0x1000, TypeName = "System.String", Size = 24, Generation = GenerationFilter.Gen0 },
+			new() { Address = 0x2000, TypeName = "System.Object", Size = 16, Generation = null }
+		};
+
+		cache.GetOrCompute(key, () => items);
+		var reread = cache.GetOrCompute<List<HeapObjectItem>>(
+			key,
+			() => throw new InvalidOperationException("should not recompute; the entry is already on disk"));
+
+		Assert.Equal(GenerationFilter.Gen0, reread[0].Generation);
+		Assert.Null(reread[1].Generation);
 	}
 
 	[Fact]
