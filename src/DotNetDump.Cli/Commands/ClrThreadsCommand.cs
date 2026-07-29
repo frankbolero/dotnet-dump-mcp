@@ -27,7 +27,7 @@ public static class ClrThreadsCommand {
 	// current exception's type only.
 	public static readonly Option<string[]> FilterOption = GlobalOptions.CreateFilterOption(
 		"Filter expression '<field><op><value>', repeatable and ANDed. Honored fields: " +
-		"thread, osthread, exception (true/false), text (across the current exception's type name).");
+		"thread, osthread, exception (true/false), text (across the current exception's class name).");
 
 	public static Command Create() {
 		var command = new Command("clrthreads", "List managed threads with basic information.");

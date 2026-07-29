@@ -112,6 +112,7 @@ public class CliRunnerTests {
 	[InlineData("clrthreads")]
 	[InlineData("threadstate")]
 	[InlineData("dumpstack")]
+	[InlineData("clrmodules")]
 	public async Task MalformedFilter_OnEveryWiredListCommand_ReturnsUsageErrorExitCode_WithoutADump(string command) {
 		var stdout = new StringWriter();
 		var stderr = new StringWriter();

@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 using DotNetDump.Cli;
 using DotNetDump.Cli.Commands;
 using DotNetDump.Core.Models;
@@ -180,6 +182,54 @@ public class RootCommandFactoryTests {
 		// property on FilterSpec that could be confused with --type's walk-time scope, since --type
 		// never goes through FilterExpressionParser at all.
 		Assert.Equal("Entry", filter.TypeName);
+	}
+
+	// ---- --help must name honored fields, and only honored fields ------------------------------
+	//
+	// Task 0.4's own instruction: help text must name the fields a command honors, "so dndump
+	// clrmodules --help does not advertise gen". \b word-boundary matching, not a bare substring
+	// check, so prose like "generation" in an explanatory sentence doesn't false-positive.
+
+	[Fact]
+	public void ClrModules_FilterHelp_DoesNotAdvertiseGen() {
+		// The task's own example: "dndump clrmodules --help does not advertise gen". Word-boundary
+		// match so explanatory prose using "generation" (not the grammar keyword "gen") can't
+		// false-positive this check.
+		string description = ClrModulesCommand.FilterOption.Description!;
+
+		Assert.DoesNotMatch(new Regex(@"\bgen\b"), description);
+		Assert.Contains("module", description);
+		Assert.Contains("size", description);
+	}
+
+	[Fact]
+	public void DumpHeap_FilterHelp_NamesItsHonoredFields() {
+		string description = DumpHeapCommand.FilterOption.Description!;
+
+		Assert.Contains("type", description);
+		Assert.Contains("size", description);
+		Assert.Contains("count", description);
+		Assert.Contains("text", description);
+		Assert.DoesNotMatch(new Regex(@"\bgen\b"), description);
+	}
+
+	[Fact]
+	public void ListObj_FilterHelp_NamesGenerationUnlikeDumpHeap() {
+		// listobj is the one heap-family command that honors Generation (HeapObjectItemFilter);
+		// dumpheap does not (HeapStatItemFilter).
+		string description = ListObjCommand.FilterOption.Description!;
+
+		Assert.Matches(new Regex(@"\bgen\b"), description);
+	}
+
+	[Fact]
+	public void ClrThreads_FilterHelp_DoesNotAdvertiseTypeOrSize() {
+		string description = ClrThreadsCommand.FilterOption.Description!;
+
+		Assert.DoesNotMatch(new Regex(@"\btype\b"), description);
+		Assert.DoesNotMatch(new Regex(@"\bsize\b"), description);
+		Assert.Contains("thread", description);
+		Assert.Contains("exception", description);
 	}
 
 	[Fact]

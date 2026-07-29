@@ -27,7 +27,7 @@ public static class ThreadStateCommand {
 	// clrthreads' 'text', which has no state flags to search.
 	public static readonly Option<string[]> FilterOption = GlobalOptions.CreateFilterOption(
 		"Filter expression '<field><op><value>', repeatable and ANDed. Honored fields: " +
-		"thread, osthread, exception (true/false), text (across the current exception's type name " +
+		"thread, osthread, exception (true/false), text (across the current exception's class name " +
 		"and state flag names).");
 
 	public static Command Create() {
