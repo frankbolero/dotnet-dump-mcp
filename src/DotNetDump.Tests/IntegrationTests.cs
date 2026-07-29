@@ -202,6 +202,45 @@ public class IntegrationTests : IDisposable {
 	}
 
 	[SkippableFact]
+	public void HeapAnalyzer_GetHeapStatistics_FilterSpecTypeName_FiltersAndReportsPostFilterTotal() {
+		SkipIfNoDump();
+
+		var analyzer = new HeapAnalyzer(_context);
+		var unfiltered = analyzer.GetHeapStatistics(new QueryParameters { Limit = 10_000 });
+		var filtered = analyzer.GetHeapStatistics(new QueryParameters {
+			Limit = 10_000,
+			Filter = new FilterSpec { TypeName = "String" }
+		});
+
+		Assert.NotEmpty(filtered.Items);
+		Assert.All(filtered.Items, s => Assert.Contains("String", s.TypeName ?? "", StringComparison.OrdinalIgnoreCase));
+		// TotalAvailable is the post-filter count (DATA_CONTRACT.md §2.1 point 3), so it must be
+		// smaller than the unfiltered total on any dump with non-string types on the heap.
+		Assert.True(filtered.TotalAvailable <= unfiltered.TotalAvailable);
+		Assert.Equal(filtered.Items.Count, filtered.TotalAvailable);
+	}
+
+	[SkippableFact]
+	public void HeapAnalyzer_GetObjects_FilterSpecGeneration_OnlyReturnsThatGeneration() {
+		SkipIfNoDump();
+
+		var analyzer = new HeapAnalyzer(_context);
+		var sample = analyzer.GetObjects(new QueryParameters { Limit = 200 }).Items;
+		Skip.If(sample.Count == 0, "No objects found in the dump.");
+
+		var observedGeneration = sample.Select(o => o.Generation).FirstOrDefault(g => g.HasValue);
+		Skip.If(observedGeneration is null, "No object in the sample had a known generation.");
+
+		var filtered = analyzer.GetObjects(new QueryParameters {
+			Limit = 10_000,
+			Filter = new FilterSpec { Generation = observedGeneration!.Value }
+		}).Items;
+
+		Assert.NotEmpty(filtered);
+		Assert.All(filtered, o => Assert.Equal(observedGeneration, o.Generation));
+	}
+
+	[SkippableFact]
 	public void ThreadAnalyzer_GetThreads_ReturnsData() {
 		SkipIfNoDump();
 

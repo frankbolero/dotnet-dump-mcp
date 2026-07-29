@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using DotNetDump.Core.Caching;
+using DotNetDump.Core.Filtering;
 using DotNetDump.Core.Models;
 using DotNetDump.Core.Utilities;
 
@@ -68,10 +69,19 @@ namespace DotNetDump.Core.Analyzers {
 		}
 
 		public PagedResult<HeapStatItem> GetHeapStatistics(QueryParameters parameters) {
+			// EnsureSupported runs before the cache lookup, so an unsupported filter is rejected
+			// identically on a cold and a warm cache (DATA_CONTRACT.md §2.1). TypeNameMatcher.Create
+			// follows immediately: a malformed regex is also a free rejection, not a cost paid only
+			// after the (possibly first-ever) walk below.
+			parameters.Filter.EnsureSupported("dumpheap", HeapStatItemFilter.Honored);
+			var typeNameMatcher = TypeNameMatcher.Create(parameters.Filter);
+
 			var key = new CacheKey(_context.Identity, "heap-statistics", "", CacheSchemaVersion);
 			List<HeapStatItem> stats = _cache.GetOrCompute(key, ComputeHeapStatistics);
 
-			IEnumerable<HeapStatItem> sorted = stats;
+			List<HeapStatItem> filtered = stats.Where(s => HeapStatItemFilter.Matches(s, parameters.Filter, typeNameMatcher)).ToList();
+
+			IEnumerable<HeapStatItem> sorted = filtered;
 			if (parameters.SortBy?.ToLower() == "count") {
 				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(s => s.Count) : sorted.OrderByDescending(s => s.Count);
 			} else if (parameters.SortBy?.ToLower() == "typename") {
@@ -81,7 +91,7 @@ namespace DotNetDump.Core.Analyzers {
 			}
 
 			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-			return new PagedResult<HeapStatItem>(page, stats.Count, parameters.Offset, parameters.Limit);
+			return new PagedResult<HeapStatItem>(page, filtered.Count, parameters.Offset, parameters.Limit);
 		}
 
 		/// <summary>
@@ -106,11 +116,20 @@ namespace DotNetDump.Core.Analyzers {
 		}
 
 		public PagedResult<HeapObjectItem> GetObjects(QueryParameters parameters, string? typeFilter = null) {
+			// typeFilter is the --type *scope* (DATA_CONTRACT.md §2.4): it narrows the walk itself and
+			// is part of the cache key below. parameters.Filter is the post-walk *filter* and is
+			// deliberately excluded from the cache key -- the two compose, scope at walk time and
+			// filter after, per §2.1.
+			parameters.Filter.EnsureSupported("listobj", HeapObjectItemFilter.Honored);
+			var typeNameMatcher = TypeNameMatcher.Create(parameters.Filter);
+
 			string argumentsHash = CacheKey.HashArguments(typeFilter?.ToLowerInvariant());
 			var key = new CacheKey(_context.Identity, "heap-objects", argumentsHash, CacheSchemaVersion);
 			List<HeapObjectItem> objects = _cache.GetOrCompute(key, () => ComputeObjects(typeFilter));
 
-			IEnumerable<HeapObjectItem> sorted = objects;
+			List<HeapObjectItem> filtered = objects.Where(o => HeapObjectItemFilter.Matches(o, parameters.Filter, typeNameMatcher)).ToList();
+
+			IEnumerable<HeapObjectItem> sorted = filtered;
 			if (parameters.SortBy?.ToLower() == "size") {
 				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(o => o.Size) : sorted.OrderByDescending(o => o.Size);
 			} else if (parameters.SortBy?.ToLower() == "address") {
@@ -118,7 +137,7 @@ namespace DotNetDump.Core.Analyzers {
 			}
 
 			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-			return new PagedResult<HeapObjectItem>(page, objects.Count, parameters.Offset, parameters.Limit);
+			return new PagedResult<HeapObjectItem>(page, filtered.Count, parameters.Offset, parameters.Limit);
 		}
 
 		/// <summary>
@@ -139,6 +158,10 @@ namespace DotNetDump.Core.Analyzers {
 		/// </para>
 		/// </summary>
 		public GCRootSearchInfo GetGCRoots(ulong targetAddress, QueryParameters parameters, int maxPaths = 4, int? maxNodesVisited = null) {
+			// Not in the DATA_CONTRACT.md §2.3 matrix's named rows, but explicitly called out as an
+			// "everything else" method: gcroot honors no filter.
+			parameters.Filter.EnsureSupported("gcroot", FilterField.None);
+
 			var runtime = _context.Runtime;
 			if (runtime == null) return new GCRootSearchInfo { TargetAddress = targetAddress };
 
@@ -391,11 +414,15 @@ namespace DotNetDump.Core.Analyzers {
 		}
 
 		public PagedResult<SyncBlockInfo> GetSyncBlocks(QueryParameters parameters, bool includeThinLocks = true) {
+			parameters.Filter.EnsureSupported("syncblk", SyncBlockInfoFilter.Honored);
+
 			string argumentsHash = CacheKey.HashArguments(includeThinLocks);
 			var key = new CacheKey(_context.Identity, "sync-blocks", argumentsHash, CacheSchemaVersion);
 			List<SyncBlockInfo> blocks = _cache.GetOrCompute(key, () => ComputeSyncBlocks(includeThinLocks));
 
-			IEnumerable<SyncBlockInfo> sorted = blocks;
+			List<SyncBlockInfo> filtered = blocks.Where(b => SyncBlockInfoFilter.Matches(b, parameters.Filter)).ToList();
+
+			IEnumerable<SyncBlockInfo> sorted = filtered;
 			if (parameters.SortBy?.ToLower() == "recursion") {
 				sorted = parameters.SortDirection == SortDirection.Asc ? sorted.OrderBy(b => b.RecursionCount) : sorted.OrderByDescending(b => b.RecursionCount);
 			} else if (parameters.SortBy?.ToLower() == "waiting") {
@@ -405,7 +432,7 @@ namespace DotNetDump.Core.Analyzers {
 			}
 
 			var page = sorted.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-			return new PagedResult<SyncBlockInfo>(page, blocks.Count, parameters.Offset, parameters.Limit);
+			return new PagedResult<SyncBlockInfo>(page, filtered.Count, parameters.Offset, parameters.Limit);
 		}
 
 		private static IEnumerable<SyncBlockInfo> EnumerateThinLocks(ClrHeap heap) {
@@ -435,6 +462,9 @@ namespace DotNetDump.Core.Analyzers {
 		}
 
 		public PagedResult<GCHandleInfo> GetGCHandles(QueryParameters parameters) {
+			parameters.Filter.EnsureSupported("gchandles", GCHandleInfoFilter.Honored);
+			var typeNameMatcher = TypeNameMatcher.Create(parameters.Filter);
+
 			var runtime = _context.Runtime;
 			if (runtime == null) return PagedResult<GCHandleInfo>.Empty(parameters);
 
@@ -448,7 +478,7 @@ namespace DotNetDump.Core.Analyzers {
 				DependentTarget = h.Dependent.Address,
 				AppDomainName = h.AppDomain?.Name,
 				Size = h.Object.IsNull ? 0 : h.Object.Size
-			}).ToList();
+			}).Where(h => GCHandleInfoFilter.Matches(h, parameters.Filter, typeNameMatcher)).ToList();
 
 			IEnumerable<GCHandleInfo> sorted = handles;
 			if (parameters.SortBy?.ToLower() == "kind") {
@@ -469,6 +499,8 @@ namespace DotNetDump.Core.Analyzers {
 		/// doing all the work.
 		/// </summary>
 		public PagedResult<HeapCorruptionInfo> VerifyHeap(QueryParameters parameters) {
+			parameters.Filter.EnsureSupported("verifyheap", FilterField.None);
+
 			var heap = GetHeap();
 			var corruptions = heap.VerifyHeap().Select(c => new HeapCorruptionInfo {
 				Address = c.Object.Address + (ulong)(c.Offset > 0 ? c.Offset : 0),
@@ -519,11 +551,19 @@ namespace DotNetDump.Core.Analyzers {
 		}
 
 		public PagedResult<ExceptionDetails> GetHeapExceptions(QueryParameters parameters) {
+			// The heap-scan path: bare ExceptionDetails with no owning thread, so ManagedThreadId is
+			// unsupported here even though ThreadAnalyzer.GetThreadExceptions honors it for the
+			// in-flight path (DATA_CONTRACT.md §2.3, "printexception is two methods").
+			parameters.Filter.EnsureSupported("printexception (heap scan)", ExceptionDetailsFilter.Honored);
+			var typeNameMatcher = TypeNameMatcher.Create(parameters.Filter);
+
 			var key = new CacheKey(_context.Identity, HeapExceptionsCacheOperation, "", CacheSchemaVersion);
 			List<ExceptionDetails> found = _cache.GetOrCompute(key, ComputeHeapExceptions);
 
-			var page = found.Skip(parameters.Offset).Take(parameters.Limit).ToList();
-			return new PagedResult<ExceptionDetails>(page, found.Count, parameters.Offset, parameters.Limit);
+			List<ExceptionDetails> filtered = found.Where(e => ExceptionDetailsFilter.Matches(e, parameters.Filter, typeNameMatcher)).ToList();
+
+			var page = filtered.Skip(parameters.Offset).Take(parameters.Limit).ToList();
+			return new PagedResult<ExceptionDetails>(page, filtered.Count, parameters.Offset, parameters.Limit);
 		}
 	}
 }
