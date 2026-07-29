@@ -71,9 +71,15 @@ public static class GlobalOptions {
 	/// detail commands) must not advertise <c>--filter</c> in their own <c>--help</c> only to have
 	/// <see cref="DotNetDump.Core.UnsupportedFilterException"/> reject it at run time -- the option
 	/// should not exist there in the first place.
+	/// <para>
+	/// <paramref name="honoredFieldsDescription"/> is required, not defaulted, so a command wiring
+	/// this in cannot forget to name the fields it actually honors (DATA_CONTRACT.md &#0167;2.3's
+	/// per-method matrix) -- the task's own instruction that <c>--help</c> must name them per
+	/// command, e.g. so <c>clrmodules --help</c> does not advertise <c>gen</c>.
+	/// </para>
 	/// </summary>
-	public static Option<string[]> CreateFilterOption() => new("--filter") {
-		Description = "Filter expression '<field><op><value>', repeatable and ANDed (see command help for honored fields).",
+	public static Option<string[]> CreateFilterOption(string honoredFieldsDescription) => new("--filter") {
+		Description = honoredFieldsDescription,
 		DefaultValueFactory = _ => Array.Empty<string>(),
 	};
 }

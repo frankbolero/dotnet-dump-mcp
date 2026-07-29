@@ -2,6 +2,7 @@ using System.CommandLine;
 
 using DotNetDump.Core.Analyzers;
 using DotNetDump.Core.Formatting;
+using DotNetDump.Core.Models;
 
 namespace DotNetDump.Cli.Commands;
 
@@ -30,6 +31,14 @@ public static class DumpHeapCommand {
 		Description = "Alias for --limit.",
 	};
 
+	// Honored set: HeapAnalyzer.GetHeapStatistics -> HeapStatItemFilter.Honored
+	// (DATA_CONTRACT.md §2.3). 'size' here is the aggregate TotalSize per type, not one object's
+	// size -- listobj's --filter 'size' means something different; the description says so.
+	public static readonly Option<string[]> FilterOption = GlobalOptions.CreateFilterOption(
+		"Filter expression '<field><op><value>', repeatable and ANDed. Honored fields: type (~ or =/regex/), " +
+		"size (total size per type, not per-object -- see 'listobj --filter' for per-object size), " +
+		"count (instance count), text (across type name).");
+
 	public static Command Create() {
 		var command = new Command("dumpheap", "Heap statistics by type: count, total size, MethodTable.");
 		command.Options.Add(LimitOption);
@@ -37,6 +46,7 @@ public static class DumpHeapCommand {
 		command.Options.Add(SortOption);
 		command.Options.Add(OrderOption);
 		command.Options.Add(TopOption);
+		command.Options.Add(FilterOption);
 
 		command.SetAction((ParseResult parseResult) => {
 			string? dumpOption = parseResult.GetValue(GlobalOptions.Dump);
@@ -48,10 +58,11 @@ public static class DumpHeapCommand {
 			int offset = parseResult.GetValue(OffsetOption);
 			string? sort = parseResult.GetValue(SortOption);
 			string? order = parseResult.GetValue(OrderOption);
+			FilterSpec filter = FilterExpressionParser.Parse(parseResult.GetValue(FilterOption));
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
 			var analyzer = new HeapAnalyzer(context, AnalysisCacheProvider.Default);
-			var parameters = QueryParametersBuilder.Build(sort, order, limit, offset);
+			var parameters = QueryParametersBuilder.Build(sort, order, limit, offset, filter);
 			var stats = analyzer.GetHeapStatistics(parameters);
 
 			System.Console.WriteLine(OutputFormatting.Render(format, stats, MarkdownFormatter.FormatHeapStatistics, JsonFormatter.FormatHeapStatistics, TsvFormatter.FormatHeapStatistics));

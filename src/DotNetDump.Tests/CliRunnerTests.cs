@@ -96,4 +96,47 @@ public class CliRunnerTests {
 
 		Assert.Equal(2, exitCode);
 	}
+
+	// ---- --filter wiring (DATA_CONTRACT.md §2.4, IMPLEMENTATION_PLAN.md task 0.4) ----------------
+	//
+	// FilterExpressionParser.Parse runs before DumpResolver.ResolveAndLoad in every wired command,
+	// so a malformed --filter is rejected without ever touching a dump -- these assertions
+	// deliberately pass no --dump, proving the ordering rather than merely the exit code.
+
+	[Theory]
+	[InlineData("dumpheap")]
+	public async Task MalformedFilter_OnEveryWiredListCommand_ReturnsUsageErrorExitCode_WithoutADump(string command) {
+		var stdout = new StringWriter();
+		var stderr = new StringWriter();
+
+		int exitCode = await CliRunner.RunAsync(new[] { command, "--filter", "not-a-real-expression" }, stdout, stderr);
+
+		Assert.Equal(2, exitCode);
+		Assert.Contains("Invalid --filter", stderr.ToString());
+	}
+
+	[Theory]
+	[InlineData("eeheap")]
+	[InlineData("threadpool")]
+	[InlineData("verifyheap")]
+	[InlineData("info")]
+	[InlineData("dumpobj")]
+	[InlineData("gcroot")]
+	public async Task Filter_OnACommandThatHonorsNone_IsRejectedByTheParserNotAccepted(string command) {
+		// These commands must not advertise --filter at all (task 0.4 Part 2): System.CommandLine's
+		// own parser rejects the unknown option before the command action ever runs, which is a
+		// different (and stronger) guarantee than the command silently accepting and ignoring it.
+		var stdout = new StringWriter();
+		var stderr = new StringWriter();
+
+		int exitCode = await CliRunner.RunAsync(new[] { command, "--filter", "type~Foo" }, stdout, stderr);
+
+		// The exact wording differs by command (an option-taking command reports the unknown
+		// "--filter" token; an argument-taking command like dumpobj/gcroot reports the stray value
+		// as an unrecognized argument once --filter itself isn't consumed as an option) -- what
+		// matters is that System.CommandLine's own parser rejects it pre-action, at usage-error
+		// severity, rather than the command running with the filter silently dropped.
+		Assert.Equal(2, exitCode);
+		Assert.DoesNotContain("Error:", stderr.ToString());
+	}
 }
