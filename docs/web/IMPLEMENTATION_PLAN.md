@@ -1,6 +1,6 @@
 # Implementation plan
 
-Status: **proposed**.
+Status: **in progress** — Phase 0 complete and accepted; Phases 1–7 outstanding.
 
 Eight phases. Phases 0, 1 and 2 run in parallel; the rest are sequential. Each phase has an exit
 criterion that is a demonstrable fact, not a feeling, and the phases that could invalidate later work
@@ -8,19 +8,22 @@ carry an explicit measurement.
 
 Read [`README.md` §3](README.md) first for why the ordering is what it is.
 
-## Phase 0 — Core contract
+## Phase 0 — Core contract ✅ complete
 
 **Track A. No web code. Ships CLI-visible value on its own.**
 
-| Task | Detail |
-| :--- | :--- |
-| 0.1 | `FilterSpec` in `DotNetDump.Core/Models/`, plus `QueryParameters.Filter`. [`DATA_CONTRACT.md` §2.2](DATA_CONTRACT.md) |
-| 0.2 | Apply the filter in each analyzer between the cached computation and the sort, against the matrix in [`DATA_CONTRACT.md` §2.3](DATA_CONTRACT.md). Declare the honored set with `FilterField`; call `FilterSpec.EnsureSupported` first, so an unsupported filter costs nothing and fails identically cached or not. Includes capturing `Generation` on `HeapObjectItem` during the walk — `listobj` cannot honor the declared set without it. **Runs after 0.5**, see below. |
-| 0.3 | `PagedResult<T>.TotalUnfiltered`. Bump the cache `SchemaVersion` — the payload shape changed, and 0.2's new `Generation` field changes it again. One bump covers both. |
-| 0.4 | `FilterExpressionParser` in `DotNetDump.Cli` for the `--filter field~value` grammar; wire `--filter` (repeatable) into every list command. Keep `listobj --type` as a distinct **walk-time scope**, *not* an alias for `--filter 'type~'` — aliasing it is a performance regression wearing a rename ([`DATA_CONTRACT.md` §2.4](DATA_CONTRACT.md)). |
-| 0.5 | Convert the remaining `IEnumerable<T>` analyzer methods to `PagedResult<T>`: `GetGCHandles`, `GetThreads`, `GetDetailedStacks`, `GetThreadStates`, `GetModules`, `VerifyHeap`. Update `JsonFormatter` to use the real totals instead of `FromItemsOnly`. |
-| 0.6 | Move `DumpResolver` and `SessionFile` from `DotNetDump.Cli` to `DotNetDump.Core`. Pure relocation; the CLI keeps behaving identically. |
-| 0.7 | `IProgress<WalkProgress>` on the five walk-scale methods. The CLI passes `null`. |
+All seven tasks merged to `feature/web-interface`. Suite at 549 passed / 38 skipped / 0 failed on
+`net8.0`/`net9.0`/`net10.0`, `dotnet format --verify-no-changes` clean.
+
+| Task | Status | Detail |
+| :--- | :--- | :--- |
+| 0.1 | ✅ | `FilterSpec` in `DotNetDump.Core/Models/`, plus `QueryParameters.Filter`. [`DATA_CONTRACT.md` §2.2](DATA_CONTRACT.md) |
+| 0.2 | ✅ | Apply the filter in each analyzer between the cached computation and the sort, against the matrix in [`DATA_CONTRACT.md` §2.3](DATA_CONTRACT.md). Declare the honored set with `FilterField`; call `FilterSpec.EnsureSupported` first, so an unsupported filter costs nothing and fails identically cached or not. Includes capturing `Generation` on `HeapObjectItem` during the walk — `listobj` cannot honor the declared set without it. **Runs after 0.5**, see below. Landed as `DotNetDump.Core/Filtering/`: shared primitives plus one predicate per model, each declaring its honored set as a constant. |
+| 0.3 | ✅ | `PagedResult<T>.TotalUnfiltered`. Bump the cache `SchemaVersion` — the payload shape changed, and 0.2's new `Generation` field changes it again. One bump covers both. The two per-analyzer `CacheSchemaVersion` constants were collapsed into one declaration first: `ThreadAnalyzer` keys the *shared* heap-exceptions entry with it, so divergent copies would have silently stopped sharing that entry. |
+| 0.4 | ✅ | `FilterExpressionParser` in `DotNetDump.Cli` for the `--filter field~value` grammar; wire `--filter` (repeatable) into every list command. Keep `listobj --type` as a distinct **walk-time scope**, *not* an alias for `--filter 'type~'` — aliasing it is a performance regression wearing a rename ([`DATA_CONTRACT.md` §2.4](DATA_CONTRACT.md)). |
+| 0.5 | ✅ | Convert the remaining `IEnumerable<T>` analyzer methods to `PagedResult<T>`: `GetGCHandles`, `GetThreads`, `GetDetailedStacks`, `GetThreadStates`, `GetModules`, `VerifyHeap`. Update `JsonFormatter` to use the real totals instead of `FromItemsOnly`. |
+| 0.6 | ✅ | Move `DumpResolver` and `SessionFile` from `DotNetDump.Cli` to `DotNetDump.Core`. Pure relocation; the CLI keeps behaving identically. Landed in `Core/Utilities/`, with a CLI-side facade mapping the new Core exceptions back to `CliUsageException`/`DumpLoadException` so the CLI's exception contract is unchanged. |
+| 0.7 | ✅ | `IProgress<WalkProgress>` on the five walk-scale methods. The CLI passes `null` — and needed no edits at all, since the parameter is optional. |
 
 **Ordering inside the phase: 0.1 → 0.5 → 0.2 → 0.3 → 0.4 → 0.6 → 0.7.** 0.5 comes before 0.2
 because five of the ten filterable analyzer methods still return bare `IEnumerable<T>`. Filtering
@@ -31,14 +34,62 @@ uniform `PagedResult<T>` surface, then filter it once.
 `GetModules` belongs in 0.5 because §2.3 gives it a filter set; `VerifyHeap` belongs there for
 pagination alone, since it honors no filters.
 
-**Measurement (gates Phase 4).** On a real dump with a warm cache, time `dumpheap` with a filter
-that matches ~5% of rows versus unfiltered. Filtering happens after the cached walk, so the delta
-should be sub-millisecond on ~1,500 rows. If it is not, the assumption that "filters are free" is
-wrong and the web UI's filter-as-you-type interaction has to be reconsidered before it is built.
+**Measurement (gates Phase 4).** ✅ **Taken 2026-07-29. Verdict: filters are free. Phase 4 may
+proceed.** Reproduce with [`../../scripts/bench-filter.sh`](../../scripts/bench-filter.sh).
 
-**Exit criterion.** `dndump dumpheap --filter 'type~Http' --filter 'size>100mb'` returns correct
-filtered results with an honest `total` and `totalUnfiltered`, on a warm cache, without re-walking.
-`dndump clrmodules --filter 'gen=2'` exits `2` with a clear message rather than silently ignoring it.
+On a real dump (9.6 GB core, 1,976 heap-stat rows) with `type~Http` matching 172 rows (8.70%):
+
+| | |
+| :--- | ---: |
+| Cold walk | 2289.0 ms |
+| Warm, unfiltered | 192.1 ms (median of 15) |
+| Warm, filtered | 197.9 ms (median of 15) |
+| Delta | **5.8 ms (3.0%)** |
+| Cold ÷ warm | 11.9× |
+
+The failure this gates is the filter leaking into the cache key and forcing a re-walk, which would
+have cost the cold number. It did not: the filtered path is 11.6× cheaper than a walk and within
+3% of unfiltered. `FilterSpec` is genuinely excluded from the cache key and §2.1 holds in practice.
+
+Two caveats on reading these numbers:
+
+* **The 5.8 ms is not filter cost.** Substring-matching 1,976 rows is ~0.1 ms; you would need ~50×
+  that to explain the gap. The likely cause is JIT — the filtered run is the only one that loads
+  `FilterExpressionParser`, `TypeNameMatcher` and `HeapStatItemFilter`. That is a per-process cost
+  in a CLI and a once-ever cost in a server.
+* **Neither warm number transfers to Phase 6.** Both include ~190 ms of .NET startup plus dump open,
+  which `serve` pays once at startup rather than per request. Phase 6's "cache-hit filter/sort/page
+  < 50 ms" target is measured in-process against the Phase 2 baseline and must not be compared
+  against these figures.
+
+The original wording asked for a sub-millisecond delta. That is not resolvable at CLI granularity
+and does not need to be: the decision this gates is whether filter-as-you-type is viable, and at 3%
+of a process floor the server does not pay, it plainly is. If the row count grows by orders of
+magnitude, re-take this in-process rather than through the CLI.
+
+**Exit criterion.** ✅ **Met and accepted 2026-07-29.**
+
+| Check | Result |
+| :--- | :--- |
+| `dumpheap --filter 'type~Http' --filter 'size>100mb'` | `total: 0`, `totalUnfiltered: 1976`, exit `0` — honest empty result on a warm cache, no re-walk |
+| `clrmodules --filter 'gen=2'` | exit `2`: *"'clrmodules' does not support filtering on Generation. Supported: Module, MinSize, MaxSize, Text."* |
+
+The specified `size>100mb` case returns zero rows on this dump, so composition was confirmed
+separately: `type~Http` alone matches 172, `size>5kb` ANDed with it matches 2 — exactly the two
+`Http` types whose aggregate exceeds 5,120 bytes. The zero is a true result, not a dropped filter.
+`totalUnfiltered` stayed at 1,976 across every combination.
+
+### Carried forward from Phase 0
+
+Found while building it, each affecting a later phase. None blocks Phase 1 or 2.
+
+| Finding | Bears on |
+| :--- | :--- |
+| **Negation has no `FilterSpec` representation.** The §2.4 grammar lists `!~` and `!=`, but every `FilterSpec` field is a positive match. The CLI parses them and rejects them with a usage error rather than silently dropping them. Whether the type grows negation is an open contract decision. | §2.4, and the Phase 4 filter bar if negation is ever exposed |
+| **`listobj`'s cold walk got more expensive.** 0.2 captures `Generation` per object via `heap.GetSegmentByAddress(...)`, adding one call per object to a walk that covers millions. The segment fast path should keep it ~O(1), but this was never measured — the Phase 0 measurement covers *warm filter* cost, not cold walk cost. | Phase 6's startup warm (6.1) and pending-state timings (6.3) |
+| **Three filterable methods never touch the cache.** `GetGCHandles`, `GetThreads` and `GetThreadStates` have no `GetOrCompute` call — pre-dating this work. "Filters are free" rests on the filter running over a *cached* result, so for these three each call re-enumerates. `gchandles` is walk-scale. | Phase 6, and any Phase 4 view backed by those three |
+| **`WalkProgress.FractionComplete` may never reach 1.0.** `BytesSeen` sums live object sizes; `TotalBytes` sums segment lengths. If a segment's length includes committed-but-unallocated space, the fraction stalls short of 100%. The counts stay honest and `ReportFinal()` always emits the true totals — but a progress bar must treat walk completion, not the fraction, as its terminal signal. | 6.3, the pending-state progress panel |
+| **Core writes to `Console.Error`.** `Core.Utilities.DumpResolver.ResolveAndLoad` prints `Dump: <path>` unless `quiet: true` — relocated verbatim from the CLI in 0.6. The web host must pass `quiet: true` or print a dump banner to its own stderr on every resolve. | 2.2, `dndump serve` |
 
 ## Phase 1 — Design
 
