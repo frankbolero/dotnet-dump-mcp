@@ -6,7 +6,8 @@ using DotNetDump.Core.Models;
 namespace DotNetDump.Core.Filtering;
 
 /// <summary>
-/// Predicate for <c>ThreadAnalyzer.GetDetailedStacks</c> (<c>dumpstack</c>, <c>clrstack</c>). Per
+/// Predicate for <c>ThreadAnalyzer.GetDetailedStacks</c> (<c>dumpstack</c> — <em>not</em>
+/// <c>clrstack</c>, which calls <c>GetStackTraceGroups</c> and honors no filters). Per
 /// DATA_CONTRACT.md &#0167;2.3, <c>Text</c> matches frame <see cref="StackFrameInfo.MethodName"/> —
 /// which requires the stack to already be walked, unlike the other three honored fields.
 /// </summary>

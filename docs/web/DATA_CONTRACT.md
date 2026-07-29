@@ -110,14 +110,24 @@ are the declaration form — see `Models/FilterField.cs`.
 | `ThreadAnalyzer.GetThreadExceptions` | `printexception` (in flight) | `AnyTypeName`, `ManagedThreadId`, `OSThreadId`, `Text` | — , `TypeName` + `Message` |
 | `ThreadAnalyzer.GetThreads` | `clrthreads` | `ManagedThreadId`, `OSThreadId`, `HasException`, `Text` | — , `ExceptionType` |
 | `ThreadAnalyzer.GetThreadStates` | `threadstate` | `ManagedThreadId`, `OSThreadId`, `HasException`, `Text` | — , `ExceptionType` + `StateFlags` |
-| `ThreadAnalyzer.GetDetailedStacks` | `dumpstack`, `clrstack` | `ManagedThreadId`, `OSThreadId`, `HasException`, `Text` | — , frame `MethodName` |
+| `ThreadAnalyzer.GetDetailedStacks` | `dumpstack` | `ManagedThreadId`, `OSThreadId`, `HasException`, `Text` | — , frame `MethodName` |
+| `ThreadAnalyzer.GetStackTraceGroups` | `clrstack`, `eestack` | `None` — see below | — |
 | `ModuleAnalyzer.GetModules` | `clrmodules` | `Module`, `Size`, `Text` | `Size` (image), `Name` |
 | everything else | `eeheap`, `threadpool`, `dumpobj`, `dumpmt`, `dumpmd`, `dumpclass`, `dumpassembly`, `name2ee`, `ip2md`, `info`, `verifyheap` | `None` | — |
 
 `Text` is the case-insensitive substring match across the columns named in the last column. It is
 what the web UI's single search box binds to.
 
-Four corrections against the models as they actually stand, found while settling this matrix:
+Five corrections against the models as they actually stand, found while settling this matrix:
+
+* **`clrstack` is not backed by `GetDetailedStacks`.** An earlier draft of this table listed
+  `clrstack` alongside `dumpstack` on that row. It is not: `ClrStackCommand` and `EEStackCommand`
+  both call `ThreadAnalyzer.GetStackTraceGroups`, a grouped summary that takes **no
+  `QueryParameters` at all** — so there is nowhere to pass a `FilterSpec`, and it cannot even call
+  `EnsureSupported`. `clrstack` and `eestack` are therefore not list views in the §3.2 sense and get
+  no filter bar. Giving them one means first giving `GetStackTraceGroups` a `QueryParameters`
+  overload, which is a Core change nobody has asked for; do not let a Phase 3 view force it in
+  through the back door.
 
 * **`Size` does not mean the same thing in two places.** On `dumpheap` it is the aggregate
   `TotalSize` of every instance of a type; on `listobj` it is one object's own size. `size>100mb`
