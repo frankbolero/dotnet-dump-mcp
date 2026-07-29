@@ -13,10 +13,14 @@ namespace DotNetDump.Cli;
 /// front ends behave the same for the same inputs.
 /// </summary>
 internal static class QueryParametersBuilder {
-	public static QueryParameters Build(string? sortBy, string? order, int limit, int offset) => new QueryParameters {
+	/// <summary><paramref name="filter"/> defaults to null (mapped to <see cref="FilterSpec.None"/>),
+	/// so every existing caller -- commands that never gained a <c>--filter</c> option -- compiles
+	/// and behaves unchanged.</summary>
+	public static QueryParameters Build(string? sortBy, string? order, int limit, int offset, FilterSpec? filter = null) => new QueryParameters {
 		SortBy = sortBy,
 		SortDirection = string.Equals(order, "asc", StringComparison.OrdinalIgnoreCase) ? SortDirection.Asc : SortDirection.Desc,
 		Limit = limit,
 		Offset = offset,
+		Filter = filter ?? FilterSpec.None,
 	};
 }

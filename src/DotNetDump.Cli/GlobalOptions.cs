@@ -1,3 +1,4 @@
+using System;
 using System.CommandLine;
 
 namespace DotNetDump.Cli;
@@ -58,5 +59,21 @@ public static class GlobalOptions {
 	public static Option<int> CreateOffsetOption() => new("--offset") {
 		Description = "Rows to skip.",
 		DefaultValueFactory = _ => 0,
+	};
+
+	/// <summary>
+	/// A fresh <c>--filter</c> instance per command that honors filtering. Repeatable (each
+	/// occurrence adds one <c>&lt;field&gt;&lt;op&gt;&lt;value&gt;</c> expression, parsed by
+	/// <see cref="FilterExpressionParser"/> and ANDed together per DATA_CONTRACT.md &#0167;2.4).
+	/// Factory-per-command like <see cref="CreateLimitOption"/>/<see cref="CreateOffsetOption"/>,
+	/// and for the same reason it is not offered here as a recursive singleton: commands that honor
+	/// no filter at all (<c>eeheap</c>, <c>threadpool</c>, <c>verifyheap</c>, <c>info</c>, the
+	/// detail commands) must not advertise <c>--filter</c> in their own <c>--help</c> only to have
+	/// <see cref="DotNetDump.Core.UnsupportedFilterException"/> reject it at run time -- the option
+	/// should not exist there in the first place.
+	/// </summary>
+	public static Option<string[]> CreateFilterOption() => new("--filter") {
+		Description = "Filter expression '<field><op><value>', repeatable and ANDed (see command help for honored fields).",
+		DefaultValueFactory = _ => Array.Empty<string>(),
 	};
 }
