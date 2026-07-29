@@ -589,6 +589,126 @@ public class IntegrationTests : IDisposable {
 		public void ClearDump(DumpIdentity dump) => _inner.ClearDump(dump);
 	}
 
+	/// <summary>Collects every <see cref="WalkProgress"/> reported during a test.</summary>
+	private sealed class RecordingProgress : IProgress<WalkProgress> {
+		public List<WalkProgress> Reports { get; } = new();
+		public void Report(WalkProgress value) => Reports.Add(value);
+	}
+
+	/// <summary>
+	/// Task 0.7: the five walk-scale methods report progress on a cold walk, with a real (non-zero,
+	/// non-invented) byte-based total from the heap's segment metadata, and report nothing at all on
+	/// a cache hit -- progress lives inside the cached computation, not around it, so a hit performs
+	/// no walk and has nothing to report (DATA_CONTRACT.md §5).
+	/// </summary>
+	[SkippableFact]
+	public void HeapAnalyzer_GetHeapStatistics_ReportsProgressOnColdWalk_NoneOnCacheHit() {
+		SkipIfNoDump();
+
+		var cache = new CountingAnalysisCache();
+		var analyzer = new HeapAnalyzer(_context, cache);
+
+		var cold = new RecordingProgress();
+		analyzer.GetHeapStatistics(new QueryParameters { Limit = 5 }, cold);
+
+		Assert.NotEmpty(cold.Reports);
+		var last = cold.Reports[^1];
+		Assert.True(last.ObjectsWalked > 0);
+		Assert.True(last.TotalBytes > 0);
+		Assert.True(last.BytesSeen > 0);
+
+		var warm = new RecordingProgress();
+		analyzer.GetHeapStatistics(new QueryParameters { Limit = 5 }, warm);
+
+		Assert.Equal(1, cache.ComputeCalls); // Confirms the second call really was a cache hit.
+		Assert.Empty(warm.Reports);
+	}
+
+	[SkippableFact]
+	public void HeapAnalyzer_GetObjects_ReportsProgress() {
+		SkipIfNoDump();
+
+		var analyzer = new HeapAnalyzer(_context);
+		var progress = new RecordingProgress();
+
+		analyzer.GetObjects(new QueryParameters { Limit = 5 }, typeFilter: null, progress: progress);
+
+		Assert.NotEmpty(progress.Reports);
+		Assert.True(progress.Reports[^1].ObjectsWalked > 0);
+	}
+
+	[SkippableFact]
+	public void HeapAnalyzer_GetSyncBlocks_WithThinLocks_ReportsProgress() {
+		SkipIfNoDump();
+
+		var analyzer = new HeapAnalyzer(_context);
+		var progress = new RecordingProgress();
+
+		analyzer.GetSyncBlocks(new QueryParameters(), includeThinLocks: true, progress: progress);
+
+		Assert.NotEmpty(progress.Reports);
+		Assert.True(progress.Reports[^1].ObjectsWalked > 0);
+	}
+
+	/// <summary>Without thin locks there is no full-heap walk, so there is nothing to report progress
+	/// on -- confirms the progress hook does not fabricate activity that did not happen.</summary>
+	[SkippableFact]
+	public void HeapAnalyzer_GetSyncBlocks_WithoutThinLocks_ReportsNoProgress() {
+		SkipIfNoDump();
+
+		var analyzer = new HeapAnalyzer(_context);
+		var progress = new RecordingProgress();
+
+		analyzer.GetSyncBlocks(new QueryParameters(), includeThinLocks: false, progress: progress);
+
+		Assert.Empty(progress.Reports);
+	}
+
+	[SkippableFact]
+	public void HeapAnalyzer_GetHeapExceptions_ReportsProgress() {
+		SkipIfNoDump();
+
+		var analyzer = new HeapAnalyzer(_context);
+		var progress = new RecordingProgress();
+
+		analyzer.GetHeapExceptions(new QueryParameters { Limit = 50 }, progress);
+
+		Assert.NotEmpty(progress.Reports);
+		Assert.True(progress.Reports[^1].ObjectsWalked > 0);
+	}
+
+	[SkippableFact]
+	public void ThreadAnalyzer_GetThreadExceptions_ReportsProgress() {
+		SkipIfNoDump();
+
+		var analyzer = new ThreadAnalyzer(_context);
+		var progress = new RecordingProgress();
+
+		analyzer.GetThreadExceptions(new QueryParameters { Limit = 50 }, progress: progress);
+
+		Assert.NotEmpty(progress.Reports);
+		Assert.True(progress.Reports[^1].ObjectsWalked > 0);
+	}
+
+	/// <summary>
+	/// The CLI's contract for this hook is "pass null" (DATA_CONTRACT.md §5 / IMPLEMENTATION_PLAN.md
+	/// 0.7): every walk-scale method must keep working exactly as before when no progress sink is
+	/// supplied at all.
+	/// </summary>
+	[SkippableFact]
+	public void HeapAnalyzer_WalkMethods_WorkWithNoProgressArgument() {
+		SkipIfNoDump();
+
+		var heapAnalyzer = new HeapAnalyzer(_context);
+		var threadAnalyzer = new ThreadAnalyzer(_context);
+
+		Assert.NotNull(heapAnalyzer.GetHeapStatistics(new QueryParameters { Limit = 5 }));
+		Assert.NotNull(heapAnalyzer.GetObjects(new QueryParameters { Limit = 5 }));
+		Assert.NotNull(heapAnalyzer.GetSyncBlocks(new QueryParameters { Limit = 5 }));
+		Assert.NotNull(heapAnalyzer.GetHeapExceptions(new QueryParameters { Limit = 5 }));
+		Assert.NotNull(threadAnalyzer.GetThreadExceptions(new QueryParameters { Limit = 5 }));
+	}
+
 	public void Dispose() {
 		_context.Dispose();
 	}

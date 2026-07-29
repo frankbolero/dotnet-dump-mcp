@@ -278,7 +278,8 @@ namespace DotNetDump.Core.Analyzers {
 		public PagedResult<ThreadExceptionInfo> GetThreadExceptions(
 			QueryParameters parameters,
 			bool onlyWithExceptions = true,
-			bool includeHeapExceptions = true) {
+			bool includeHeapExceptions = true,
+			IProgress<WalkProgress>? progress = null) {
 
 			// The in-flight path: rows carry an owning thread, unlike HeapAnalyzer.GetHeapExceptions'
 			// heap-scan path, so ManagedThreadId/OSThreadId are honored here (DATA_CONTRACT.md §2.3).
@@ -317,7 +318,7 @@ namespace DotNetDump.Core.Analyzers {
 					.ToHashSet();
 
 				var key = new CacheKey(_context.Identity, HeapAnalyzer.HeapExceptionsCacheOperation, "", HeapAnalyzer.CacheSchemaVersion);
-				List<ExceptionDetails> heapExceptions = _cache.GetOrCompute(key, ComputeHeapExceptions);
+				List<ExceptionDetails> heapExceptions = _cache.GetOrCompute(key, () => ComputeHeapExceptions(progress));
 
 				foreach (var details in heapExceptions) {
 					if (seen.Add(details.Address)) {
@@ -367,13 +368,18 @@ namespace DotNetDump.Core.Analyzers {
 		/// <summary>
 		/// The walk-scale part of <see cref="GetThreadExceptions"/>. Shares its cache entry with
 		/// <see cref="HeapAnalyzer.GetHeapExceptions"/> (see <see cref="HeapAnalyzer.HeapExceptionsCacheOperation"/>)
-		/// — both perform the identical full-heap exception scan.
+		/// — both perform the identical full-heap exception scan. Whichever one runs first on a cache
+		/// miss is the one whose <paramref name="progress"/> the caller sees; the other's cached read
+		/// reports none, per the cache-hit rule in DATA_CONTRACT.md §5.
 		/// </summary>
-		private List<ExceptionDetails> ComputeHeapExceptions() {
+		private List<ExceptionDetails> ComputeHeapExceptions(IProgress<WalkProgress>? progress) {
 			var heap = GetRuntime().Heap;
+			var throttle = WalkProgressThrottle.ForHeap(heap, progress);
 			var found = new List<ExceptionDetails>();
 
 			foreach (var obj in heap.EnumerateObjects()) {
+				throttle.Record((long)obj.Size);
+
 				if (obj.Type?.IsException != true)
 					continue;
 
@@ -388,6 +394,7 @@ namespace DotNetDump.Core.Analyzers {
 					found.Add(ExceptionMapper.Map(exception));
 			}
 
+			throttle.ReportFinal();
 			return found;
 		}
 	}

@@ -1,6 +1,9 @@
 using System;
+using System.Linq;
 
 using DotNetDump.Core.Models;
+
+using Microsoft.Diagnostics.Runtime;
 
 namespace DotNetDump.Core.Utilities;
 
@@ -56,6 +59,20 @@ public sealed class WalkProgressThrottle {
 		_progress = progress;
 		_totalBytes = totalBytes;
 		_intervalObjects = intervalObjects > 0 ? intervalObjects : DefaultReportIntervalObjects;
+	}
+
+	/// <summary>
+	/// Builds a throttle for a walk over <paramref name="heap"/>, deriving <see cref="WalkProgress.TotalBytes"/>
+	/// from <c>ClrHeap.Segments</c> -- the sum of every segment's object-range length, the real
+	/// denominator described on <see cref="WalkProgress"/>.
+	/// </summary>
+	/// <remarks>
+	/// The segment sum is skipped entirely when <paramref name="progress"/> is <c>null</c>: nothing
+	/// downstream will read <see cref="WalkProgress.TotalBytes"/>, so there is no reason to pay for it.
+	/// </remarks>
+	public static WalkProgressThrottle ForHeap(ClrHeap heap, IProgress<WalkProgress>? progress, int intervalObjects = DefaultReportIntervalObjects) {
+		long totalBytes = progress != null ? heap.Segments.Sum(s => (long)s.Length) : 0;
+		return new WalkProgressThrottle(progress, totalBytes, intervalObjects);
 	}
 
 	/// <summary>

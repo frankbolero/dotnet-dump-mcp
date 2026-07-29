@@ -56,21 +56,47 @@ namespace DotNetDump.Core.Analyzers {
 		/// key — one entry serves every <c>limit</c>/<c>offset</c>/<c>sort</c>/<c>order</c> variant
 		/// of <c>dumpheap</c> (CLI_DESIGN.md §6.2).
 		/// </summary>
-		private List<HeapStatItem> ComputeHeapStatistics() {
+		/// <param name="progress">
+		/// Optional walk-progress sink (DATA_CONTRACT.md §5). Reported at a throttled interval via
+		/// <see cref="WalkProgressThrottle"/>, never per object. Only consulted on a cache miss --
+		/// this method runs only when there is an actual walk to report progress on.
+		/// </param>
+		private List<HeapStatItem> ComputeHeapStatistics(IProgress<WalkProgress>? progress) {
 			var heap = GetHeap();
-			return (from obj in heap.EnumerateObjects()
-					  let type = obj.Type
-					  where type != null
-					  group obj by new { type.Name, type.MethodTable } into g
-					  select new HeapStatItem {
-						  TypeName = g.Key.Name,
-						  MethodTable = g.Key.MethodTable,
-						  Count = g.Count(),
-						  TotalSize = g.Sum(p => (long)p.Size)
-					  }).ToList();
+			var throttle = WalkProgressThrottle.ForHeap(heap, progress);
+
+			// A foreach + Dictionary, not a LINQ GroupBy, so progress can be recorded for every
+			// object visited -- including the ones the type != null check below discards -- without
+			// an awkward `let` clause threading a side effect through the query. The result (grouped
+			// by type name + method table, always re-sorted by the caller) is identical either way.
+			var groups = new Dictionary<(string? Name, ulong MethodTable), (int Count, long TotalSize)>();
+			foreach (var obj in heap.EnumerateObjects()) {
+				throttle.Record((long)obj.Size);
+
+				var type = obj.Type;
+				if (type == null)
+					continue;
+
+				var key = (type.Name, type.MethodTable);
+				groups.TryGetValue(key, out var current);
+				groups[key] = (current.Count + 1, current.TotalSize + (long)obj.Size);
+			}
+
+			var result = new List<HeapStatItem>(groups.Count);
+			foreach (var (groupKey, value) in groups) {
+				result.Add(new HeapStatItem {
+					TypeName = groupKey.Name,
+					MethodTable = groupKey.MethodTable,
+					Count = value.Count,
+					TotalSize = value.TotalSize
+				});
+			}
+
+			throttle.ReportFinal();
+			return result;
 		}
 
-		public PagedResult<HeapStatItem> GetHeapStatistics(QueryParameters parameters) {
+		public PagedResult<HeapStatItem> GetHeapStatistics(QueryParameters parameters, IProgress<WalkProgress>? progress = null) {
 			// EnsureSupported runs before the cache lookup, so an unsupported filter is rejected
 			// identically on a cold and a warm cache (DATA_CONTRACT.md §2.1). TypeNameMatcher.Create
 			// follows immediately: a malformed regex is also a free rejection, not a cost paid only
@@ -79,7 +105,7 @@ namespace DotNetDump.Core.Analyzers {
 			var typeNameMatcher = TypeNameMatcher.Create(parameters.Filter);
 
 			var key = new CacheKey(_context.Identity, "heap-statistics", "", CacheSchemaVersion);
-			List<HeapStatItem> stats = _cache.GetOrCompute(key, ComputeHeapStatistics);
+			List<HeapStatItem> stats = _cache.GetOrCompute(key, () => ComputeHeapStatistics(progress));
 
 			List<HeapStatItem> filtered = stats.Where(s => HeapStatItemFilter.Matches(s, parameters.Filter, typeNameMatcher)).ToList();
 
@@ -101,9 +127,20 @@ namespace DotNetDump.Core.Analyzers {
 		/// (unlike pagination/sort), so it is part of the cache key — a distinct filter gets its own
 		/// entry, computed by its own heap walk.
 		/// </summary>
-		private List<HeapObjectItem> ComputeObjects(string? typeFilter) {
+		/// <param name="progress">
+		/// Optional walk-progress sink (DATA_CONTRACT.md §5), reported at a throttled interval. Every
+		/// object <c>EnumerateObjects()</c> visits counts toward progress, including ones
+		/// <paramref name="typeFilter"/> excludes from the result -- the walk touches them regardless.
+		/// </param>
+		private List<HeapObjectItem> ComputeObjects(string? typeFilter, IProgress<WalkProgress>? progress) {
 			var heap = GetHeap();
-			return heap.EnumerateObjects()
+			var throttle = WalkProgressThrottle.ForHeap(heap, progress);
+
+			var result = heap.EnumerateObjects()
+				 .Select(obj => {
+					 throttle.Record((long)obj.Size);
+					 return obj;
+				 })
 				 .Where(obj => typeFilter == null || (obj.Type?.Name?.Contains(typeFilter, StringComparison.OrdinalIgnoreCase) ?? false))
 				 .Select(obj => new HeapObjectItem {
 					 Address = obj.Address,
@@ -115,9 +152,12 @@ namespace DotNetDump.Core.Analyzers {
 					 // re-searching the segment list from scratch on every row.
 					 Generation = GenerationClassifier.ToFilter(heap.GetSegmentByAddress(obj.Address)?.GetGeneration(obj.Address) ?? Generation.Unknown)
 				 }).ToList();
+
+			throttle.ReportFinal();
+			return result;
 		}
 
-		public PagedResult<HeapObjectItem> GetObjects(QueryParameters parameters, string? typeFilter = null) {
+		public PagedResult<HeapObjectItem> GetObjects(QueryParameters parameters, string? typeFilter = null, IProgress<WalkProgress>? progress = null) {
 			// typeFilter is the --type *scope* (DATA_CONTRACT.md §2.4): it narrows the walk itself and
 			// is part of the cache key below. parameters.Filter is the post-walk *filter* and is
 			// deliberately excluded from the cache key -- the two compose, scope at walk time and
@@ -127,7 +167,7 @@ namespace DotNetDump.Core.Analyzers {
 
 			string argumentsHash = CacheKey.HashArguments(typeFilter?.ToLowerInvariant());
 			var key = new CacheKey(_context.Identity, "heap-objects", argumentsHash, CacheSchemaVersion);
-			List<HeapObjectItem> objects = _cache.GetOrCompute(key, () => ComputeObjects(typeFilter));
+			List<HeapObjectItem> objects = _cache.GetOrCompute(key, () => ComputeObjects(typeFilter, progress));
 
 			List<HeapObjectItem> filtered = objects.Where(o => HeapObjectItemFilter.Matches(o, parameters.Filter, typeNameMatcher)).ToList();
 
@@ -387,7 +427,13 @@ namespace DotNetDump.Core.Analyzers {
 		/// changes what is computed and is part of the cache key.
 		/// </para>
 		/// </summary>
-		private List<SyncBlockInfo> ComputeSyncBlocks(bool includeThinLocks) {
+		/// <param name="progress">
+		/// Optional walk-progress sink (DATA_CONTRACT.md §5), forwarded to <see cref="EnumerateThinLocks"/>
+		/// -- the only part of this method that walks the full heap. When <paramref name="includeThinLocks"/>
+		/// is <c>false</c> there is no walk, so <paramref name="progress"/> goes unused and nothing is
+		/// reported, which is correct: there is nothing to report progress on.
+		/// </param>
+		private List<SyncBlockInfo> ComputeSyncBlocks(bool includeThinLocks, IProgress<WalkProgress>? progress) {
 			var heap = GetHeap();
 			var runtime = _context.Runtime;
 
@@ -409,18 +455,18 @@ namespace DotNetDump.Core.Analyzers {
 			}).ToList();
 
 			if (includeThinLocks) {
-				blocks.AddRange(EnumerateThinLocks(heap));
+				blocks.AddRange(EnumerateThinLocks(heap, progress));
 			}
 
 			return blocks;
 		}
 
-		public PagedResult<SyncBlockInfo> GetSyncBlocks(QueryParameters parameters, bool includeThinLocks = true) {
+		public PagedResult<SyncBlockInfo> GetSyncBlocks(QueryParameters parameters, bool includeThinLocks = true, IProgress<WalkProgress>? progress = null) {
 			parameters.Filter.EnsureSupported("syncblk", SyncBlockInfoFilter.Honored);
 
 			string argumentsHash = CacheKey.HashArguments(includeThinLocks);
 			var key = new CacheKey(_context.Identity, "sync-blocks", argumentsHash, CacheSchemaVersion);
-			List<SyncBlockInfo> blocks = _cache.GetOrCompute(key, () => ComputeSyncBlocks(includeThinLocks));
+			List<SyncBlockInfo> blocks = _cache.GetOrCompute(key, () => ComputeSyncBlocks(includeThinLocks, progress));
 
 			List<SyncBlockInfo> filtered = blocks.Where(b => SyncBlockInfoFilter.Matches(b, parameters.Filter)).ToList();
 
@@ -437,8 +483,13 @@ namespace DotNetDump.Core.Analyzers {
 			return new PagedResult<SyncBlockInfo>(page, filtered.Count, blocks.Count, parameters.Offset, parameters.Limit);
 		}
 
-		private static IEnumerable<SyncBlockInfo> EnumerateThinLocks(ClrHeap heap) {
+		/// <summary>The walk. <paramref name="progress"/> is reported at a throttled interval, never per object.</summary>
+		private static IEnumerable<SyncBlockInfo> EnumerateThinLocks(ClrHeap heap, IProgress<WalkProgress>? progress) {
+			var throttle = WalkProgressThrottle.ForHeap(heap, progress);
+
 			foreach (var obj in heap.EnumerateObjects()) {
+				throttle.Record((long)obj.Size);
+
 				ClrThinLock? thinLock;
 				try {
 					thinLock = obj.GetThinLock();
@@ -461,6 +512,8 @@ namespace DotNetDump.Core.Analyzers {
 					IsThinLock = true
 				};
 			}
+
+			throttle.ReportFinal();
 		}
 
 		public PagedResult<GCHandleInfo> GetGCHandles(QueryParameters parameters) {
@@ -543,18 +596,30 @@ namespace DotNetDump.Core.Analyzers {
 		/// <remarks>
 		/// Shares its cache entry with <see cref="ThreadAnalyzer"/>'s heap-exception scan (see
 		/// <see cref="HeapExceptionsCacheOperation"/>) — both perform the identical full-heap walk.
+		/// Whichever one runs first on a cache miss is the one whose <paramref name="progress"/> the
+		/// caller sees; the other's cached read reports none, per the cache-hit rule in
+		/// DATA_CONTRACT.md §5.
 		/// </remarks>
-		private List<ExceptionDetails> ComputeHeapExceptions() {
+		private List<ExceptionDetails> ComputeHeapExceptions(IProgress<WalkProgress>? progress) {
 			var heap = GetHeap();
-			return heap.EnumerateObjects()
+			var throttle = WalkProgressThrottle.ForHeap(heap, progress);
+
+			var result = heap.EnumerateObjects()
+				.Select(o => {
+					throttle.Record((long)o.Size);
+					return o;
+				})
 				.Where(o => o.Type?.IsException == true)
 				.Select(o => o.AsException())
 				.Where(e => e != null)
 				.Select(e => ExceptionMapper.Map(e!))
 				.ToList();
+
+			throttle.ReportFinal();
+			return result;
 		}
 
-		public PagedResult<ExceptionDetails> GetHeapExceptions(QueryParameters parameters) {
+		public PagedResult<ExceptionDetails> GetHeapExceptions(QueryParameters parameters, IProgress<WalkProgress>? progress = null) {
 			// The heap-scan path: bare ExceptionDetails with no owning thread, so ManagedThreadId is
 			// unsupported here even though ThreadAnalyzer.GetThreadExceptions honors it for the
 			// in-flight path (DATA_CONTRACT.md §2.3, "printexception is two methods").
@@ -562,7 +627,7 @@ namespace DotNetDump.Core.Analyzers {
 			var typeNameMatcher = TypeNameMatcher.Create(parameters.Filter);
 
 			var key = new CacheKey(_context.Identity, HeapExceptionsCacheOperation, "", CacheSchemaVersion);
-			List<ExceptionDetails> found = _cache.GetOrCompute(key, ComputeHeapExceptions);
+			List<ExceptionDetails> found = _cache.GetOrCompute(key, () => ComputeHeapExceptions(progress));
 
 			List<ExceptionDetails> filtered = found.Where(e => ExceptionDetailsFilter.Matches(e, parameters.Filter, typeNameMatcher)).ToList();
 
