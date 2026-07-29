@@ -34,6 +34,16 @@ public static class PrintExceptionCommand {
 		Description = "Sort direction: asc or desc (default desc).",
 	};
 
+	// Honored set: ThreadAnalyzer.GetThreadExceptions -> ThreadExceptionInfoFilter.Honored
+	// (DATA_CONTRACT.md §2.3, "in flight" row -- this command always goes through the combined
+	// in-flight-plus-heap path, never GetHeapExceptions directly, so ManagedThreadId/OSThreadId are
+	// honored here even though they are not on the heap-scan-only method). Applies only in
+	// collection mode; a single-address lookup has nothing to filter.
+	public static readonly Option<string[]> FilterOption = GlobalOptions.CreateFilterOption(
+		"Filter expression '<field><op><value>', repeatable and ANDed. Collection mode only " +
+		"(ignored when an address is given). Honored fields: type (~ or =/regex/, matches the " +
+		"exception's type), thread, osthread, text (across exception type and message).");
+
 	public static Command Create() {
 		var addressArgument = new Argument<string?>("address") {
 			Description = "Optional: exception address (hex, with or without 0x prefix). If omitted, list all exceptions.",
@@ -49,6 +59,7 @@ public static class PrintExceptionCommand {
 		command.Options.Add(OffsetOption);
 		command.Options.Add(SortOption);
 		command.Options.Add(OrderOption);
+		command.Options.Add(FilterOption);
 
 		command.SetAction((ParseResult parseResult) => {
 			string? dumpOption = parseResult.GetValue(GlobalOptions.Dump);
@@ -63,6 +74,7 @@ public static class PrintExceptionCommand {
 			int offset = parseResult.GetValue(OffsetOption);
 			string? sort = parseResult.GetValue(SortOption);
 			string? order = parseResult.GetValue(OrderOption);
+			FilterSpec filter = FilterExpressionParser.Parse(parseResult.GetValue(FilterOption));
 
 			using var context = DumpResolver.ResolveAndLoad(dumpOption, dacOption, quiet);
 			var analyzer = new ThreadAnalyzer(context, AnalysisCacheProvider.Default);
@@ -80,7 +92,7 @@ public static class PrintExceptionCommand {
 				int limitValue = limit;
 				int offsetValue = offset;
 
-				var parameters = QueryParametersBuilder.Build(sort, order, limitValue, offsetValue);
+				var parameters = QueryParametersBuilder.Build(sort, order, limitValue, offsetValue, filter);
 				var results = analyzer.GetThreadExceptions(parameters, onlyWithExceptions, includeHeapExceptions);
 				System.Console.WriteLine(OutputFormatting.Render(format, results, MarkdownFormatter.FormatThreadExceptions, JsonFormatter.FormatThreadExceptions, TsvFormatter.FormatThreadExceptions));
 			}

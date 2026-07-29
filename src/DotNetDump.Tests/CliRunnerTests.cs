@@ -108,6 +108,7 @@ public class CliRunnerTests {
 	[InlineData("listobj")]
 	[InlineData("gchandles")]
 	[InlineData("syncblk")]
+	[InlineData("printexception")]
 	public async Task MalformedFilter_OnEveryWiredListCommand_ReturnsUsageErrorExitCode_WithoutADump(string command) {
 		var stdout = new StringWriter();
 		var stderr = new StringWriter();
@@ -116,6 +117,19 @@ public class CliRunnerTests {
 
 		Assert.Equal(2, exitCode);
 		Assert.Contains("Invalid --filter", stderr.ToString());
+	}
+
+	[Fact]
+	public async Task PrintException_MalformedFilter_RejectedEvenInSingleAddressMode() {
+		// FilterExpressionParser.Parse runs unconditionally before the address-mode branch, so a
+		// malformed --filter is caught even though it would otherwise be ignored (single-address
+		// mode has nothing to filter).
+		var stdout = new StringWriter();
+		var stderr = new StringWriter();
+
+		int exitCode = await CliRunner.RunAsync(new[] { "printexception", "0x1000", "--filter", "not-a-real-expression" }, stdout, stderr);
+
+		Assert.Equal(2, exitCode);
 	}
 
 	[Theory]
