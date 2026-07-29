@@ -17,9 +17,11 @@ namespace DotNetDump.Core.Analyzers {
 		/// <summary>
 		/// Bumped whenever one of the cached models below changes shape, so a stale on-disk entry
 		/// from an older build cannot be deserialized and served as if it matched the current
-		/// contract (CLI_DESIGN.md §6.1).
+		/// contract (CLI_DESIGN.md §6.1). Shared with <see cref="ThreadAnalyzer"/> since both
+		/// perform the identical full-heap exception scan and must use the same schema version
+		/// to avoid split cache entries.
 		/// </summary>
-		private const int CacheSchemaVersion = 1;
+		internal const int CacheSchemaVersion = 2;
 
 		/// <summary>
 		/// Shared with <see cref="ThreadAnalyzer"/> — both classes perform the identical full-heap

@@ -11,10 +11,6 @@ using Microsoft.Diagnostics.Runtime;
 
 namespace DotNetDump.Core.Analyzers {
 	public class ThreadAnalyzer {
-		/// <summary>
-		/// Bumped whenever the cached model below changes shape (CLI_DESIGN.md §6.1).
-		/// </summary>
-		private const int CacheSchemaVersion = 1;
 
 		private readonly IDumpContext _context;
 		private readonly IAnalysisCache _cache;
@@ -320,7 +316,7 @@ namespace DotNetDump.Core.Analyzers {
 					.Select(r => r.Exception!.Address)
 					.ToHashSet();
 
-				var key = new CacheKey(_context.Identity, HeapAnalyzer.HeapExceptionsCacheOperation, "", CacheSchemaVersion);
+				var key = new CacheKey(_context.Identity, HeapAnalyzer.HeapExceptionsCacheOperation, "", HeapAnalyzer.CacheSchemaVersion);
 				List<ExceptionDetails> heapExceptions = _cache.GetOrCompute(key, ComputeHeapExceptions);
 
 				foreach (var details in heapExceptions) {
