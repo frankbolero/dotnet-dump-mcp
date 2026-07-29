@@ -1,0 +1,9 @@
+# Line endings are LF everywhere — in the repository and in every working tree.
+#
+# src/.editorconfig sets `end_of_line = lf`, and `dotnet format --verify-no-changes` is part of the
+# Phase 7 exit criterion. Without this file a Windows checkout would convert on the way in, and the
+# format check would fail on files nobody edited.
+* text=auto eol=lf
+
+# The Docker images run these; a CRLF shebang line fails with a confusing "not found".
+*.sh text eol=lf
