@@ -19,6 +19,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DotNetDump.Core\DotNetDump.Core.csproj" />
+    <!-- 'dndump serve' starts the web host in-process (docs/web/SERVER.md §1). One way only: Web
+         never references Cli, and neither reaches DotNetDump.Server or ModelContextProtocol.
+         Referencing it makes the ASP.NET Core shared framework a runtime requirement of the tool;
+         the assemblies are only *loaded* when ServeCommand's action runs, so every other command
+         still pays nothing at startup. -->
+    <ProjectReference Include="..\DotNetDump.Web\DotNetDump.Web.csproj" />
   </ItemGroup>
 
   <ItemGroup>

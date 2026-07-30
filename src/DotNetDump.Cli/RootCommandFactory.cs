@@ -21,6 +21,7 @@ public static class RootCommandFactory {
 		root.Subcommands.Add(UseCommand.Create());
 		root.Subcommands.Add(InfoCommand.Create());
 		root.Subcommands.Add(CommandsCommand.Create());
+		root.Subcommands.Add(ServeCommand.Create());
 
 		// Heap commands
 		root.Subcommands.Add(DumpHeapCommand.Create());
