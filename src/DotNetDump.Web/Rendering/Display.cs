@@ -116,15 +116,12 @@ public static class Display {
 		values.Any() ? string.Join(", ", values) : "-";
 
 	/// <summary>
-	/// Renders the owning thread of an exception, or "Heap" if it is heap-resident.
-	/// Combines managed and OS thread ids when present, using the convention of the CLI output.
+	/// Renders the owning thread of an exception, or "Heap" if it is heap-resident. A dump's
+	/// in-flight exceptions always carry a managed thread id (<c>GetThreadExceptions</c> only ever
+	/// produces <see cref="DotNetDump.Core.Models.ExceptionSource.ThreadCurrentException"/> or
+	/// <see cref="DotNetDump.Core.Models.ExceptionSource.Heap"/>), so its presence alone
+	/// distinguishes the two cases without needing the source itself.
 	/// </summary>
-	public static string ThreadOrHeap(int? managedThreadId, uint? osThreadId, DotNetDump.Core.Models.ExceptionSource source) {
-		if (managedThreadId.HasValue) {
-			// In-flight exception: show managed id and OS id
-			return $"Thread {managedThreadId} ({ThreadId(osThreadId ?? 0)})";
-		}
-		// Heap-resident exception
-		return "Heap";
-	}
+	public static string ThreadOrHeap(int? managedThreadId, uint? osThreadId) =>
+		managedThreadId.HasValue ? $"Thread {managedThreadId} ({ThreadId(osThreadId ?? 0)})" : "Heap";
 }
