@@ -234,6 +234,30 @@ public static class DumpRoutes {
 					return new Fragment(html, null, model.CountSummary);
 				}
 
+			case "verifyobj": {
+					if (!TryRequireAddress(address, descriptor, out ulong objectAddress, out var badAddress)) {
+						return new Fragment(null, badAddress);
+					}
+
+					var corruptions = await queue.Enqueue(
+						(session, _) => session.Heap.VerifyObject(objectAddress).ToList(), "verifying object", ct);
+					var model = new DetailModel<ObjectVerificationModel>(descriptor, new ObjectVerificationModel(objectAddress, corruptions));
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/VerifyObj.cshtml", model);
+					return new Fragment(html, null);
+				}
+
+			case "dumpclass": {
+					if (!TryRequireAddress(address, descriptor, out ulong eeClassAddress, out var badAddress)) {
+						return new Fragment(null, badAddress);
+					}
+
+					var classInfo = await queue.Enqueue(
+						(session, _) => session.Metadata.GetClass(eeClassAddress), "reading class", ct);
+					var model = new DetailModel<ClassInfo>(descriptor, classInfo);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/DumpClass.cshtml", model);
+					return new Fragment(html, null);
+				}
+
 			case "dumpmodule": {
 					if (!TryRequireAddress(address, descriptor, out ulong moduleAddress, out var badAddress)) {
 						return new Fragment(null, badAddress);
@@ -479,6 +503,26 @@ public static class DumpRoutes {
 					var methodDescInfo = await queue.Enqueue(
 						(session, _) => session.Modules.GetMethodByIP(instructionPointer), "resolving instruction pointer", ct);
 					return Results.Content(JsonFormatter.FormatMethodDesc(methodDescInfo), "application/json; charset=utf-8");
+				}
+
+			case "verifyobj": {
+					if (!TryRequireAddress(address, descriptor, out ulong objectAddress, out var badAddress)) {
+						return badAddress;
+					}
+
+					var corruptions = await queue.Enqueue(
+						(session, _) => session.Heap.VerifyObject(objectAddress).ToList(), "verifying object", ct);
+					return Results.Content(JsonFormatter.FormatObjectVerification(corruptions), "application/json; charset=utf-8");
+				}
+
+			case "dumpclass": {
+					if (!TryRequireAddress(address, descriptor, out ulong eeClassAddress, out var badAddress)) {
+						return badAddress;
+					}
+
+					var classInfo = await queue.Enqueue(
+						(session, _) => session.Metadata.GetClass(eeClassAddress), "reading class", ct);
+					return Results.Content(JsonFormatter.FormatClass(classInfo), "application/json; charset=utf-8");
 				}
 
 			default:

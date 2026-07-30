@@ -1,0 +1,53 @@
+@*
+    Object verification (task 3.4). verifyobj checks a single object for corruption without
+    walking the whole heap -- HeapAnalyzer.VerifyObject(address) returns a possibly-empty list of
+    HeapCorruptionInfo, and an empty list is the *good* outcome, not an empty-data state, so it
+    gets its own "no corruption found" wording rather than DumpObj.cshtml's neighbouring "no
+    fields" message and .dn-empty's muted, "nothing to show" treatment (see .dn-pass in
+    dndump.css).
+
+    A bare List<HeapCorruptionInfo> can't say which address was checked once the list is empty, so
+    ObjectVerificationModel carries the route's own parsed address alongside the corruption list
+    rather than re-deriving it from a (possibly absent) first item.
+
+    Same discipline as every other fragment: no style=, the htmx id derived from Model.View.Name,
+    no conditionals beyond presence/absence, and formatting logic staying out of the template.
+*@
+@model DetailModel<ObjectVerificationModel>
+
+<div id="v-@Model.View.Name">
+    <div class="dn-card">
+        <div class="dn-card__head">
+            <div class="dn-card__row"><span class="dn-card__label">Address</span><span class="dn-addr">@Display.Address(Model.Data.Address)</span></div>
+        </div>
+
+        @if (Model.Data.Corruptions.Count == 0)
+        {
+            <div class="dn-pass">No corruption found for this object.</div>
+        }
+        else
+        {
+            <table class="dn-table">
+                <thead>
+                    <tr>
+                        <th scope="col" class="dn-th dn-th--mono">Offset</th>
+                        <th scope="col" class="dn-th">Kind</th>
+                        <th scope="col" class="dn-th">Type</th>
+                        <th scope="col" class="dn-th">Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model.Data.Corruptions)
+                    {
+                        <tr class="dn-tr">
+                            <td class="dn-td dn-td--mono">@Display.OffsetHex(item.Offset)</td>
+                            <td class="dn-td dn-td--text">@item.Kind</td>
+                            <td class="dn-td dn-td--text">@Display.OrNone(item.TypeName)</td>
+                            <td class="dn-td dn-td--text">@Display.OrNone(item.Message)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>

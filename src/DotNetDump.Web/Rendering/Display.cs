@@ -133,6 +133,14 @@ public static class Display {
 	public static string FieldOffset(int value) => value != -1 ? value.ToString("X", CultureInfo.InvariantCulture) : "-";
 
 	/// <summary>
+	/// A byte offset as plain hex, no sentinel handling. Unlike <see cref="FieldOffset"/>'s
+	/// <c>ObjectField.Offset == -1</c> "not placed" convention, <c>HeapCorruptionInfo.Offset</c> and
+	/// <c>FieldMetadata.Offset</c> carry no such sentinel -- the runtime always places them -- so a
+	/// dash here would misreport an unreachable case as "unknown" instead of just showing the value.
+	/// </summary>
+	public static string OffsetHex(int value) => value.ToString("X", CultureInfo.InvariantCulture);
+
+	/// <summary>
 	/// The DAC path/name plus its match status, exactly as <c>MarkdownFormatter.FormatInfo</c>
 	/// composes it: an explicit <c>--dac</c> path if one was given, else the expected file name, else
 	/// "&lt;unknown&gt;"; and "matched" unless an explicit path bypassed ClrMD's own check.

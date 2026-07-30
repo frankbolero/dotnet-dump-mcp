@@ -1,0 +1,92 @@
+@*
+    EEClass detail (task 3.4). A type's fields, layout, and the MethodTable it backs --
+    MetadataAnalyzer.GetClass(eeClassAddress) returns ClassInfo. Follows DumpObj.cshtml's card
+    shape: an address-identity head plus .dn-table for what the record contains.
+
+    ClassInfo.EEClass is deliberately not shown as a second address distinct from MethodTable --
+    ClrMD does not expose EEClass separately from the MethodTable it backs (see the comment on
+    MetadataAnalyzer.GetClass and ClassInfo.EEClass), and MarkdownFormatter.FormatClass already
+    established the precedent of showing only MethodTable for exactly that reason.
+
+    Two .dn-tables below the head, Fields then Methods, each present only when it has rows --
+    presence/absence, not a picked-between-two-layouts branch. FieldMetadata.Offset carries no
+    "not placed" sentinel the way ObjectField.Offset does, so it uses Display.OffsetHex (plain
+    hex) rather than DumpObj.cshtml's Display.FieldOffset. The Static column folds IsStatic and
+    IsThreadStatic into one three-way word inline, the same way Info.cshtml inlines its
+    Server/Workstation ternary rather than routing a single bool through Display.cs.
+
+    Same discipline as every other fragment: no style=, the htmx id derived from Model.View.Name,
+    no conditionals beyond presence/absence, and formatting logic staying out of the template.
+*@
+@model DetailModel<ClassInfo>
+
+<div id="v-@Model.View.Name">
+    <div class="dn-card">
+        <div class="dn-card__head">
+            <div class="dn-card__row"><span class="dn-card__label">MethodTable</span><span class="dn-addr">@Display.Address(Model.Data.MethodTable)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Type</span><span class="dn-mono--strong">@Model.Data.TypeName</span></div>
+            @if (!string.IsNullOrEmpty(Model.Data.ModuleName))
+            {
+                <div class="dn-card__row"><span class="dn-card__label">Module</span><span class="dn-mono">@Model.Data.ModuleName</span></div>
+            }
+            <div class="dn-card__row"><span class="dn-card__label">Fields</span><span class="dn-mono">@Model.Data.FieldCount instance, @Model.Data.StaticFieldCount static, @Model.Data.ThreadStaticFieldCount thread-static</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Methods</span><span class="dn-mono">@Model.Data.MethodCount</span></div>
+        </div>
+
+        @if (Model.Data.Fields.Count > 0)
+        {
+            <table class="dn-table">
+                <thead>
+                    <tr>
+                        <th scope="col" class="dn-th dn-th--mono">Offset</th>
+                        <th scope="col" class="dn-th dn-th--mono">Name</th>
+                        <th scope="col" class="dn-th">Type</th>
+                        <th scope="col" class="dn-th dn-th--num">Size</th>
+                        <th scope="col" class="dn-th">Static</th>
+                        <th scope="col" class="dn-th dn-th--mono">Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var field in Model.Data.Fields)
+                    {
+                        var type = MiddleTruncated.From(field.TypeName);
+                        <tr class="dn-tr">
+                            <td class="dn-td dn-td--mono">@Display.OffsetHex(field.Offset)</td>
+                            <td class="dn-td dn-td--mono">@field.Name</td>
+                            <td class="dn-td dn-td--type" title="@type.Full">
+                                <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
+                            </td>
+                            <td class="dn-td dn-td--num">@Display.Count(field.Size)</td>
+                            <td class="dn-td dn-td--text">@(field.IsThreadStatic ? "Thread-static" : field.IsStatic ? "Static" : "Instance")</td>
+                            <td class="dn-td dn-td--mono">@Display.OrNone(field.Value)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        @if (Model.Data.Methods.Count > 0)
+        {
+            <table class="dn-table">
+                <thead>
+                    <tr>
+                        <th scope="col" class="dn-th dn-th--mono">Method</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var method in Model.Data.Methods)
+                    {
+                        <tr class="dn-tr">
+                            <td class="dn-td dn-td--mono">@method</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        @if (Model.Data.IsTruncated)
+        {
+            <div class="dn-note">Field and method lists are truncated; the counts above are the true totals.</div>
+        }
+    </div>
+</div>
