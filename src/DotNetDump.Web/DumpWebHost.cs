@@ -123,6 +123,10 @@ public static class DumpWebHost {
 			options.Cache ?? new TieredAnalysisCache(new MemoryAnalysisCache(), new FileSystemAnalysisCache()),
 			services.GetRequiredService<ILogger<AnalysisQueue>>()));
 
+		// Memoized ahead of the dump header bar that renders on every page -- see the type's own
+		// remarks for why this cannot be a per-request Enqueue call.
+		builder.Services.AddSingleton<DumpInfoService>();
+
 		var app = builder.Build();
 
 		// First, ahead of static files: a rebound host must not be served assets either.

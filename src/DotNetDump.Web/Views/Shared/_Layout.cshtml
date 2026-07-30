@@ -1,12 +1,17 @@
 @*
-    The app shell. Scaffolding at 3.1 -- task 3.2 owns the navigation proper and the dump header
-    bar's runtime/architecture fields, which need SessionAnalyzer data this layout does not yet
-    receive.
+    The app shell: navigation (six groups per DESIGN_BRIEF.md §5 Shell, collapsible), the dump
+    header bar, and the view header. Task 3.2.
 
     As with every view here: no `style=` attribute. Both stylesheets and the one script are local,
     version-pinned and integrity-checked where a hash exists. Nothing on this page may make an
     outbound request (SERVER.md §6) -- the design pages' Google Fonts <link> is replaced by
     @@font-face rules over vendored woff2 in dndump.css.
+
+    Nav collapse is a checkbox, not the script below. This layout carries exactly one inline
+    <script> -- the theme toggle, which genuinely needs one to avoid a flash before first paint
+    (see the comment on that block) -- so collapse uses the standard checkbox/label/sibling-
+    combinator technique instead: pure CSS, no extra script, and keyboard-operable for free because
+    a checkbox already is.
 *@
 @model ShellModel
 <!DOCTYPE html>
@@ -17,22 +22,53 @@
     <title>@Model.Current.Title — dndump</title>
     <link rel="stylesheet" href="@Assets.StylesheetPath" />
     <script src="@Assets.HtmxPath" integrity="@Assets.HtmxIntegrity" crossorigin="anonymous" defer></script>
+    <script>
+        // Sets data-theme before first paint (no flash) and wires the toggle once the DOM is
+        // ready; theme lives only in localStorage -- there is no account or session to hold a
+        // preference server-side, and no network call may be made here at all (SERVER.md §6).
+        (function () {
+            var root = document.documentElement;
+            var light = localStorage.getItem('dn-theme') === 'light';
+            if (light) root.setAttribute('data-theme', 'light');
+            addEventListener('DOMContentLoaded', function () {
+                document.getElementById('dn-theme-toggle').onclick = function () {
+                    light = !light;
+                    if (light) root.setAttribute('data-theme', 'light'); else root.removeAttribute('data-theme');
+                    localStorage.setItem('dn-theme', light ? 'light' : 'dark');
+                };
+            });
+        })();
+    </script>
 </head>
 <body>
     <div class="dn-app">
+        <input type="checkbox" id="dn-nav-collapse" class="dn-nav-collapse" />
+
         <nav class="dn-nav" aria-label="Views">
-            <div class="dn-nav__head">dndump</div>
+            <div class="dn-nav__head">
+                <span class="dn-nav__brand dn-nav__hide-collapsed">dndump</span>
+                <label for="dn-nav-collapse" class="dn-nav__toggle" aria-label="Toggle navigation"></label>
+            </div>
             <div class="dn-nav__groups">
                 @foreach (var group in Model.Views.GroupBy(view => view.Group))
                 {
-                    <div class="dn-nav__group-label">@group.Key</div>
+                    <div class="dn-nav__group-label dn-nav__hide-collapsed">@group.Key</div>
                     @foreach (var view in group)
                     {
                         <a class="dn-nav__item"
                            href="/views/@view.Name"
-                           aria-current="@(view.Name == Model.Current.Name ? "page" : null)">@view.Title</a>
+                           aria-current="@(view.Name == Model.Current.Name ? "page" : null)">
+                            <span class="dn-nav__dot" aria-hidden="true"></span>
+                            <span class="dn-nav__hide-collapsed">@view.Title</span>
+                        </a>
                     }
                 }
+            </div>
+            <div class="dn-nav__foot">
+                <button type="button" id="dn-theme-toggle" class="dn-btn dn-nav__theme" aria-label="Toggle theme">
+                    <span aria-hidden="true"><span class="dn-nav__theme-dark">☾</span><span class="dn-nav__theme-light">☀</span></span>
+                    <span class="dn-nav__hide-collapsed"><span class="dn-nav__theme-dark">Dark</span><span class="dn-nav__theme-light">Light</span></span>
+                </button>
             </div>
         </nav>
 
@@ -40,6 +76,10 @@
             <header class="dn-dumpbar">
                 <div class="dn-dumpbar__left">
                     <span class="dn-dumpbar__file">@Model.DumpPath</span>
+                    <span class="dn-dumpbar__sep" aria-hidden="true">·</span>
+                    <span class="dn-dumpbar__meta">@Model.Info.RuntimeVersion</span>
+                    <span class="dn-dumpbar__meta">@Model.Info.Architecture</span>
+                    <span class="dn-dumpbar__meta">@Model.Info.OperatingSystem</span>
                 </div>
             </header>
 
@@ -47,7 +87,7 @@
                 <div>
                     <h1 class="dn-view-title">@Model.Current.Title</h1>
                     <div class="dn-view-desc">
-                        SOS <code class="dn-code">@Model.Current.Name</code>
+                        SOS <code class="dn-code">@Model.Current.Command</code> — @Model.Current.Description
                     </div>
                 </div>
                 <div class="dn-view-count">@Model.CountSummary</div>

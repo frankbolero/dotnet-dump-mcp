@@ -35,8 +35,8 @@ public static class DumpRoutes {
 		// Liveness, for the browser-open race in 'dndump serve' and for scripts.
 		app.MapGet("/health", () => Results.Text("ok", "text/plain"));
 
-		app.MapGet("/", (HttpContext http, LoadedDump dump, IAnalysisQueue queue, IFragmentRenderer renderer, CancellationToken ct) =>
-			RenderShell(http, dump, queue, renderer, DefaultView, ct));
+		app.MapGet("/", (HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer, CancellationToken ct) =>
+			RenderShell(http, dump, info, queue, renderer, DefaultView, ct));
 
 		app.MapGet("/views/{view}", (string view, HttpContext http, IAnalysisQueue queue, IFragmentRenderer renderer, CancellationToken ct) =>
 			RenderFragment(http, queue, renderer, view, ct));
@@ -56,12 +56,17 @@ public static class DumpRoutes {
 	private readonly record struct Fragment(string? Html, IResult? Failure, string? CountSummary = null);
 
 	private static async Task<IResult> RenderShell(
-		HttpContext http, LoadedDump dump, IAnalysisQueue queue, IFragmentRenderer renderer, string viewName, CancellationToken ct) {
+		HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer, string viewName, CancellationToken ct) {
 
 		var descriptor = ViewCatalog.Find(viewName);
 		if (descriptor is null) {
 			return Results.NotFound();
 		}
+
+		// Started before the fragment is awaited so the memoized info call and the fragment's own
+		// Enqueue (if any) both sit on the analysis queue as early as possible; on a cold dump the
+		// fragment's heap walk still dominates, but nothing here waits on it that doesn't have to.
+		var infoTask = info.GetAsync();
 
 		var fragment = await BuildFragment(http, queue, renderer, descriptor, ct);
 		if (fragment.Html is null) {
@@ -71,7 +76,7 @@ public static class DumpRoutes {
 		}
 
 		string html = await renderer.RenderAsync(http, "/Views/Shell/Index.cshtml",
-			new ShellModel(dump.Path, descriptor, ViewCatalog.All, new HtmlString(fragment.Html), fragment.CountSummary));
+			new ShellModel(dump.Path, await infoTask, descriptor, ViewCatalog.All, new HtmlString(fragment.Html), fragment.CountSummary));
 
 		return Html(html);
 	}

@@ -152,7 +152,7 @@ a {
 }
 
 /* ---------------------------------------------------------------------------
- * App shell. Scaffolding only; task 3.2 owns the navigation proper.
+ * App shell: collapsible navigation, dump header bar, theme toggle. Task 3.2.
  * ------------------------------------------------------------------------- */
 
 .dn-app {
@@ -160,6 +160,21 @@ a {
 	inset: 0;
 	display: flex;
 	overflow: hidden;
+}
+
+/*
+ * The nav-collapse checkbox. Visually hidden (not display:none, so it stays keyboard-focusable),
+ * positioned absolute so it is not a flex item of .dn-app, and placed before .dn-nav in the markup
+ * so the sibling combinator below can react to it -- the standard checkbox/label toggle pattern,
+ * used here instead of script because this layout's one inline <script> is spent on the theme
+ * toggle, which has a hard requirement (no flash before paint) that CSS alone cannot meet.
+ */
+.dn-nav-collapse {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	pointer-events: none;
 }
 
 .dn-nav {
@@ -170,6 +185,29 @@ a {
 	background: var(--dn-surface);
 	border-right: 1px solid var(--dn-border);
 	overflow-y: auto;
+	overflow-x: hidden;
+	/* themeTokens-driven width narrows to 52px when collapsed -- Shell.dc.html's navCollapsed. */
+	transition: width 150ms ease;
+}
+
+.dn-nav-collapse:checked ~ .dn-nav {
+	width: 52px;
+}
+
+/* Labels, the brand and group headings disappear when collapsed; the per-item dot stays. */
+.dn-nav-collapse:checked ~ .dn-nav .dn-nav__hide-collapsed {
+	display: none;
+}
+
+.dn-nav-collapse:checked ~ .dn-nav .dn-nav__toggle::before {
+	content: '»';
+}
+
+/* The checkbox itself is the focusable element, not the label, so the visible focus ring has to
+   be drawn on the label it operates -- otherwise Tabbing to it shows no indication at all. */
+.dn-nav-collapse:focus-visible ~ .dn-nav .dn-nav__toggle {
+	outline: 2px solid var(--dn-accent);
+	outline-offset: 2px;
 }
 
 .dn-nav__head {
@@ -180,6 +218,30 @@ a {
 	border-bottom: 1px solid var(--dn-border);
 	font-family: var(--dn-font-heading);
 	font-weight: 500;
+}
+
+.dn-nav__brand {
+	font-size: 13px;
+	letter-spacing: 0.02em;
+}
+
+.dn-nav__toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 24px;
+	height: 24px;
+	background: transparent;
+	border: 1px solid var(--dn-border);
+	color: var(--dn-text-muted);
+	border-radius: 6px;
+	font-size: 11px;
+	cursor: pointer;
+}
+
+.dn-nav__toggle::before {
+	content: '«';
 }
 
 .dn-nav__groups {
@@ -199,8 +261,10 @@ a {
 }
 
 .dn-nav__item {
-	display: block;
-	padding: 6px 8px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 10px;
 	border-radius: 6px;
 	color: var(--dn-text-muted);
 	font-size: 12.5px;
@@ -214,6 +278,49 @@ a {
 .dn-nav__item[aria-current='page'] {
 	background: var(--dn-accent-soft);
 	color: var(--dn-accent-text);
+}
+
+/* The per-item dot: the one label-independent affordance that survives a collapsed nav. */
+.dn-nav__dot {
+	width: 5px;
+	height: 5px;
+	border-radius: 100px;
+	background: var(--dn-text-faint);
+	flex-shrink: 0;
+}
+
+.dn-nav__item[aria-current='page'] .dn-nav__dot {
+	background: var(--dn-accent);
+}
+
+.dn-nav__foot {
+	padding: 10px;
+	border-top: 1px solid var(--dn-border);
+}
+
+.dn-nav__theme {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	text-align: left;
+}
+
+/*
+ * The toggle's glyph and label reflect the *current* theme via the same [data-theme] attribute
+ * the tokens above key off, rather than script rewriting text -- one state, read by CSS in two
+ * places, instead of a second source of truth the click handler would have to keep in sync.
+ */
+.dn-nav__theme-light {
+	display: none;
+}
+
+:root[data-theme='light'] .dn-nav__theme-dark {
+	display: none;
+}
+
+:root[data-theme='light'] .dn-nav__theme-light {
+	display: inline;
 }
 
 .dn-main {
@@ -251,6 +358,14 @@ a {
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+}
+
+.dn-dumpbar__sep {
+	color: var(--dn-text-faint);
+}
+
+.dn-dumpbar__meta {
+	white-space: nowrap;
 }
 
 .dn-view-header {

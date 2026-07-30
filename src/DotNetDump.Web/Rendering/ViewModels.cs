@@ -14,6 +14,13 @@ namespace DotNetDump.Web.Rendering;
 /// through the same path in both cases is what guarantees that, instead of leaving it to two
 /// templates staying in agreement.
 /// </param>
+/// <param name="Info">
+/// Runtime version, architecture and OS for the dump header bar. Sourced from
+/// <c>SessionAnalyzer.GetInfo</c> via <see cref="DotNetDump.Web.Analysis.DumpInfoService"/>, which
+/// memoizes the one <c>IAnalysisQueue.Enqueue</c> call behind a <see cref="Lazy{T}"/> rather than
+/// reissuing it per request -- the dump this process was started against never changes, so the
+/// answer cannot either.
+/// </param>
 /// <param name="CountSummary">
 /// The view's honest row count, rendered in the view header rather than inside the fragment. It
 /// lives outside the swapped region because the header is not re-rendered on a filter change —
@@ -21,6 +28,7 @@ namespace DotNetDump.Web.Rendering;
 /// </param>
 public sealed record ShellModel(
 	string DumpPath,
+	DumpInfo Info,
 	ViewDescriptor Current,
 	IReadOnlyList<ViewDescriptor> Views,
 	IHtmlContent FragmentHtml,
