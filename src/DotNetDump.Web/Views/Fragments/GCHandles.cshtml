@@ -1,0 +1,63 @@
+@*
+    The GC handles list (task 3.3). Copies DumpHeap.cshtml's shape exactly -- see that file's
+    doc comment for the four rules this repeats: no style=, the htmx contract as markup, no
+    conditionals beyond presence/absence, and formatting logic staying out of the template.
+
+    The columns mirror MarkdownFormatter.FormatGCHandles: handle address (mono), object address
+    (mono), kind, strong (bool as text), ref count (with "-" when zero), type name.
+*@
+@model ListModel<GCHandleInfo>
+
+<div id="v-@Model.View.Name">
+    <table class="dn-table">
+        <thead>
+            <tr>
+                <th scope="col" class="dn-th dn-th--mono">Handle</th>
+                <th scope="col" class="dn-th dn-th--mono">Object</th>
+                <th scope="col" class="dn-th">Kind</th>
+                <th scope="col" class="dn-th">Strong</th>
+                <th scope="col" class="dn-th dn-th--num">RefCount</th>
+                <th scope="col" class="dn-th dn-th--mono">Dependent</th>
+                <th scope="col" class="dn-th">Type</th>
+            </tr>
+        </thead>
+        <tbody id="rows-@Model.View.Name">
+            @foreach (var item in Model.Result.Items)
+            {
+                var type = MiddleTruncated.From(item.TypeName);
+                string refCount = item.ReferenceCount != 0 ? Display.Count(item.ReferenceCount) : "-";
+                string dependent = item.DependentTarget != 0 ? Display.Address(item.DependentTarget) : "-";
+                <tr class="dn-tr">
+                    <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Address)</span></td>
+                    <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Object)</span></td>
+                    <td class="dn-td">@Display.OrNone(item.Kind)</td>
+                    <td class="dn-td">@(item.IsStrong ? "yes" : "no")</td>
+                    <td class="dn-td dn-td--num">@refCount</td>
+                    <td class="dn-td dn-td--mono">@dependent</td>
+                    <td class="dn-td dn-td--type" title="@type.Full">
+                        <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
+                    </td>
+                </tr>
+            }
+
+            @if (Model.Result.Items.Count == 0)
+            {
+                <tr>
+                    <td colspan="7" class="dn-empty">
+                        @* Per DESIGN_BRIEF.md §5: an unfiltered empty result means the dump has no
+                           GC handles, whereas a filtered one means the filter is too narrow. *@
+                        @if (Model.Result.TotalUnfiltered > 0)
+                        {
+                            <div class="dn-empty__title">No handles match the current filter.</div>
+                            <a class="dn-btn" href="/views/@Model.View.Name">Clear filters</a>
+                        }
+                        else
+                        {
+                            <div class="dn-empty__title">This dump has no GC handles to show.</div>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
