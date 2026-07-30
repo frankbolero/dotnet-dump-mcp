@@ -234,6 +234,14 @@ public static class DumpRoutes {
 					return new Fragment(html, null, model.CountSummary);
 				}
 
+			case "verifyheap": {
+					var corruptions = await queue.Enqueue(
+						(session, _) => session.Heap.VerifyHeap(request.Parameters), "verifying heap", ct);
+					var model = new ListModel<HeapCorruptionInfo>(descriptor, corruptions);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/VerifyHeap.cshtml", model);
+					return new Fragment(html, null, model.CountSummary);
+				}
+
 			default:
 				return new Fragment(null, NotWiredYet(descriptor), NotImplemented: true);
 		}
@@ -313,6 +321,12 @@ public static class DumpRoutes {
 					var blocks = await queue.Enqueue(
 						(session, _) => session.Heap.GetSyncBlocks(request.Parameters), "enumerating sync blocks", ct);
 					return Results.Content(JsonFormatter.FormatSyncBlocks(blocks), "application/json; charset=utf-8");
+				}
+
+			case "verifyheap": {
+					var corruptions = await queue.Enqueue(
+						(session, _) => session.Heap.VerifyHeap(request.Parameters), "verifying heap", ct);
+					return Results.Content(JsonFormatter.FormatHeapVerification(corruptions), "application/json; charset=utf-8");
 				}
 
 			default:
