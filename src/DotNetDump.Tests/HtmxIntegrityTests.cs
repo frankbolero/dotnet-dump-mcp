@@ -73,7 +73,7 @@ public class HtmxIntegrityTests {
 		string computedIntegrity = "sha384-" + Convert.ToBase64String(hash);
 
 		// The hash must match exactly. If it differs, the file has been swapped, truncated, or corrupted.
-		// See docs/web/VENDORING.md for the update procedure.
+		// See src/DotNetDump.Web/VENDORING.md for the update procedure.
 		Assert.Equal(Assets.HtmxIntegrity, computedIntegrity);
 	}
 
