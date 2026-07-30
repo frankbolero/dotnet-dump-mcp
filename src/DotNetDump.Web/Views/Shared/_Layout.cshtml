@@ -1,0 +1,43 @@
+@*
+    Phase 2 placeholder shell. Phase 3 replaces the markup wholesale with the Claude Design
+    component library; what must survive that replacement is the htmx script reference below --
+    local, version-pinned, integrity-checked, and the only script on the page (SERVER.md §1.1).
+*@
+@model ShellModel
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@Model.Current.Title — dndump</title>
+    @* No CDN, no fonts, no telemetry: nothing on this page may make an outbound request. *@
+    <script src="@Assets.HtmxPath" integrity="@Assets.HtmxIntegrity" crossorigin="anonymous" defer></script>
+</head>
+<body>
+    <header>
+        <strong>dndump</strong>
+        <code>@Model.DumpPath</code>
+    </header>
+
+    <nav>
+        @foreach (var group in Model.Views.GroupBy(v => v.Group))
+        {
+            <section>
+                <h2>@group.Key</h2>
+                <ul>
+                    @foreach (var view in group)
+                    {
+                        <li>
+                            <a href="/views/@view.Name" aria-current="@(view.Name == Model.Current.Name ? "page" : null)">@view.Title</a>
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+    </nav>
+
+    <main>
+        @RenderBody()
+    </main>
+</body>
+</html>

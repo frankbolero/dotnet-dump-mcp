@@ -1,0 +1,14 @@
+@*
+    The only view that takes a layout. There is deliberately no _ViewStart.cshtml: fragments must
+    never acquire a shell by accident, and "opt in explicitly" is a rule a designer syncing a new
+    fragment in Phase 3 cannot forget to follow.
+
+    The body is the fragment the handler already rendered, emitted verbatim. Rendering it through
+    the same path whether it arrives as a full page load or as an htmx swap is what guarantees the
+    two produce identical markup, rather than leaving it to two templates staying in agreement.
+*@
+@model ShellModel
+@{
+    Layout = "/Views/Shared/_Layout.cshtml";
+}
+@Model.FragmentHtml

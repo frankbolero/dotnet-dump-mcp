@@ -1,0 +1,46 @@
+@*
+    Phase 2 placeholder markup, thrown away in Phase 3. What Phase 3 must preserve is the htmx
+    contract, which is markup and therefore testable as markup (SERVER.md §5.1):
+
+      * the fragment's stable id  #v-{view}, swapped outerHTML
+      * the table body's id       #rows-{view}, the infinite-scroll append target
+
+    No layout is set, and there is no _ViewStart.cshtml to supply one -- a fragment is a fragment
+    whether it is swapped in by htmx or embedded in the shell on a full page load.
+*@
+@model ListModel<HeapStatItem>
+
+<div id="v-@Model.View.Name">
+    <h1>@Model.View.Title</h1>
+    <p>@Model.CountSummary</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th scope="col">Type</th>
+                <th scope="col">Count</th>
+                <th scope="col">Total size</th>
+                <th scope="col">MethodTable</th>
+            </tr>
+        </thead>
+        <tbody id="rows-@Model.View.Name">
+            @foreach (var item in Model.Result.Items)
+            {
+                <tr>
+                    <td>@item.TypeName</td>
+                    <td>@item.Count.ToString("N0")</td>
+                    <td>@item.TotalSize.ToString("N0")</td>
+                    @* 16-char uppercase hex with no 0x prefix -- the Addr convention the Markdown
+                       and JSON formatters already use, so an address copied from any front end
+                       pastes into any other. *@
+                    <td><code>@item.MethodTable.ToString("X16")</code></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @if (Model.Result.Items.Count == 0)
+    {
+        <p>No rows.</p>
+    }
+</div>
