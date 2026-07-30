@@ -1,0 +1,30 @@
+@*
+    Dump info (task 3.4). The first DetailModel<T> fragment -- establishes the plain key-value
+    shape every filter-less, address-less detail view copies (threadpool, eeheap, verifyheap).
+    A view with an identity of its own (an address, a header of fields) uses the card shape
+    instead -- see DumpObj.cshtml.
+
+    Same discipline as every list fragment: no style=, the htmx id derived from Model.View.Name,
+    no conditionals beyond presence/absence, and formatting logic staying out of the template --
+    including the DAC line, which spans two nullable fields and a status flag, so it lives in
+    Display.DacSummary rather than being computed here.
+
+    Rows are independent (Detail.dc.html's "key-value block (info / threadpool / eeheap style)"
+    shows six unrelated rows, not one composed sentence per row), unlike
+    MarkdownFormatter.FormatInfo's prose, which is Markdown-specific.
+*@
+@model DetailModel<DumpInfo>
+
+<div id="v-@Model.View.Name">
+    <div class="dn-kv">
+        <div class="dn-kv__row"><span class="dn-kv__key">Runtime</span><span class="dn-kv__val">@Model.Data.RuntimeFlavor @Model.Data.RuntimeVersion</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">Architecture</span><span class="dn-kv__val">@Model.Data.Architecture</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">OS</span><span class="dn-kv__val">@Model.Data.OperatingSystem</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">DAC</span><span class="dn-kv__val">@Display.DacSummary(Model.Data)</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">GC mode</span><span class="dn-kv__val">@(Model.Data.IsServerGC ? "Server" : "Workstation")</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">Sub-heaps</span><span class="dn-kv__val">@Display.Count(Model.Data.SubHeapCount)</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">Heap size</span><span class="dn-kv__val" title="@Display.Bytes((long)Model.Data.HeapSizeBytes)">@Display.Size((long)Model.Data.HeapSizeBytes)</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">Heap segments</span><span class="dn-kv__val">@Display.Count(Model.Data.SegmentCount)</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">Managed threads</span><span class="dn-kv__val">@Display.Count(Model.Data.ManagedThreadCount)</span></div>
+    </div>
+</div>

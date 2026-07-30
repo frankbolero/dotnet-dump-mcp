@@ -1,0 +1,77 @@
+@*
+    Single-object detail (task 3.4). The reference implementation for every address-taking detail
+    view (verifyobj, dumpmt, dumpmd, dumpclass, dumpmodule, dumpassembly, ip2md): a card whose head
+    is the record's own identity, plus a table for whatever it contains -- the field list here,
+    reusing .dn-table rather than a third table style.
+
+    Same discipline as every other fragment: no style=, the htmx id derived from Model.View.Name,
+    no conditionals beyond presence/absence, and formatting logic staying out of the template.
+
+    The head row order and value styling (address vs. mono-strong vs. plain mono) are lifted from
+    design-sync/Detail.dc.html's "object detail card". One deliberate consistency fix over that
+    mockup: MethodTable there uses plain mono, but every address value elsewhere in this app --
+    object address, handle address, owner thread -- already gets the dashed-underline .dn-addr
+    treatment (task 3.3), so MethodTable gets it here too rather than being the one exception.
+
+    The fields table's Value column shows a reference field's target address (styled the same way)
+    instead of a separate Address column the design mockup didn't have -- a field's "value" for a
+    reference type *is* the address it points to.
+*@
+@model DetailModel<ObjectDetails>
+
+<div id="v-@Model.View.Name">
+    <div class="dn-card">
+        <div class="dn-card__head">
+            <div class="dn-card__row"><span class="dn-card__label">Address</span><span class="dn-addr">@Display.Address(Model.Data.Address)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Type</span><span class="dn-mono--strong">@Model.Data.TypeName</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Size</span><span class="dn-mono" title="@Display.Bytes((long)Model.Data.Size)">@Display.Size((long)Model.Data.Size)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">MethodTable</span><span class="dn-addr">@Display.Address(Model.Data.MethodTable)</span></div>
+            @if (!string.IsNullOrEmpty(Model.Data.Value))
+            {
+                <div class="dn-card__row"><span class="dn-card__label">Value</span><span class="dn-mono">@Model.Data.Value</span></div>
+            }
+        </div>
+        <table class="dn-table">
+            <thead>
+                <tr>
+                    <th scope="col" class="dn-th dn-th--mono">Offset</th>
+                    <th scope="col" class="dn-th">Type</th>
+                    <th scope="col" class="dn-th dn-th--mono">Name</th>
+                    <th scope="col" class="dn-th dn-th--mono">Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var field in Model.Data.Fields)
+                {
+                    var type = MiddleTruncated.From(field.TypeName);
+                    <tr class="dn-tr">
+                        <td class="dn-td dn-td--mono">@Display.FieldOffset(field.Offset)</td>
+                        <td class="dn-td dn-td--type" title="@type.Full">
+                            <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
+                        </td>
+                        <td class="dn-td dn-td--mono">@field.Name</td>
+                        <td class="dn-td dn-td--mono">
+                            @if (field.IsReference && field.Address != 0)
+                            {
+                                <span class="dn-addr">@Display.Address(field.Address)</span>
+                            }
+                            else
+                            {
+                                @field.Value
+                            }
+                        </td>
+                    </tr>
+                }
+
+                @if (Model.Data.Fields.Count == 0)
+                {
+                    <tr>
+                        <td colspan="4" class="dn-empty">
+                            <div class="dn-empty__title">This object has no instance fields.</div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

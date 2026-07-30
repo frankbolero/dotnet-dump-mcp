@@ -124,4 +124,22 @@ public static class Display {
 	/// </summary>
 	public static string ThreadOrHeap(int? managedThreadId, uint? osThreadId) =>
 		managedThreadId.HasValue ? $"Thread {managedThreadId} ({ThreadId(osThreadId ?? 0)})" : "Heap";
+
+	/// <summary>
+	/// An object field's byte offset as hex, or a dash when the analyzer could not place it
+	/// (<c>ObjectField.Offset == -1</c>) — the same convention
+	/// <c>MarkdownFormatter.FormatObjectDetails</c> already uses.
+	/// </summary>
+	public static string FieldOffset(int value) => value != -1 ? value.ToString("X", CultureInfo.InvariantCulture) : "-";
+
+	/// <summary>
+	/// The DAC path/name plus its match status, exactly as <c>MarkdownFormatter.FormatInfo</c>
+	/// composes it: an explicit <c>--dac</c> path if one was given, else the expected file name, else
+	/// "&lt;unknown&gt;"; and "matched" unless an explicit path bypassed ClrMD's own check.
+	/// </summary>
+	public static string DacSummary(DotNetDump.Core.Models.DumpInfo info) {
+		string description = info.ExplicitDacPath ?? info.ExpectedDacFileName ?? "<unknown>";
+		string status = info.DacMatchVerified ? "matched" : "unverified -- explicit path bypasses ClrMD's match check";
+		return $"{description} ({status})";
+	}
 }

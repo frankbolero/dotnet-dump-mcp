@@ -46,3 +46,6 @@ public sealed record ListModel<T>(ViewDescriptor View, PagedResult<T> Result) {
 			? $"{Result.TotalAvailable:N0} rows"
 			: $"{Result.TotalAvailable:N0} of {Result.TotalUnfiltered:N0} rows";
 }
+
+/// <summary>A single record: what every <see cref="ViewKind.Detail"/> fragment binds to.</summary>
+public sealed record DetailModel<T>(ViewDescriptor View, T Data);

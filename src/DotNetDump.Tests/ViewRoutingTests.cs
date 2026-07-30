@@ -33,10 +33,12 @@ namespace DotNetDump.Tests;
 public sealed class ViewRoutingTests(LoopbackServerFixture server) {
 	/// <summary>
 	/// A catalog view with no handler yet, so nothing here reaches an analyzer. Every list view is
-	/// now wired (task 3.3), so this points at a still-unwired detail view instead; move it again
-	/// once 3.4 wires <c>info</c>.
+	/// wired (task 3.3), and 3.4 is progressively wiring every detail view too, which made this
+	/// constant move twice already (<c>gchandles</c>, then <c>info</c>) as those views landed.
+	/// <c>gcroot</c> is deliberately excluded from 3.4 — it is a tree and belongs to Phase 5.3 — so
+	/// unlike every other remaining name here, it will not need to move again until then.
 	/// </summary>
-	private const string UnwiredView = "info";
+	private const string UnwiredView = "gcroot";
 
 	private async Task<(HttpStatusCode Status, string Body)> Send(string path, params (string Name, string Value)[] headers) {
 		using var client = new HttpClient();

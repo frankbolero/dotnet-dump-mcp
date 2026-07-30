@@ -1,6 +1,7 @@
 using DotNetDump.Core;
 using DotNetDump.Core.Formatting;
 using DotNetDump.Core.Models;
+using DotNetDump.Core.Utilities;
 using DotNetDump.Web.Analysis;
 using DotNetDump.Web.Binding;
 using DotNetDump.Web.Catalog;
@@ -36,13 +37,17 @@ public static class DumpRoutes {
 		app.MapGet("/health", () => Results.Text("ok", "text/plain"));
 
 		app.MapGet("/", (HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer, CancellationToken ct) =>
-			RenderShell(http, dump, info, queue, renderer, ViewCatalog.Find(DefaultView)!, ct));
+			RenderShell(http, dump, info, queue, renderer, ViewCatalog.Find(DefaultView)!, address: null, ct));
 
-		app.MapGet("/views/{view}", (string view, HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer, CancellationToken ct) =>
-			RenderView(http, dump, info, queue, renderer, view, ct));
+		// {address?} is a path segment, not a query parameter -- IMPLEMENTATION_PLAN.md's Phase 3
+		// notes settle this: an address identifies which record a detail view *is*, unlike the
+		// filter/sort/page state in the query string (DATA_CONTRACT.md §3.2), and the trees already
+		// route addresses this way (gcroot/{address}, object/{address}).
+		app.MapGet("/views/{view}/{address?}", (string view, string? address, HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer, CancellationToken ct) =>
+			RenderView(http, dump, info, queue, renderer, view, address, ct));
 
-		app.MapGet("/api/{view}", (string view, HttpContext http, IAnalysisQueue queue, CancellationToken ct) =>
-			RenderJson(http, queue, view, ct));
+		app.MapGet("/api/{view}/{address?}", (string view, string? address, HttpContext http, DumpInfoService info, IAnalysisQueue queue, CancellationToken ct) =>
+			RenderJson(http, info, queue, view, address, ct));
 	}
 
 	/// <summary>
@@ -63,14 +68,14 @@ public static class DumpRoutes {
 
 	private static async Task<IResult> RenderShell(
 		HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer,
-		ViewDescriptor descriptor, CancellationToken ct) {
+		ViewDescriptor descriptor, string? address, CancellationToken ct) {
 
 		// Started before the fragment is awaited so the memoized info call and the fragment's own
 		// Enqueue (if any) both sit on the analysis queue as early as possible; on a cold dump the
 		// fragment's heap walk still dominates, but nothing here waits on it that doesn't have to.
 		var infoTask = info.GetAsync();
 
-		var fragment = await BuildFragment(http, queue, renderer, descriptor, ct);
+		var fragment = await BuildFragment(http, info, queue, renderer, descriptor, address, ct);
 
 		if (fragment.Html is null && !fragment.NotImplemented) {
 			// A failed fragment is the whole page's failure. Rendering the shell around a rejected
@@ -120,7 +125,7 @@ public static class DumpRoutes {
 
 	private static async Task<IResult> RenderView(
 		HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer,
-		string viewName, CancellationToken ct) {
+		string viewName, string? address, CancellationToken ct) {
 
 		var descriptor = ViewCatalog.Find(viewName);
 		if (descriptor is null) {
@@ -128,15 +133,16 @@ public static class DumpRoutes {
 		}
 
 		if (WantsFragment(http)) {
-			var swap = await BuildFragment(http, queue, renderer, descriptor, ct);
+			var swap = await BuildFragment(http, info, queue, renderer, descriptor, address, ct);
 			return swap.Html is null ? swap.Failure! : Html(swap.Html);
 		}
 
-		return await RenderShell(http, dump, info, queue, renderer, descriptor, ct);
+		return await RenderShell(http, dump, info, queue, renderer, descriptor, address, ct);
 	}
 
 	private static async Task<Fragment> BuildFragment(
-		HttpContext http, IAnalysisQueue queue, IFragmentRenderer renderer, ViewDescriptor descriptor, CancellationToken ct) {
+		HttpContext http, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer, ViewDescriptor descriptor,
+		string? address, CancellationToken ct) {
 
 		if (!TryBind(http, descriptor, out var request, out var badRequest)) {
 			return new Fragment(null, badRequest);
@@ -149,6 +155,27 @@ public static class DumpRoutes {
 					var model = new ListModel<HeapStatItem>(descriptor, stats);
 					string html = await renderer.RenderAsync(http, "/Views/Fragments/DumpHeap.cshtml", model);
 					return new Fragment(html, null, model.CountSummary);
+				}
+
+			case "info": {
+					// Reuses the header bar's own memoized call rather than a fresh Enqueue -- the
+					// dump this process was started against cannot answer differently the second time.
+					var dumpInfo = await info.GetAsync();
+					var model = new DetailModel<DumpInfo>(descriptor, dumpInfo);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/Info.cshtml", model);
+					return new Fragment(html, null);
+				}
+
+			case "dumpobj": {
+					if (!TryRequireAddress(address, descriptor, out ulong objectAddress, out var badAddress)) {
+						return new Fragment(null, badAddress);
+					}
+
+					var details = await queue.Enqueue(
+						(session, _) => session.Heap.GetObjectDetails(objectAddress), "reading object", ct);
+					var model = new DetailModel<ObjectDetails>(descriptor, details);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/DumpObj.cshtml", model);
+					return new Fragment(html, null);
 				}
 
 			case "gchandles": {
@@ -212,7 +239,7 @@ public static class DumpRoutes {
 		}
 	}
 
-	private static async Task<IResult> RenderJson(HttpContext http, IAnalysisQueue queue, string viewName, CancellationToken ct) {
+	private static async Task<IResult> RenderJson(HttpContext http, DumpInfoService info, IAnalysisQueue queue, string viewName, string? address, CancellationToken ct) {
 		var descriptor = ViewCatalog.Find(viewName);
 		if (descriptor is null) {
 			return Results.NotFound();
@@ -229,6 +256,21 @@ public static class DumpRoutes {
 					// The existing envelope, unchanged. DATA_CONTRACT.md §3.3's `state` block is not part
 					// of Phase 2; it lands with the cache-state indicator in 6.5.
 					return Results.Content(JsonFormatter.FormatHeapStatistics(stats), "application/json; charset=utf-8");
+				}
+
+			case "info": {
+					var dumpInfo = await info.GetAsync();
+					return Results.Content(JsonFormatter.FormatInfo(dumpInfo), "application/json; charset=utf-8");
+				}
+
+			case "dumpobj": {
+					if (!TryRequireAddress(address, descriptor, out ulong objectAddress, out var badAddress)) {
+						return badAddress;
+					}
+
+					var details = await queue.Enqueue(
+						(session, _) => session.Heap.GetObjectDetails(objectAddress), "reading object", ct);
+					return Results.Content(JsonFormatter.FormatObjectDetails(details), "application/json; charset=utf-8");
 				}
 
 			case "gchandles": {
@@ -294,6 +336,23 @@ public static class DumpRoutes {
 			badRequest = Results.Text(ex.Message, "text/plain; charset=utf-8", statusCode: StatusCodes.Status400BadRequest);
 			return false;
 		}
+	}
+
+	/// <summary>
+	/// Parses the trailing <c>/{address}</c> segment a single-record detail view identifies itself
+	/// by. A missing or malformed value is a client error, exactly like an unsupported filter field.
+	/// </summary>
+	private static bool TryRequireAddress(string? address, ViewDescriptor descriptor, out ulong parsed, out IResult badRequest) {
+		if (AddressParser.TryParse(address, out parsed)) {
+			badRequest = Results.Empty;
+			return true;
+		}
+
+		badRequest = Results.Text(
+			$"'{descriptor.Name}' requires an address, e.g. /views/{descriptor.Name}/7FF6A1B02000 (hex, optionally 0x-prefixed).",
+			"text/plain; charset=utf-8",
+			statusCode: StatusCodes.Status400BadRequest);
+		return false;
 	}
 
 	private static IResult Html(string markup) => Results.Content(markup, "text/html; charset=utf-8");

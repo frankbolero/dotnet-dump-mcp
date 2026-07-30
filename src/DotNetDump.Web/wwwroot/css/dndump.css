@@ -582,3 +582,78 @@ a {
 .dn-btn--accent:hover {
 	background: var(--dn-accent-soft);
 }
+
+/* ---------------------------------------------------------------------------
+ * Detail views (task 3.4).
+ *
+ * Two shapes lifted from design-sync/Detail.dc.html's "object detail card" and
+ * "key-value block (info / threadpool / eeheap style)" sections. A card's field
+ * list reuses .dn-table rather than a third table style; .dn-addr already
+ * matches the design's addrSpan exactly, so no new address class is needed.
+ * ------------------------------------------------------------------------- */
+
+.dn-card {
+	background: var(--dn-surface);
+	border: 1px solid var(--dn-border);
+	border-radius: 8px;
+	max-width: 820px;
+}
+
+.dn-card__head {
+	padding: 16px 18px;
+	border-bottom: 1px solid var(--dn-border);
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.dn-card__row {
+	display: flex;
+	gap: 10px;
+	align-items: baseline;
+	font-size: 12.5px;
+}
+
+.dn-card__label {
+	color: var(--dn-text-muted);
+	width: 100px;
+	flex-shrink: 0;
+}
+
+.dn-mono {
+	font-family: var(--dn-font-mono);
+	color: var(--dn-text);
+}
+
+.dn-mono--strong {
+	font-family: var(--dn-font-mono);
+	color: var(--dn-text);
+	font-weight: 600;
+}
+
+.dn-kv {
+	background: var(--dn-surface);
+	border: 1px solid var(--dn-border);
+	border-radius: 8px;
+	max-width: 520px;
+	padding: 6px 18px;
+}
+
+.dn-kv__row {
+	display: flex;
+	gap: 16px;
+	padding: 8px 0;
+	border-bottom: 1px solid var(--dn-border);
+	font-size: 12.5px;
+}
+
+.dn-kv__key {
+	color: var(--dn-text-muted);
+	width: 160px;
+	flex-shrink: 0;
+}
+
+.dn-kv__val {
+	font-family: var(--dn-font-mono);
+	color: var(--dn-text);
+}
