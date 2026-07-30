@@ -1,0 +1,46 @@
+@*
+    Heap corruption scan (task 3.4). Copies DumpHeap.cshtml's flat-table shape -- this model is one
+    row per corruption found, so unlike DumpStack.cshtml it fits `dn-table` without translation.
+
+    The empty state is deliberately not the two-way "filtered vs. genuinely empty" wording every list
+    view uses (DumpHeap.cshtml, ClrThreads.cshtml, ...): `verifyheap` honors no filters at all
+    (ViewCatalog.cs: FilterField.None), so there is no filtered/unfiltered distinction to draw, and an
+    empty result here is the *good* outcome -- mirrors MarkdownFormatter.FormatHeapVerification's
+    "PASSED" framing rather than the generic "no data" message.
+*@
+@model ListModel<HeapCorruptionInfo>
+
+<div id="v-@Model.View.Name">
+    <table class="dn-table">
+        <thead>
+            <tr>
+                <th scope="col" class="dn-th dn-th--mono">Object</th>
+                <th scope="col" class="dn-th">Kind</th>
+                <th scope="col" class="dn-th dn-th--mono">Offset</th>
+                <th scope="col" class="dn-th">Type</th>
+                <th scope="col" class="dn-th">Message</th>
+            </tr>
+        </thead>
+        <tbody id="rows-@Model.View.Name">
+            @foreach (var item in Model.Result.Items)
+            {
+                <tr class="dn-tr">
+                    <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Object)</span></td>
+                    <td class="dn-td">@item.Kind</td>
+                    <td class="dn-td dn-td--mono">@item.Offset.ToString("X")</td>
+                    <td class="dn-td">@Display.OrNone(item.TypeName)</td>
+                    <td class="dn-td dn-td--text">@item.Message</td>
+                </tr>
+            }
+
+            @if (Model.Result.Items.Count == 0)
+            {
+                <tr>
+                    <td colspan="5" class="dn-empty">
+                        <div class="dn-empty__title">Heap verification passed -- no corruption detected.</div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
