@@ -175,6 +175,14 @@ public static class DumpRoutes {
 					return new Fragment(html, null, model.CountSummary);
 				}
 
+			case "syncblk": {
+					var blocks = await queue.Enqueue(
+						(session, _) => session.Heap.GetSyncBlocks(request.Parameters), "enumerating sync blocks", ct);
+					var model = new ListModel<SyncBlockInfo>(descriptor, blocks);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/SyncBlk.cshtml", model);
+					return new Fragment(html, null, model.CountSummary);
+				}
+
 			default:
 				return new Fragment(null, NotWiredYet(descriptor), NotImplemented: true);
 		}
@@ -215,6 +223,12 @@ public static class DumpRoutes {
 					var threads = await queue.Enqueue(
 						(session, _) => session.Threads.GetThreads(request.Parameters), "enumerating threads", ct);
 					return Results.Content(JsonFormatter.FormatThreads(threads), "application/json; charset=utf-8");
+				}
+
+			case "syncblk": {
+					var blocks = await queue.Enqueue(
+						(session, _) => session.Heap.GetSyncBlocks(request.Parameters), "enumerating sync blocks", ct);
+					return Results.Content(JsonFormatter.FormatSyncBlocks(blocks), "application/json; charset=utf-8");
 				}
 
 			default:
