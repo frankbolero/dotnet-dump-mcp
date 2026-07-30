@@ -1,0 +1,35 @@
+@*
+    A method's MethodDesc detail (task 3.4). Follows the same card-based structure as DumpObj.cshtml:
+    identity header with address, method table, method name, and related metadata. Also used for
+    ip2md, which reuses this template since it produces the same MethodDescInfo model.
+
+    Same discipline as every other fragment: no style=, the htmx id derived from Model.View.Name,
+    no conditionals beyond presence/absence, and formatting logic staying out of the template.
+*@
+@model DetailModel<MethodDescInfo>
+
+<div id="v-@Model.View.Name">
+    <div class="dn-card">
+        <div class="dn-card__head">
+            <div class="dn-card__row"><span class="dn-card__label">MethodDesc</span><span class="dn-addr">@Display.Address(Model.Data.MethodDesc)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">MethodTable</span><span class="dn-addr">@Display.Address(Model.Data.MethodTable)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Method</span><span class="dn-mono--strong">@Model.Data.MethodName</span></div>
+            @if (!string.IsNullOrEmpty(Model.Data.TypeName))
+            {
+                <div class="dn-card__row"><span class="dn-card__label">Type</span><span class="dn-mono">@Model.Data.TypeName</span></div>
+            }
+            @if (!string.IsNullOrEmpty(Model.Data.ModuleName))
+            {
+                <div class="dn-card__row"><span class="dn-card__label">Module</span><span class="dn-mono">@Model.Data.ModuleName</span></div>
+            }
+            @if (!string.IsNullOrEmpty(Model.Data.Signature))
+            {
+                <div class="dn-card__row"><span class="dn-card__label">Signature</span><span class="dn-mono">@Model.Data.Signature</span></div>
+            }
+            <div class="dn-card__row"><span class="dn-card__label">Metadata token</span><span class="dn-mono">@Display.MetadataToken(Model.Data.MetadataToken)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Native code</span><span class="dn-addr">@Display.Address(Model.Data.NativeCode)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Is Jitted</span><span class="dn-mono">@(Model.Data.IsJitted ? "yes" : "no")</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Is Generic</span><span class="dn-mono">@(Model.Data.IsGeneric ? "yes" : "no")</span></div>
+        </div>
+    </div>
+</div>

@@ -142,4 +142,9 @@ public static class Display {
 		string status = info.DacMatchVerified ? "matched" : "unverified -- explicit path bypasses ClrMD's match check";
 		return $"{description} ({status})";
 	}
+
+	/// <summary>
+	/// An 8-digit, zero-padded, 0x-prefixed hex string for a metadata token.
+	/// </summary>
+	public static string MetadataToken(int value) => "0x" + value.ToString("X8", CultureInfo.InvariantCulture);
 }
