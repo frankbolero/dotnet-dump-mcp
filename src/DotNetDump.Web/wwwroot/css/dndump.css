@@ -643,6 +643,13 @@ a {
 	background: var(--dn-ok-soft);
 }
 
+/* A small note under a table -- e.g. dumpclass's truncation note. Muted, same size as .dn-view-desc. */
+.dn-note {
+	padding: 10px 18px;
+	font-size: 12px;
+	color: var(--dn-text-muted);
+}
+
 .dn-kv {
 	background: var(--dn-surface);
 	border: 1px solid var(--dn-border);

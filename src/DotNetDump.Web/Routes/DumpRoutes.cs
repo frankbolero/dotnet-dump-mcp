@@ -246,6 +246,18 @@ public static class DumpRoutes {
 					return new Fragment(html, null);
 				}
 
+			case "dumpclass": {
+					if (!TryRequireAddress(address, descriptor, out ulong eeClassAddress, out var badAddress)) {
+						return new Fragment(null, badAddress);
+					}
+
+					var classInfo = await queue.Enqueue(
+						(session, _) => session.Metadata.GetClass(eeClassAddress), "reading class", ct);
+					var model = new DetailModel<ClassInfo>(descriptor, classInfo);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/DumpClass.cshtml", model);
+					return new Fragment(html, null);
+				}
+
 			default:
 				return new Fragment(null, NotWiredYet(descriptor), NotImplemented: true);
 		}
@@ -335,6 +347,16 @@ public static class DumpRoutes {
 					var corruptions = await queue.Enqueue(
 						(session, _) => session.Heap.VerifyObject(objectAddress).ToList(), "verifying object", ct);
 					return Results.Content(JsonFormatter.FormatObjectVerification(corruptions), "application/json; charset=utf-8");
+				}
+
+			case "dumpclass": {
+					if (!TryRequireAddress(address, descriptor, out ulong eeClassAddress, out var badAddress)) {
+						return badAddress;
+					}
+
+					var classInfo = await queue.Enqueue(
+						(session, _) => session.Metadata.GetClass(eeClassAddress), "reading class", ct);
+					return Results.Content(JsonFormatter.FormatClass(classInfo), "application/json; charset=utf-8");
 				}
 
 			default:
