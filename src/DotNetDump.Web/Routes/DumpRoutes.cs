@@ -159,6 +159,14 @@ public static class DumpRoutes {
 					return new Fragment(html, null, model.CountSummary);
 				}
 
+			case "clrthreads": {
+					var threads = await queue.Enqueue(
+						(session, _) => session.Threads.GetThreads(request.Parameters), "enumerating threads", ct);
+					var model = new ListModel<ThreadInfo>(descriptor, threads);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/ClrThreads.cshtml", model);
+					return new Fragment(html, null, model.CountSummary);
+				}
+
 			default:
 				return new Fragment(null, NotWiredYet(descriptor), NotImplemented: true);
 		}
@@ -187,6 +195,12 @@ public static class DumpRoutes {
 					var modules = await queue.Enqueue(
 						(session, _) => session.Modules.GetModules(request.Parameters), "listing modules", ct);
 					return Results.Content(JsonFormatter.FormatModules(modules), "application/json; charset=utf-8");
+				}
+
+			case "clrthreads": {
+					var threads = await queue.Enqueue(
+						(session, _) => session.Threads.GetThreads(request.Parameters), "enumerating threads", ct);
+					return Results.Content(JsonFormatter.FormatThreads(threads), "application/json; charset=utf-8");
 				}
 
 			default:
