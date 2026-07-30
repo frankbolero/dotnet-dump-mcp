@@ -45,8 +45,15 @@ public static class DumpRoutes {
 			RenderJson(http, queue, view, ct));
 	}
 
-	/// <summary>The outcome of rendering a fragment: markup, or the response that replaces it.</summary>
-	private readonly record struct Fragment(string? Html, IResult? Failure);
+	/// <summary>
+	/// The outcome of rendering a fragment: markup, or the response that replaces it.
+	/// </summary>
+	/// <param name="CountSummary">
+	/// The row count for the view header, which sits outside the swapped fragment. Carried out here
+	/// rather than read back off the markup, because the header and the fragment are rendered by
+	/// different templates and only the handler sees the <c>PagedResult</c> both derive from.
+	/// </param>
+	private readonly record struct Fragment(string? Html, IResult? Failure, string? CountSummary = null);
 
 	private static async Task<IResult> RenderShell(
 		HttpContext http, LoadedDump dump, IAnalysisQueue queue, IFragmentRenderer renderer, string viewName, CancellationToken ct) {
@@ -64,7 +71,7 @@ public static class DumpRoutes {
 		}
 
 		string html = await renderer.RenderAsync(http, "/Views/Shell/Index.cshtml",
-			new ShellModel(dump.Path, descriptor, ViewCatalog.All, new HtmlString(fragment.Html)));
+			new ShellModel(dump.Path, descriptor, ViewCatalog.All, new HtmlString(fragment.Html), fragment.CountSummary));
 
 		return Html(html);
 	}
@@ -92,9 +99,9 @@ public static class DumpRoutes {
 			case "dumpheap": {
 					var stats = await queue.Enqueue(
 						(session, _) => session.Heap.GetHeapStatistics(request.Parameters), "walking heap", ct);
-					string html = await renderer.RenderAsync(http, "/Views/Fragments/DumpHeap.cshtml",
-						new ListModel<HeapStatItem>(descriptor, stats));
-					return new Fragment(html, null);
+					var model = new ListModel<HeapStatItem>(descriptor, stats);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/DumpHeap.cshtml", model);
+					return new Fragment(html, null, model.CountSummary);
 				}
 
 			default:

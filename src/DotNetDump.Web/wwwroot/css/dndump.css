@@ -1,0 +1,478 @@
+/*
+ * dndump — the Nocturne design system, extracted for server-rendered Razor.
+ *
+ * WHERE THIS COMES FROM, AND WHY IT IS NOT design-sync/_ds/styles.css
+ * -------------------------------------------------------------------
+ * Claude Design emitted two things: a token-and-class stylesheet under
+ * design-sync/_ds/nocturne-*/styles.css, and seven component pages (*.dc.html).
+ * The component pages do not use that stylesheet. Across all seven there are 586
+ * inline `style=` attributes and zero `class=` attributes; every value is computed
+ * in JavaScript from a `themeTokens(mode)` function that carries roles the
+ * stylesheet does not have at all — surfaceAlt, accentSoft, accentText, and the
+ * whole warn/danger/ok set — and carries the light palette, which the stylesheet
+ * also lacks.
+ *
+ * So `themeTokens()` is the real source of truth for this application's look, and
+ * this file is its extraction: the two palettes below are copied verbatim from
+ * design-sync/Shell.dc.html, and the component rules are the inline styles lifted
+ * into classes. _ds/styles.css is deliberately NOT linked — two token systems, one
+ * of which nothing consumes, would drift silently and the drift would be invisible.
+ *
+ * RESYNC PROCEDURE: see src/DotNetDump.Web/DESIGN_RESYNC.md. The short version is
+ * that a token change is a change to the :root blocks here and nothing else, and
+ * that no Razor view may carry a `style=` attribute.
+ */
+
+/* ---------------------------------------------------------------------------
+ * Fonts. Vendored, never fetched. SERVER.md §6: this tool renders heap strings
+ * containing connection strings, tokens and PII, and must make no outbound
+ * request of any kind — so the Google Fonts <link> the design pages carry is
+ * replaced by these local latin-subset variable faces.
+ * ------------------------------------------------------------------------- */
+
+@font-face {
+	font-family: 'Inter';
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url('../fonts/inter-latin-var.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'JetBrains Mono';
+	font-style: normal;
+	font-weight: 100 800;
+	font-display: swap;
+	src: url('../fonts/jetbrains-mono-latin-var.woff2') format('woff2');
+}
+
+/* ---------------------------------------------------------------------------
+ * Tokens.
+ *
+ * Light is the base and dark arrives through prefers-color-scheme, with a
+ * data-theme attribute overriding both in either direction (DESIGN_BRIEF.md §6).
+ * The :not([data-theme="light"]) guard is what makes the override work downwards:
+ * without it, a user who has asked for light on a dark-preferring OS would still
+ * get dark, because the media query would out-specify the attribute.
+ * ------------------------------------------------------------------------- */
+
+:root {
+	color-scheme: light dark;
+
+	/* themeTokens('light') — design-sync/Shell.dc.html */
+	--dn-bg: #f7f8fc;
+	--dn-surface: #ffffff;
+	--dn-surface-alt: #eef0f9;
+	--dn-border: #d7dae8;
+	--dn-border-strong: #b7bbd2;
+	--dn-text: #22232d;
+	--dn-text-muted: #5b5f74;
+	--dn-text-faint: #8a8ea3;
+	--dn-accent: #6e63b0;
+	--dn-accent-soft: #efedfb;
+	--dn-accent-text: #5d5294;
+	--dn-warn: #a3762a;
+	--dn-warn-soft: #faf1de;
+	--dn-warn-text: #7a5820;
+	--dn-danger: #b0453f;
+	--dn-danger-soft: #fbeceb;
+	--dn-ok: #3f8a55;
+	--dn-ok-soft: #eaf6ee;
+
+	--dn-font-body: 'Inter', system-ui, -apple-system, sans-serif;
+	--dn-font-heading: 'Inter', system-ui, -apple-system, sans-serif;
+	--dn-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* themeTokens('dark') — design-sync/Shell.dc.html */
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme='light']) {
+		--dn-bg: #161826;
+		--dn-surface: #232532;
+		--dn-surface-alt: #2c2f3e;
+		--dn-border: #3f424d;
+		--dn-border-strong: #595d6c;
+		--dn-text: #e9e9ed;
+		--dn-text-muted: #9397ab;
+		--dn-text-faint: #75798c;
+		--dn-accent: #9184d9;
+		--dn-accent-soft: rgba(145, 132, 217, 0.14);
+		--dn-accent-text: #d2cefd;
+		--dn-warn: #caa053;
+		--dn-warn-soft: rgba(202, 160, 83, 0.14);
+		--dn-warn-text: #e8cd94;
+		--dn-danger: #d16a6a;
+		--dn-danger-soft: rgba(209, 106, 106, 0.14);
+		--dn-ok: #6fae7f;
+		--dn-ok-soft: rgba(111, 174, 127, 0.14);
+	}
+}
+
+:root[data-theme='dark'] {
+	--dn-bg: #161826;
+	--dn-surface: #232532;
+	--dn-surface-alt: #2c2f3e;
+	--dn-border: #3f424d;
+	--dn-border-strong: #595d6c;
+	--dn-text: #e9e9ed;
+	--dn-text-muted: #9397ab;
+	--dn-text-faint: #75798c;
+	--dn-accent: #9184d9;
+	--dn-accent-soft: rgba(145, 132, 217, 0.14);
+	--dn-accent-text: #d2cefd;
+	--dn-warn: #caa053;
+	--dn-warn-soft: rgba(202, 160, 83, 0.14);
+	--dn-warn-text: #e8cd94;
+	--dn-danger: #d16a6a;
+	--dn-danger-soft: rgba(209, 106, 106, 0.14);
+	--dn-ok: #6fae7f;
+	--dn-ok-soft: rgba(111, 174, 127, 0.14);
+}
+
+/* ---------------------------------------------------------------------------
+ * Base and interaction states.
+ * ------------------------------------------------------------------------- */
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--dn-bg);
+	color: var(--dn-text);
+	font-family: var(--dn-font-body);
+	font-size: 13px;
+}
+
+/* Never the browser default ring — the design system is explicit about this. */
+:focus-visible {
+	outline: 2px solid var(--dn-accent);
+	outline-offset: 2px;
+}
+
+::selection {
+	background: var(--dn-accent-soft);
+}
+
+a {
+	color: inherit;
+	text-decoration: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * App shell. Scaffolding only; task 3.2 owns the navigation proper.
+ * ------------------------------------------------------------------------- */
+
+.dn-app {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	overflow: hidden;
+}
+
+.dn-nav {
+	width: 200px;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--dn-surface);
+	border-right: 1px solid var(--dn-border);
+	overflow-y: auto;
+}
+
+.dn-nav__head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 14px 12px;
+	border-bottom: 1px solid var(--dn-border);
+	font-family: var(--dn-font-heading);
+	font-weight: 500;
+}
+
+.dn-nav__groups {
+	flex: 1;
+	padding: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.dn-nav__group-label {
+	color: var(--dn-text-faint);
+	font-size: 10.5px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	padding: 10px 8px 4px;
+}
+
+.dn-nav__item {
+	display: block;
+	padding: 6px 8px;
+	border-radius: 6px;
+	color: var(--dn-text-muted);
+	font-size: 12.5px;
+}
+
+.dn-nav__item:hover {
+	background: var(--dn-surface-alt);
+	color: var(--dn-text);
+}
+
+.dn-nav__item[aria-current='page'] {
+	background: var(--dn-accent-soft);
+	color: var(--dn-accent-text);
+}
+
+.dn-main {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	overflow: hidden;
+}
+
+/* Dump header bar — always visible, per DESIGN_BRIEF.md §5 Shell. */
+.dn-dumpbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 9px 20px;
+	background: var(--dn-surface-alt);
+	border-bottom: 1px solid var(--dn-border);
+	font-size: 11.5px;
+	color: var(--dn-text-muted);
+	gap: 16px;
+}
+
+.dn-dumpbar__left {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.dn-dumpbar__file {
+	font-family: var(--dn-font-mono);
+	color: var(--dn-text);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.dn-view-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	padding: 18px 24px 12px;
+	border-bottom: 1px solid var(--dn-border);
+	gap: 16px;
+}
+
+.dn-view-title {
+	font-family: var(--dn-font-heading);
+	font-weight: 500;
+	font-size: 20px;
+	margin: 0 0 2px;
+}
+
+.dn-view-desc {
+	color: var(--dn-text-muted);
+	font-size: 12.5px;
+}
+
+/* The honest count line: "1,284 of 10,238,441" (DATA_CONTRACT.md §2.5). */
+.dn-view-count {
+	color: var(--dn-text-muted);
+	font-size: 12px;
+	white-space: nowrap;
+	padding-top: 4px;
+}
+
+.dn-view-pad {
+	padding: 20px 24px;
+	overflow: auto;
+	flex: 1;
+}
+
+.dn-code {
+	font-family: var(--dn-font-mono);
+	background: var(--dn-surface-alt);
+	padding: 1px 5px;
+	border-radius: 4px;
+	font-size: 11.5px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Data table.
+ *
+ * Dense, monospace for addresses and sizes, right-aligned numerics, zebra-free
+ * with rules rather than banding (DESIGN_BRIEF.md §5 Data).
+ * ------------------------------------------------------------------------- */
+
+.dn-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12.5px;
+}
+
+.dn-th {
+	font-weight: 500;
+	color: var(--dn-text-muted);
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--dn-border-strong);
+	text-align: left;
+	white-space: nowrap;
+}
+
+.dn-th--mono {
+	font-family: var(--dn-font-mono);
+}
+
+.dn-th--num {
+	text-align: right;
+}
+
+.dn-th--action {
+	text-align: right;
+}
+
+.dn-tr {
+	border-bottom: 1px solid var(--dn-border);
+}
+
+.dn-tr:hover {
+	background: var(--dn-surface-alt);
+}
+
+.dn-td {
+	padding: 8px 10px;
+	color: var(--dn-text);
+}
+
+.dn-td--mono {
+	font-family: var(--dn-font-mono);
+	white-space: nowrap;
+}
+
+.dn-td--num {
+	text-align: right;
+	font-family: var(--dn-font-mono);
+	white-space: nowrap;
+}
+
+.dn-td--text {
+	color: var(--dn-text-muted);
+}
+
+/*
+ * The type column takes all remaining width and truncates inside itself.
+ * max-width:1px with width:100% is the standard trick that makes a table cell
+ * actually honour overflow — without it the table grows to fit the longest type
+ * name and the layout breaks, which is precisely the Phase 1 exit criterion.
+ */
+.dn-td--type {
+	font-family: var(--dn-font-mono);
+	color: var(--dn-text-muted);
+	max-width: 1px;
+	width: 100%;
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+/* Addresses are copyable and navigable; the dashed underline is the affordance. */
+.dn-addr {
+	font-family: var(--dn-font-mono);
+	border-bottom: 1px dashed var(--dn-text-faint);
+	cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------------
+ * Middle truncation.
+ *
+ * A long .NET type name must lose its middle, never its tail: the tail is what
+ * distinguishes Dictionary<String,CacheEntry>+Entry[] from
+ * Dictionary<String,CacheEntry>, and plain `text-overflow: ellipsis` cuts exactly
+ * the wrong end. The head flexes and clips, the tail never shrinks, so the two
+ * together reflow with the column instead of truncating at a fixed character
+ * count the way the design page's JavaScript did.
+ * ------------------------------------------------------------------------- */
+
+.dn-trunc {
+	display: flex;
+	min-width: 0;
+}
+
+.dn-trunc__head {
+	flex: 0 1 auto;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+
+.dn-trunc__tail {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+ * Row-level states.
+ * ------------------------------------------------------------------------- */
+
+/* Infinite-scroll sentinel (Phase 4.4). */
+.dn-sentinel {
+	padding: 12px;
+	text-align: center;
+	color: var(--dn-text-muted);
+	font-size: 12px;
+}
+
+.dn-sentinel__muted {
+	color: var(--dn-text-faint);
+}
+
+.dn-empty {
+	padding: 28px;
+	text-align: center;
+	color: var(--dn-text-muted);
+}
+
+.dn-empty__title {
+	margin-bottom: 10px;
+	font-size: 13px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Buttons. Outlined, never filled — the system is explicit about this.
+ * ------------------------------------------------------------------------- */
+
+.dn-btn {
+	background: transparent;
+	border: 1px solid var(--dn-border);
+	color: var(--dn-text-muted);
+	border-radius: 6px;
+	padding: 6px 10px;
+	font-size: 11.5px;
+	font-family: inherit;
+	cursor: pointer;
+}
+
+.dn-btn:hover {
+	background: var(--dn-surface-alt);
+	color: var(--dn-text);
+}
+
+.dn-btn--accent {
+	border-color: var(--dn-accent);
+	color: var(--dn-accent-text);
+}
+
+.dn-btn--accent:hover {
+	background: var(--dn-accent-soft);
+}

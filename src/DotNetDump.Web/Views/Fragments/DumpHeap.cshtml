@@ -1,46 +1,66 @@
 @*
-    Phase 2 placeholder markup, thrown away in Phase 3. What Phase 3 must preserve is the htmx
-    contract, which is markup and therefore testable as markup (SERVER.md §5.1):
+    The reference fragment (task 3.1). Every later list view copies this shape.
 
-      * the fragment's stable id  #v-{view}, swapped outerHTML
-      * the table body's id       #rows-{view}, the infinite-scroll append target
+    Four rules it exists to demonstrate, all of which the Phase 3 exit criterion checks:
 
-    No layout is set, and there is no _ViewStart.cshtml to supply one -- a fragment is a fragment
-    whether it is swapped in by htmx or embedded in the shell on a full page load.
+      1. NO `style=` ATTRIBUTE, EVER. All styling is a class in wwwroot/css/dndump.css. A resync
+         that changes a colour or a spacing edits that stylesheet's tokens and nothing here.
+      2. The htmx contract is markup (SERVER.md §5.1): #v-{view} is the fragment's stable id and
+         swaps outerHTML, #rows-{view} is the infinite-scroll append target. Both are derived from
+         Model.View.Name so they cannot drift from the route.
+      3. No conditionals beyond presence/absence, and no formatting logic. Anything cleverer than
+         "render this value" belongs in DotNetDump.Web.Rendering.Display or the view model --
+         a template a designer cannot safely re-generate is a template that has failed.
+      4. The type column truncates in the middle, never at the end. See MiddleTruncated: the tail
+         of a .NET type name is what distinguishes it, so cutting the tail loses the answer.
 *@
 @model ListModel<HeapStatItem>
 
 <div id="v-@Model.View.Name">
-    <h1>@Model.View.Title</h1>
-    <p>@Model.CountSummary</p>
-
-    <table>
+    <table class="dn-table">
         <thead>
             <tr>
-                <th scope="col">Type</th>
-                <th scope="col">Count</th>
-                <th scope="col">Total size</th>
-                <th scope="col">MethodTable</th>
+                <th scope="col" class="dn-th dn-th--mono">MethodTable</th>
+                <th scope="col" class="dn-th dn-th--num">Count</th>
+                <th scope="col" class="dn-th dn-th--num">Total size</th>
+                <th scope="col" class="dn-th">Type</th>
             </tr>
         </thead>
         <tbody id="rows-@Model.View.Name">
             @foreach (var item in Model.Result.Items)
             {
+                var type = MiddleTruncated.From(item.TypeName);
+                <tr class="dn-tr">
+                    <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.MethodTable)</span></td>
+                    <td class="dn-td dn-td--num">@Display.Count(item.Count)</td>
+                    <td class="dn-td dn-td--num" title="@Display.Bytes(item.TotalSize)">@Display.Size(item.TotalSize)</td>
+                    <td class="dn-td dn-td--type" title="@type.Full">
+                        <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
+                    </td>
+                </tr>
+            }
+
+            @if (Model.Result.Items.Count == 0)
+            {
                 <tr>
-                    <td>@item.TypeName</td>
-                    <td>@item.Count.ToString("N0")</td>
-                    <td>@item.TotalSize.ToString("N0")</td>
-                    @* 16-char uppercase hex with no 0x prefix -- the Addr convention the Markdown
-                       and JSON formatters already use, so an address copied from any front end
-                       pastes into any other. *@
-                    <td><code>@item.MethodTable.ToString("X16")</code></td>
+                    <td colspan="4" class="dn-empty">
+                        @* Three different empty states are distinguished, per DESIGN_BRIEF.md §5:
+                           an unfiltered empty result means the dump holds nothing of this kind,
+                           whereas a filtered one means the filter is too narrow -- and telling a
+                           user "no data" when they have simply over-filtered sends them looking
+                           for a problem in the dump. *@
+                        @if (Model.Result.TotalUnfiltered > 0)
+                        {
+                            <div class="dn-empty__title">No rows match the current filter.</div>
+                            <a class="dn-btn" href="/views/@Model.View.Name">Clear filters</a>
+                        }
+                        else
+                        {
+                            <div class="dn-empty__title">This dump has no heap statistics to show.</div>
+                        }
+                    </td>
                 </tr>
             }
         </tbody>
     </table>
-
-    @if (Model.Result.Items.Count == 0)
-    {
-        <p>No rows.</p>
-    }
 </div>

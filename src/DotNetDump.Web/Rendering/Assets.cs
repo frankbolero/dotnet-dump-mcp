@@ -18,6 +18,13 @@ public static class Assets {
 	/// <summary>Path under <c>wwwroot</c>, and the URL it is served at.</summary>
 	public const string HtmxPath = "/lib/htmx.min.js";
 
+	/// <summary>
+	/// The one stylesheet: the Nocturne tokens extracted from the design sync, plus the component
+	/// layer. No integrity hash — unlike htmx this file is ours and changes with the design, so a
+	/// pinned hash would be a build step that fails on every visual edit rather than a safeguard.
+	/// </summary>
+	public const string StylesheetPath = "/css/dndump.css";
+
 	/// <summary>Subresource-integrity value for <see cref="HtmxPath"/>: <c>sha384-</c> + base64.</summary>
 	public const string HtmxIntegrity = "sha384-ESlCao+z/oasnu2Uc/5K1LQTI7YCF2KKO4xakCPQCFuiHhCh8Oa/R5NwHY6guZ3m";
 }

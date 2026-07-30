@@ -1,7 +1,12 @@
 @*
-    Phase 2 placeholder shell. Phase 3 replaces the markup wholesale with the Claude Design
-    component library; what must survive that replacement is the htmx script reference below --
-    local, version-pinned, integrity-checked, and the only script on the page (SERVER.md §1.1).
+    The app shell. Scaffolding at 3.1 -- task 3.2 owns the navigation proper and the dump header
+    bar's runtime/architecture fields, which need SessionAnalyzer data this layout does not yet
+    receive.
+
+    As with every view here: no `style=` attribute. Both stylesheets and the one script are local,
+    version-pinned and integrity-checked where a hash exists. Nothing on this page may make an
+    outbound request (SERVER.md §6) -- the design pages' Google Fonts <link> is replaced by
+    @@font-face rules over vendored woff2 in dndump.css.
 *@
 @model ShellModel
 <!DOCTYPE html>
@@ -10,34 +15,48 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>@Model.Current.Title — dndump</title>
-    @* No CDN, no fonts, no telemetry: nothing on this page may make an outbound request. *@
+    <link rel="stylesheet" href="@Assets.StylesheetPath" />
     <script src="@Assets.HtmxPath" integrity="@Assets.HtmxIntegrity" crossorigin="anonymous" defer></script>
 </head>
 <body>
-    <header>
-        <strong>dndump</strong>
-        <code>@Model.DumpPath</code>
-    </header>
-
-    <nav>
-        @foreach (var group in Model.Views.GroupBy(v => v.Group))
-        {
-            <section>
-                <h2>@group.Key</h2>
-                <ul>
+    <div class="dn-app">
+        <nav class="dn-nav" aria-label="Views">
+            <div class="dn-nav__head">dndump</div>
+            <div class="dn-nav__groups">
+                @foreach (var group in Model.Views.GroupBy(view => view.Group))
+                {
+                    <div class="dn-nav__group-label">@group.Key</div>
                     @foreach (var view in group)
                     {
-                        <li>
-                            <a href="/views/@view.Name" aria-current="@(view.Name == Model.Current.Name ? "page" : null)">@view.Title</a>
-                        </li>
+                        <a class="dn-nav__item"
+                           href="/views/@view.Name"
+                           aria-current="@(view.Name == Model.Current.Name ? "page" : null)">@view.Title</a>
                     }
-                </ul>
-            </section>
-        }
-    </nav>
+                }
+            </div>
+        </nav>
 
-    <main>
-        @RenderBody()
-    </main>
+        <div class="dn-main">
+            <header class="dn-dumpbar">
+                <div class="dn-dumpbar__left">
+                    <span class="dn-dumpbar__file">@Model.DumpPath</span>
+                </div>
+            </header>
+
+            <div class="dn-view-header">
+                <div>
+                    <h1 class="dn-view-title">@Model.Current.Title</h1>
+                    <div class="dn-view-desc">
+                        SOS <code class="dn-code">@Model.Current.Name</code>
+                    </div>
+                </div>
+                <div class="dn-view-count">@Model.CountSummary</div>
+            </div>
+
+            <main class="dn-view-pad">
+                @RenderBody()
+            </main>
+        </div>
+    </div>
 </body>
 </html>

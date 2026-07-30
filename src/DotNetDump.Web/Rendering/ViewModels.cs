@@ -14,11 +14,17 @@ namespace DotNetDump.Web.Rendering;
 /// through the same path in both cases is what guarantees that, instead of leaving it to two
 /// templates staying in agreement.
 /// </param>
+/// <param name="CountSummary">
+/// The view's honest row count, rendered in the view header rather than inside the fragment. It
+/// lives outside the swapped region because the header is not re-rendered on a filter change —
+/// Phase 4.5 updates it out of band instead. <c>null</c> for a view that has no count to show.
+/// </param>
 public sealed record ShellModel(
 	string DumpPath,
 	ViewDescriptor Current,
 	IReadOnlyList<ViewDescriptor> Views,
-	IHtmlContent FragmentHtml);
+	IHtmlContent FragmentHtml,
+	string? CountSummary);
 
 /// <summary>A paged, filtered, sorted table: what every <see cref="ViewKind.List"/> fragment binds to.</summary>
 public sealed record ListModel<T>(ViewDescriptor View, PagedResult<T> Result) {
