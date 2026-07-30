@@ -26,6 +26,24 @@ namespace DotNetDump.Web.Analysis;
 /// </para>
 /// </remarks>
 public sealed class DumpInfoService {
+	/// <summary>
+	/// What the header bar shows when the runtime cannot be described.
+	/// </summary>
+	/// <remarks>
+	/// The dump header bar is context, not content: it decorates every page in the application. If
+	/// describing the runtime can throw — and it can, <c>SessionAnalyzer.GetInfo</c> raises
+	/// "No dump loaded" for a context with no runtime — then propagating that failure turns a
+	/// decoration into a total outage, because the shell renders on every route. Degrading to blank
+	/// metadata keeps the navigation, the views and the API usable, and the <c>info</c> view is
+	/// where the real diagnosis belongs anyway.
+	/// <para>
+	/// This matters more than it looks because of the memoization: <see cref="Lazy{T}"/> caches a
+	/// faulted task as readily as a successful one, so without this the first failure would be
+	/// permanent for the life of the process.
+	/// </para>
+	/// </remarks>
+	private static readonly DumpInfo Unavailable = new();
+
 	private readonly Lazy<Task<DumpInfo>> _info;
 
 	public DumpInfoService(IAnalysisQueue queue) {
@@ -38,7 +56,15 @@ public sealed class DumpInfoService {
 		// bar this feeds does not display DAC information -- only runtime version, architecture and
 		// OS -- so there is nothing here for a real value to change.
 		_info = new Lazy<Task<DumpInfo>>(() => queue.Enqueue(
-			(session, _) => session.Info.GetInfo(explicitDacPath: null),
+			(session, _) => {
+				try {
+					return session.Info.GetInfo(explicitDacPath: null);
+				} catch (Exception) {
+					// Caught on the analysis thread rather than at the await, so the memoized task
+					// completes successfully with blank metadata instead of caching a fault forever.
+					return Unavailable;
+				}
+			},
 			"reading dump info",
 			CancellationToken.None));
 	}

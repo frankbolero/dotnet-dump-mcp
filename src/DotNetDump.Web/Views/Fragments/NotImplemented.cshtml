@@ -1,0 +1,20 @@
+@*
+    A view that exists in the catalog but has no handler yet (tasks 3.3 and 3.4 fill these in).
+
+    It renders inside the shell rather than as a bare 501 body so the navigation stays usable --
+    a reader who lands here must be able to leave without pressing Back. The response still carries
+    501, because the page is an explanation and not the view that was asked for.
+
+    This file is temporary by design. When every view is wired, the switch in DumpRoutes has no
+    default case left to reach and this fragment can be deleted along with NotWiredYet.
+*@
+@model ViewDescriptor
+
+<div id="v-@Model.Name">
+    <div class="dn-empty">
+        <div class="dn-empty__title">@Model.Title is not built yet.</div>
+        <div class="dn-view-desc">
+            SOS <code class="dn-code">@Model.Command</code> — @Model.Description
+        </div>
+    </div>
+</div>

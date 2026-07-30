@@ -36,10 +36,10 @@ public static class DumpRoutes {
 		app.MapGet("/health", () => Results.Text("ok", "text/plain"));
 
 		app.MapGet("/", (HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer, CancellationToken ct) =>
-			RenderShell(http, dump, info, queue, renderer, DefaultView, ct));
+			RenderShell(http, dump, info, queue, renderer, ViewCatalog.Find(DefaultView)!, ct));
 
-		app.MapGet("/views/{view}", (string view, HttpContext http, IAnalysisQueue queue, IFragmentRenderer renderer, CancellationToken ct) =>
-			RenderFragment(http, queue, renderer, view, ct));
+		app.MapGet("/views/{view}", (string view, HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer, CancellationToken ct) =>
+			RenderView(http, dump, info, queue, renderer, view, ct));
 
 		app.MapGet("/api/{view}", (string view, HttpContext http, IAnalysisQueue queue, CancellationToken ct) =>
 			RenderJson(http, queue, view, ct));
@@ -53,15 +53,17 @@ public static class DumpRoutes {
 	/// rather than read back off the markup, because the header and the fragment are rendered by
 	/// different templates and only the handler sees the <c>PagedResult</c> both derive from.
 	/// </param>
-	private readonly record struct Fragment(string? Html, IResult? Failure, string? CountSummary = null);
+	/// <param name="NotImplemented">
+	/// The view exists in the catalog but has no handler yet. Distinguished from an ordinary failure
+	/// because it is the only one that still deserves the whole page around it: the navigation must
+	/// stay usable so a reader can leave, which a bare 501 body does not allow.
+	/// </param>
+	private readonly record struct Fragment(
+		string? Html, IResult? Failure, string? CountSummary = null, bool NotImplemented = false);
 
 	private static async Task<IResult> RenderShell(
-		HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer, string viewName, CancellationToken ct) {
-
-		var descriptor = ViewCatalog.Find(viewName);
-		if (descriptor is null) {
-			return Results.NotFound();
-		}
+		HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer,
+		ViewDescriptor descriptor, CancellationToken ct) {
 
 		// Started before the fragment is awaited so the memoized info call and the fragment's own
 		// Enqueue (if any) both sit on the analysis queue as early as possible; on a cold dump the
@@ -69,28 +71,68 @@ public static class DumpRoutes {
 		var infoTask = info.GetAsync();
 
 		var fragment = await BuildFragment(http, queue, renderer, descriptor, ct);
-		if (fragment.Html is null) {
-			// A failed fragment is the whole page's failure. Rendering the shell around an error
-			// would present a broken view as a working one.
+
+		if (fragment.Html is null && !fragment.NotImplemented) {
+			// A failed fragment is the whole page's failure. Rendering the shell around a rejected
+			// query string would present a broken view as a working one.
 			return fragment.Failure!;
 		}
 
-		string html = await renderer.RenderAsync(http, "/Views/Shell/Index.cshtml",
-			new ShellModel(dump.Path, await infoTask, descriptor, ViewCatalog.All, new HtmlString(fragment.Html), fragment.CountSummary));
+		string body = fragment.Html
+			?? await renderer.RenderAsync(http, "/Views/Fragments/NotImplemented.cshtml", descriptor);
 
-		return Html(html);
+		string html = await renderer.RenderAsync(http, "/Views/Shell/Index.cshtml",
+			new ShellModel(dump.Path, await infoTask, descriptor, ViewCatalog.All, new HtmlString(body), fragment.CountSummary));
+
+		// The status stays 501 even though a full page comes back. The page is navigation plus an
+		// honest explanation, not the view that was asked for.
+		return fragment.NotImplemented
+			? Results.Content(html, "text/html; charset=utf-8", statusCode: StatusCodes.Status501NotImplemented)
+			: Html(html);
 	}
 
-	private static async Task<IResult> RenderFragment(
-		HttpContext http, IAnalysisQueue queue, IFragmentRenderer renderer, string viewName, CancellationToken ct) {
+	/// <summary>
+	/// Whether this request wants the bare fragment rather than a whole page.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <c>/views/{view}</c> is two things at once, and the <c>HX-Request</c> header is what tells
+	/// them apart. htmx swapping a view into an existing page wants the fragment; a browser
+	/// following a link, restoring history, or opening a pasted URL wants the whole page — nav,
+	/// stylesheet and all. Serving the fragment to both is how the navigation came to render an
+	/// unstyled table with no shell.
+	/// </para>
+	/// <para>
+	/// This is not only cosmetic. DATA_CONTRACT.md &#0167;3.2 makes the query string the view state and
+	/// <c>hx-push-url</c> writes it to the address bar, so <c>/views/dumpheap?type=Http</c> has to be
+	/// a page a user can paste, bookmark and share — which is exactly what Phase 4.6's round-trip
+	/// criterion requires.
+	/// </para>
+	/// <para>
+	/// <c>HX-History-Restore-Request</c> is the exception that proves it: htmx sends it when
+	/// restoring a page from its own history cache, and on that request it wants the full document
+	/// back, not a fragment.
+	/// </para>
+	/// </remarks>
+	private static bool WantsFragment(HttpContext http) =>
+		http.Request.Headers.ContainsKey("HX-Request")
+		&& !http.Request.Headers.ContainsKey("HX-History-Restore-Request");
+
+	private static async Task<IResult> RenderView(
+		HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer,
+		string viewName, CancellationToken ct) {
 
 		var descriptor = ViewCatalog.Find(viewName);
 		if (descriptor is null) {
 			return Results.NotFound();
 		}
 
-		var fragment = await BuildFragment(http, queue, renderer, descriptor, ct);
-		return fragment.Html is null ? fragment.Failure! : Html(fragment.Html);
+		if (WantsFragment(http)) {
+			var swap = await BuildFragment(http, queue, renderer, descriptor, ct);
+			return swap.Html is null ? swap.Failure! : Html(swap.Html);
+		}
+
+		return await RenderShell(http, dump, info, queue, renderer, descriptor, ct);
 	}
 
 	private static async Task<Fragment> BuildFragment(
@@ -110,7 +152,7 @@ public static class DumpRoutes {
 				}
 
 			default:
-				return new Fragment(null, NotWiredYet(descriptor));
+				return new Fragment(null, NotWiredYet(descriptor), NotImplemented: true);
 		}
 	}
 
