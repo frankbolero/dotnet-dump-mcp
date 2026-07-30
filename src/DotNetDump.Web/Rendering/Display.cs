@@ -83,4 +83,21 @@ public static class Display {
 	/// other.
 	/// </summary>
 	public static string Address(ulong value) => value.ToString("X16", CultureInfo.InvariantCulture);
+
+	/// <summary>
+	/// Uppercase hex with no <c>0x</c> prefix and no padding — the convention
+	/// <c>MarkdownFormatter.FormatThreads</c> already uses for an OS thread id via <c>{value:X}</c>.
+	/// Deliberately unpadded, unlike <see cref="Address"/>: a native thread id is not a heap address,
+	/// and padding it to 16 characters would manufacture leading zeros no other front end shows.
+	/// </summary>
+	public static string ThreadId(uint value) => value.ToString("X", CultureInfo.InvariantCulture);
+
+	/// <summary>"Alive" or "Dead" — the same two words <c>MarkdownFormatter.FormatThreads</c> uses.</summary>
+	public static string ThreadState(bool isAlive) => isAlive ? "Alive" : "Dead";
+
+	/// <summary>
+	/// A possibly-null value rendered as itself, or the literal <c>(none)</c> when absent — the same
+	/// fallback <c>MarkdownFormatter.FormatThreads</c> uses for a thread with no exception in flight.
+	/// </summary>
+	public static string OrNone(string? value) => value ?? "(none)";
 }
