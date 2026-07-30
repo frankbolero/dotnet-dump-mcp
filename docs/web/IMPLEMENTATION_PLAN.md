@@ -299,12 +299,17 @@ met would be false.
 `dotnet format --verify-no-changes` clean. The two new skips are `WiredViewRoutingTests`, which need
 a dump — run with `DOTNETDUMP_TEST_DUMP=<path>`; both pass against the 9.6 GB core.
 
-**Unchanged at 3.3.** Still 679/0/40 on all three frameworks after wiring the remaining seven list
-views — the generic `ViewRoutingTests` (page-vs-fragment, catalog-vs-404) already exercise a newly
-wired view automatically, so no new tests were needed for that property. None of the delegated
-agents had `DOTNETDUMP_TEST_DUMP` available, so none of the seven were visually verified against
-real row data — that check is still outstanding and should happen before Phase 4 builds filtering
-on top of them.
+**Unchanged at 3.3, then verified against a real dump.** 679/0/40 on all three frameworks after
+wiring the remaining seven list views — the generic `ViewRoutingTests` (page-vs-fragment,
+catalog-vs-404) already exercise a newly wired view automatically, so no new tests were needed for
+that property. None of the delegated agents had `DOTNETDUMP_TEST_DUMP` available, so none of the
+seven were checked against real row data at merge time. Run afterward with
+`DOTNETDUMP_TEST_DUMP=core_20260727_211646` (9.6 GB core, checked into the repo root): the full
+suite goes to 719/0/0 (the two dump-gated skips resolve and pass). Separately, `dndump serve`
+against the same dump and a `curl` of all eight `/views/{view}` fragments and one `/api/{view}`
+route confirmed real rows render correctly — including `type=String` filtering on `listobj` despite
+its no-walk-time-scope decision above, and a full page (nav, shell) on direct navigation to
+`threadstate`.
 
 ### Carried forward from Phase 3
 
