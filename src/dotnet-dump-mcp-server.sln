@@ -21,6 +21,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFolder", "SolutionF
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetDump.Cli", "DotNetDump.Cli\DotNetDump.Cli.csproj", "{F92425B5-3AB2-42C8-9183-0EC3DB62A78F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotNetDump.Web", "DotNetDump.Web\DotNetDump.Web.csproj", "{1DD49684-7009-4992-A50D-2AC6F60CF89D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -79,6 +81,18 @@ Global
 		{F92425B5-3AB2-42C8-9183-0EC3DB62A78F}.Release|x64.Build.0 = Release|Any CPU
 		{F92425B5-3AB2-42C8-9183-0EC3DB62A78F}.Release|x86.ActiveCfg = Release|Any CPU
 		{F92425B5-3AB2-42C8-9183-0EC3DB62A78F}.Release|x86.Build.0 = Release|Any CPU
+		{1DD49684-7009-4992-A50D-2AC6F60CF89D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1DD49684-7009-4992-A50D-2AC6F60CF89D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1DD49684-7009-4992-A50D-2AC6F60CF89D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1DD49684-7009-4992-A50D-2AC6F60CF89D}.Debug|x64.Build.0 = Debug|Any CPU
+		{1DD49684-7009-4992-A50D-2AC6F60CF89D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1DD49684-7009-4992-A50D-2AC6F60CF89D}.Debug|x86.Build.0 = Debug|Any CPU
+		{1DD49684-7009-4992-A50D-2AC6F60CF89D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1DD49684-7009-4992-A50D-2AC6F60CF89D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1DD49684-7009-4992-A50D-2AC6F60CF89D}.Release|x64.ActiveCfg = Release|Any CPU
+		{1DD49684-7009-4992-A50D-2AC6F60CF89D}.Release|x64.Build.0 = Release|Any CPU
+		{1DD49684-7009-4992-A50D-2AC6F60CF89D}.Release|x86.ActiveCfg = Release|Any CPU
+		{1DD49684-7009-4992-A50D-2AC6F60CF89D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

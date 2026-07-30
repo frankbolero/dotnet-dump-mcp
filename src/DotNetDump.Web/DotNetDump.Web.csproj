@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>DotNetDump.Web</RootNamespace>
+
+        <!-- A library, not an application. The host is started in-process by 'dndump serve'
+             (SERVER.md §1); there is no second entry point and no standalone executable.
+             Microsoft.NET.Sdk.Web defaults OutputType to Exe, so this must be stated. -->
+        <OutputType>Library</OutputType>
+        <IsPackable>false</IsPackable>
+
+        <!-- Static Web Assets off, wwwroot copied to the output directory instead.
+             The SDK's static-web-assets pipeline hands assets to the *entry* project through a
+             generated runtime manifest, and dndump is packaged as a dotnet tool (Phase 7.1) where
+             that manifest is the fiddliest link in the chain, failing by serving 404s rather
+             than by failing the build. A plain copied directory behaves identically under build,
+             run, publish and pack, and is served below by a PhysicalFileProvider rooted at
+             AppContext.BaseDirectory. -->
+        <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Core only. SERVER.md §1: the dependency runs one way, Web must never reference Cli, and
+             neither reaches DotNetDump.Server or ModelContextProtocol. -->
+        <ProjectReference Include="..\DotNetDump.Core\DotNetDump.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Update, not Include: the SDK already picks wwwroot up as Content by default. All that
+             is added here is the CopyToOutputDirectory metadata, which is what carries these files
+             through the project reference into the CLI's output directory as well as this one's. -->
+        <Content Update="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+
+</Project>
