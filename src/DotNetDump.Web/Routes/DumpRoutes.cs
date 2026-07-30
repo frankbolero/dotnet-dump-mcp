@@ -151,6 +151,14 @@ public static class DumpRoutes {
 					return new Fragment(html, null, model.CountSummary);
 				}
 
+			case "clrmodules": {
+					var modules = await queue.Enqueue(
+						(session, _) => session.Modules.GetModules(request.Parameters), "listing modules", ct);
+					var model = new ListModel<ModuleInfo>(descriptor, modules);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/ClrModules.cshtml", model);
+					return new Fragment(html, null, model.CountSummary);
+				}
+
 			default:
 				return new Fragment(null, NotWiredYet(descriptor), NotImplemented: true);
 		}
@@ -173,6 +181,12 @@ public static class DumpRoutes {
 					// The existing envelope, unchanged. DATA_CONTRACT.md §3.3's `state` block is not part
 					// of Phase 2; it lands with the cache-state indicator in 6.5.
 					return Results.Content(JsonFormatter.FormatHeapStatistics(stats), "application/json; charset=utf-8");
+				}
+
+			case "clrmodules": {
+					var modules = await queue.Enqueue(
+						(session, _) => session.Modules.GetModules(request.Parameters), "listing modules", ct);
+					return Results.Content(JsonFormatter.FormatModules(modules), "application/json; charset=utf-8");
 				}
 
 			default:
