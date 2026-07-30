@@ -1,0 +1,58 @@
+@*
+    The module list (task 3.3). Copies DumpHeap.cshtml's shape exactly -- see that file's doc
+    comment for the four rules both templates exist to demonstrate.
+
+    Two departures from DumpHeap, both intentional:
+      - The name column is a module path, not a .NET type name. MiddleTruncated is documented as
+        specifically for type names, whose distinguishing suffix (>+Entry[], [,], +Enumerator) sits
+        at the tail -- a path's distinguishing part is usually the leaf filename, which sits at the
+        tail too, but nothing in the data contract or MarkdownFormatter.FormatModules truncates
+        paths, so this renders the path as plain text (dn-td--text).
+      - IsUserCode has no existing badge/pill treatment in dndump.css, so it is plain text rather
+        than invented markup.
+*@
+@model ListModel<ModuleInfo>
+
+<div id="v-@Model.View.Name">
+    <table class="dn-table">
+        <thead>
+            <tr>
+                <th scope="col" class="dn-th dn-th--mono">Base address</th>
+                <th scope="col" class="dn-th dn-th--num">Size</th>
+                <th scope="col" class="dn-th">Kind</th>
+                <th scope="col" class="dn-th">Name</th>
+            </tr>
+        </thead>
+        <tbody id="rows-@Model.View.Name">
+            @foreach (var item in Model.Result.Items)
+            {
+                <tr class="dn-tr">
+                    <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.ImageBase)</span></td>
+                    <td class="dn-td dn-td--num" title="@Display.Bytes((long)item.Size)">@Display.Size((long)item.Size)</td>
+                    <td class="dn-td">@(item.IsUserCode ? "user code" : "system")</td>
+                    <td class="dn-td dn-td--text">@item.Name</td>
+                </tr>
+            }
+
+            @if (Model.Result.Items.Count == 0)
+            {
+                <tr>
+                    <td colspan="4" class="dn-empty">
+                        @* Same distinction as DumpHeap.cshtml: an unfiltered empty result means the
+                           dump has no modules loaded, whereas a filtered one means the filter is too
+                           narrow. *@
+                        @if (Model.Result.TotalUnfiltered > 0)
+                        {
+                            <div class="dn-empty__title">No rows match the current filter.</div>
+                            <a class="dn-btn" href="/views/@Model.View.Name">Clear filters</a>
+                        }
+                        else
+                        {
+                            <div class="dn-empty__title">This dump has no modules loaded.</div>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
