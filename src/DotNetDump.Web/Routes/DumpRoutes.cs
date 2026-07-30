@@ -234,6 +234,62 @@ public static class DumpRoutes {
 					return new Fragment(html, null, model.CountSummary);
 				}
 
+			case "dumpmodule": {
+					if (!TryRequireAddress(address, descriptor, out ulong moduleAddress, out var badAddress)) {
+						return new Fragment(null, badAddress);
+					}
+
+					var details = await queue.Enqueue(
+						(session, _) => session.Modules.GetModuleDetails(moduleAddress), "reading module", ct);
+					var model = new DetailModel<ModuleDetails>(descriptor, details);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/DumpModule.cshtml", model);
+					return new Fragment(html, null);
+				}
+
+			case "dumpassembly": {
+					if (!TryRequireAddress(address, descriptor, out ulong assemblyAddress, out var badAddress)) {
+						return new Fragment(null, badAddress);
+					}
+
+					var details = await queue.Enqueue(
+						(session, _) => session.Modules.GetAssemblyDetails(assemblyAddress), "reading assembly", ct);
+					var model = new DetailModel<AssemblyDetails>(descriptor, details);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/DumpAssembly.cshtml", model);
+					return new Fragment(html, null);
+				}
+
+			case "eeheap": {
+					var heapInfo = await queue.Enqueue(
+						(session, _) => session.Heap.GetHeapSegments(), "reading heap segments", ct);
+					var model = new DetailModel<HeapSummaryInfo>(descriptor, heapInfo);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/EeHeap.cshtml", model);
+					return new Fragment(html, null);
+				}
+
+			case "threadpool": {
+					var threadPoolInfo = await queue.Enqueue(
+						(session, _) => session.Threads.GetThreadPoolInfo(), "reading thread pool", ct);
+					var model = new DetailModel<ThreadPoolInfo>(descriptor, threadPoolInfo);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/ThreadPool.cshtml", model);
+					return new Fragment(html, null);
+				}
+
+			case "clrstack": {
+					var groups = await queue.Enqueue(
+						(session, _) => session.Threads.GetStackTraceGroups(maxFrames: 20).ToList(), "enumerating stacks", ct);
+					var model = new DetailModel<List<StackGroup>>(descriptor, groups);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/StackGroups.cshtml", model);
+					return new Fragment(html, null);
+				}
+
+			case "eestack": {
+					var groups = await queue.Enqueue(
+						(session, _) => session.Threads.GetStackTraceGroups(maxFrames: 30).ToList(), "enumerating stacks", ct);
+					var model = new DetailModel<List<StackGroup>>(descriptor, groups);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/StackGroups.cshtml", model);
+					return new Fragment(html, null);
+				}
+
 			case "dumpmt": {
 					if (!TryRequireAddress(address, descriptor, out ulong methodTableAddress, out var badAddress)) {
 						return new Fragment(null, badAddress);
@@ -349,6 +405,50 @@ public static class DumpRoutes {
 					var blocks = await queue.Enqueue(
 						(session, _) => session.Heap.GetSyncBlocks(request.Parameters), "enumerating sync blocks", ct);
 					return Results.Content(JsonFormatter.FormatSyncBlocks(blocks), "application/json; charset=utf-8");
+				}
+
+			case "dumpmodule": {
+					if (!TryRequireAddress(address, descriptor, out ulong moduleAddress, out var badAddress)) {
+						return badAddress;
+					}
+
+					var details = await queue.Enqueue(
+						(session, _) => session.Modules.GetModuleDetails(moduleAddress), "reading module", ct);
+					return Results.Content(JsonFormatter.FormatModuleDetails(details), "application/json; charset=utf-8");
+				}
+
+			case "dumpassembly": {
+					if (!TryRequireAddress(address, descriptor, out ulong assemblyAddress, out var badAddress)) {
+						return badAddress;
+					}
+
+					var details = await queue.Enqueue(
+						(session, _) => session.Modules.GetAssemblyDetails(assemblyAddress), "reading assembly", ct);
+					return Results.Content(JsonFormatter.FormatAssemblyDetails(details), "application/json; charset=utf-8");
+				}
+
+			case "eeheap": {
+					var heapInfo = await queue.Enqueue(
+						(session, _) => session.Heap.GetHeapSegments(), "reading heap segments", ct);
+					return Results.Content(JsonFormatter.FormatHeapSegments(heapInfo), "application/json; charset=utf-8");
+				}
+
+			case "threadpool": {
+					var threadPoolInfo = await queue.Enqueue(
+						(session, _) => session.Threads.GetThreadPoolInfo(), "reading thread pool", ct);
+					return Results.Content(JsonFormatter.FormatThreadPool(threadPoolInfo), "application/json; charset=utf-8");
+				}
+
+			case "clrstack": {
+					var groups = await queue.Enqueue(
+						(session, _) => session.Threads.GetStackTraceGroups(maxFrames: 20), "enumerating stacks", ct);
+					return Results.Content(JsonFormatter.FormatStackGroups(groups), "application/json; charset=utf-8");
+				}
+
+			case "eestack": {
+					var groups = await queue.Enqueue(
+						(session, _) => session.Threads.GetStackTraceGroups(maxFrames: 30), "enumerating stacks", ct);
+					return Results.Content(JsonFormatter.FormatStackGroups(groups), "application/json; charset=utf-8");
 				}
 
 			case "dumpmt": {

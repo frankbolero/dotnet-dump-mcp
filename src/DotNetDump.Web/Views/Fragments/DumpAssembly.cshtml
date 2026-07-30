@@ -1,0 +1,27 @@
+@*
+    Single assembly detail (task 3.4). Card shape for address-taking detail view.
+    Displays an assembly's identity and the modules that make it up.
+
+    Same discipline as every other fragment: no style=, the htmx id derived from Model.View.Name,
+    no conditionals beyond presence/absence, and formatting logic staying out of the template.
+*@
+@model DetailModel<AssemblyDetails>
+
+<div id="v-@Model.View.Name">
+    <div class="dn-card">
+        <div class="dn-card__head">
+            <div class="dn-card__row"><span class="dn-card__label">Assembly</span><span class="dn-mono--strong">@Model.Data.Name</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Address</span><span class="dn-addr">@Display.Address(Model.Data.AssemblyAddress)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">IsDynamic</span><span class="dn-mono">@(Model.Data.IsDynamic ? "yes" : "no")</span></div>
+            @if (!string.IsNullOrEmpty(Model.Data.AppDomainName))
+            {
+                <div class="dn-card__row"><span class="dn-card__label">AppDomain</span><span class="dn-mono">@Model.Data.AppDomainName</span></div>
+            }
+            <div class="dn-card__row"><span class="dn-card__label">Module Count</span><span class="dn-mono">@Display.Count(Model.Data.Modules.Count)</span></div>
+            @if (Model.Data.Modules.Count > 0)
+            {
+                <div class="dn-card__row"><span class="dn-card__label">Modules</span><span class="dn-mono">@Display.JoinOrDash(Model.Data.Modules)</span></div>
+            }
+        </div>
+    </div>
+</div>

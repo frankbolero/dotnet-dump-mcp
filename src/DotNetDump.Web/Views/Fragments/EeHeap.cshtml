@@ -1,0 +1,56 @@
+@*
+    Heap segments and generation info (task 3.4). Key-value + table shape.
+    Displays generation sizes, segment layout, and GC configuration.
+
+    Same discipline as every other fragment: no style=, the htmx id derived from Model.View.Name,
+    no conditionals beyond presence/absence, and formatting logic staying out of the template.
+*@
+@model DetailModel<HeapSummaryInfo>
+
+<div id="v-@Model.View.Name">
+    <div class="dn-kv">
+        <div class="dn-kv__row"><span class="dn-kv__key">GC Mode</span><span class="dn-kv__val">@(Model.Data.IsServerGC ? "Server" : "Workstation")</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">Sub-heaps</span><span class="dn-kv__val">@Display.Count(Model.Data.SubHeapCount)</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">Heap Walkable</span><span class="dn-kv__val">@(Model.Data.CanWalkHeap ? "yes" : "no")</span></div>
+        @if (Model.Data.DynamicAdaptationMode.HasValue)
+        {
+            <div class="dn-kv__row"><span class="dn-kv__key">DATAS Mode</span><span class="dn-kv__val">@Display.Count(Model.Data.DynamicAdaptationMode.Value)</span></div>
+        }
+        else
+        {
+            <div class="dn-kv__row"><span class="dn-kv__key">DATAS Mode</span><span class="dn-kv__val">off / not reported</span></div>
+        }
+    </div>
+
+    @if (Model.Data.Segments.Count > 0)
+    {
+        <table class="dn-table">
+            <thead>
+                <tr>
+                    <th scope="col" class="dn-th dn-th--mono">Range</th>
+                    <th scope="col" class="dn-th">Kind</th>
+                    <th scope="col" class="dn-th dn-th--mono">Gen</th>
+                    <th scope="col" class="dn-th dn-th--mono">Size</th>
+                    <th scope="col" class="dn-th dn-th--mono">Committed</th>
+                    <th scope="col" class="dn-th dn-th--mono">Reserved</th>
+                    <th scope="col" class="dn-th dn-th--mono">Heap</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var segment in Model.Data.Segments)
+                {
+                    var genDisplay = segment.Generation.HasValue ? Display.Count(segment.Generation.Value) : "mixed";
+                    <tr class="dn-tr">
+                        <td class="dn-td dn-td--mono">@Display.Address(segment.Start)–@Display.Address(segment.End)</td>
+                        <td class="dn-td">@segment.Kind</td>
+                        <td class="dn-td dn-td--mono">@genDisplay</td>
+                        <td class="dn-td dn-td--mono" title="@Display.Bytes((long)segment.Size)">@Display.Size((long)segment.Size)</td>
+                        <td class="dn-td dn-td--mono" title="@Display.Bytes((long)segment.CommittedSize)">@Display.Size((long)segment.CommittedSize)</td>
+                        <td class="dn-td dn-td--mono" title="@Display.Bytes((long)segment.ReservedSize)">@Display.Size((long)segment.ReservedSize)</td>
+                        <td class="dn-td dn-td--mono">@Display.Count(segment.SubHeapIndex)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>

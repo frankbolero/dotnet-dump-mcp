@@ -1,0 +1,33 @@
+@*
+    Thread pool info (task 3.4). Pure key-value shape, like Info.cshtml.
+    Displays worker and I/O thread counts, queue length, and configured min/max.
+
+    Same discipline as every other fragment: no style=, the htmx id derived from Model.View.Name,
+    no conditionals beyond presence/absence, and formatting logic staying out of the template.
+*@
+@model DetailModel<ThreadPoolInfo>
+
+<div id="v-@Model.View.Name">
+    <div class="dn-kv">
+        <div class="dn-kv__row"><span class="dn-kv__key">Type</span><span class="dn-kv__val">@Display.OrNone(Model.Data.Type)</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">Total Threads</span><span class="dn-kv__val">@Display.Count(Model.Data.TotalThreads)</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">Active Threads</span><span class="dn-kv__val">@Display.Count(Model.Data.ActiveThreads)</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">Idle Threads</span><span class="dn-kv__val">@Display.Count(Model.Data.IdleThreads)</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">Retired Threads</span><span class="dn-kv__val">@Display.Count(Model.Data.RetiredThreads)</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">Min Threads</span><span class="dn-kv__val">@Display.Count(Model.Data.MinThreads)</span></div>
+        <div class="dn-kv__row"><span class="dn-kv__key">Max Threads</span><span class="dn-kv__val">@Display.Count(Model.Data.MaxThreads)</span></div>
+        @if (Model.Data.CpuUtilization.HasValue)
+        {
+            <div class="dn-kv__row"><span class="dn-kv__key">CPU Utilization</span><span class="dn-kv__val">@Model.Data.CpuUtilization.Value%</span></div>
+        }
+        @if (Model.Data.HasCompletionPortData)
+        {
+            <div class="dn-kv__row"><span class="dn-kv__key">Total Completion Ports</span><span class="dn-kv__val">@Display.Count(Model.Data.TotalCompletionPorts)</span></div>
+            <div class="dn-kv__row"><span class="dn-kv__key">Free Completion Ports</span><span class="dn-kv__val">@Display.Count(Model.Data.FreeCompletionPorts)</span></div>
+            <div class="dn-kv__row"><span class="dn-kv__key">Max Free Completion Ports</span><span class="dn-kv__val">@Display.Count(Model.Data.MaxFreeCompletionPorts)</span></div>
+            <div class="dn-kv__row"><span class="dn-kv__key">Completion Port Current Limit</span><span class="dn-kv__val">@Display.Count(Model.Data.CompletionPortCurrentLimit)</span></div>
+            <div class="dn-kv__row"><span class="dn-kv__key">Min Completion Ports</span><span class="dn-kv__val">@Display.Count(Model.Data.MinCompletionPorts)</span></div>
+            <div class="dn-kv__row"><span class="dn-kv__key">Max Completion Ports</span><span class="dn-kv__val">@Display.Count(Model.Data.MaxCompletionPorts)</span></div>
+        }
+    </div>
+</div>

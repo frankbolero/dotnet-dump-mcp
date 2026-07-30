@@ -1,0 +1,31 @@
+@*
+    Single module detail (task 3.4). Card shape for address-taking detail view.
+    Displays a module's metadata: path, version, type count, assembly and app domain info.
+
+    Same discipline as every other fragment: no style=, the htmx id derived from Model.View.Name,
+    no conditionals beyond presence/absence, and formatting logic staying out of the template.
+*@
+@model DetailModel<ModuleDetails>
+
+<div id="v-@Model.View.Name">
+    <div class="dn-card">
+        <div class="dn-card__head">
+            <div class="dn-card__row"><span class="dn-card__label">Module</span><span class="dn-mono--strong">@Model.Data.Name</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Assembly</span><span class="dn-mono">@Display.OrNone(Model.Data.AssemblyName)</span></div>
+            @if (!string.IsNullOrEmpty(Model.Data.AppDomainName))
+            {
+                <div class="dn-card__row"><span class="dn-card__label">AppDomain</span><span class="dn-mono">@Model.Data.AppDomainName</span></div>
+            }
+            <div class="dn-card__row"><span class="dn-card__label">ImageBase</span><span class="dn-addr">@Display.Address(Model.Data.ImageBase)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">MetadataAddress</span><span class="dn-addr">@Display.Address(Model.Data.MetadataAddress)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Assembly Address</span><span class="dn-addr">@Display.Address(Model.Data.AssemblyAddress)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Size</span><span class="dn-mono" title="@Display.Bytes((long)Model.Data.Size)">@Display.Size((long)Model.Data.Size)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">MetadataLength</span><span class="dn-mono">@Display.Count(Model.Data.MetadataLength)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">TypeCount</span><span class="dn-mono">@Display.Count(Model.Data.TypeCount)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">TypesWithStaticFields</span><span class="dn-mono">@Display.Count(Model.Data.TypesWithStaticFieldsCount)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">IsDynamic</span><span class="dn-mono">@(Model.Data.IsDynamic ? "yes" : "no")</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">IsPEFile</span><span class="dn-mono">@(Model.Data.IsPEFile ? "yes" : "no")</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Layout</span><span class="dn-mono">@Model.Data.Layout</span></div>
+        </div>
+    </div>
+</div>
