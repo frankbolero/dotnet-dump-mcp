@@ -1,0 +1,49 @@
+@*
+    Stack groups (clrstack, eestack — task 3.4). Detail view rendering grouped call stacks for managed threads.
+
+    BackedBy ThreadAnalyzer.GetStackTraceGroups, which groups threads sharing identical stacks and
+    orders by thread count descending. Each group carries:
+    - ManagedThreadIds: List<int> of all threads sharing this stack
+    - Frames: List<string> of already-formatted frame strings (one per line, no further processing needed)
+    - ThreadCount: computed property = ManagedThreadIds.Count
+
+    Same discipline as every other fragment: no style=, the htmx id derived from Model.View.Name,
+    no conditionals beyond presence/absence, and formatting logic staying out of the template.
+
+    Structure: one .dn-card per group, with:
+    - Heading row: "Group N (X threads)" — N is 1-based, maintained in a loop variable
+    - Thread IDs row: comma-joined managed thread IDs
+    - .dn-stack-block containing one .dn-frame-row per frame (already formatted, no further processing)
+*@
+@model DetailModel<List<StackGroup>>
+
+<div id="v-@Model.View.Name">
+    @if (Model.Data.Count > 0)
+    {
+        int groupNumber = 1;
+        foreach (var group in Model.Data)
+        {
+            <div class="dn-card">
+                <div class="dn-card__head">
+                    <div class="dn-card__row"><span class="dn-card__label">Group @groupNumber</span><span class="dn-mono">(@group.ThreadCount @(group.ThreadCount == 1 ? "thread" : "threads"))</span></div>
+                    <div class="dn-card__row"><span class="dn-card__label">Threads</span><span class="dn-mono">@string.Join(", ", group.ManagedThreadIds)</span></div>
+                </div>
+                <div class="dn-stack-block">
+                    @foreach (var frame in group.Frames)
+                    {
+                        <div class="dn-frame-row">@frame</div>
+                    }
+                </div>
+            </div>
+            groupNumber++;
+        }
+    }
+    else
+    {
+        <div class="dn-card">
+            <div class="dn-card__head">
+                <div class="dn-card__row">No stack groups found.</div>
+            </div>
+        </div>
+    }
+</div>

@@ -657,3 +657,24 @@ a {
 	font-family: var(--dn-font-mono);
 	color: var(--dn-text);
 }
+
+/* Stack views (clrstack, eestack — task 3.4).
+ *
+ * Lifted from design-sync/Detail.dc.html's "Exception detail" section.
+ */
+
+.dn-stack-block {
+	padding: 12px 18px;
+	border-bottom: 1px solid var(--dn-border);
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.dn-frame-row {
+	font-family: var(--dn-font-mono);
+	font-size: 12px;
+	color: var(--dn-text-muted);
+	white-space: nowrap;
+	overflow-x: auto;
+}
