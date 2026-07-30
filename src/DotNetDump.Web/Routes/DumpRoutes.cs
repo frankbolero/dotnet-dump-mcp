@@ -151,6 +151,14 @@ public static class DumpRoutes {
 					return new Fragment(html, null, model.CountSummary);
 				}
 
+			case "clrthreads": {
+					var threads = await queue.Enqueue(
+						(session, _) => session.Threads.GetThreads(request.Parameters), "enumerating threads", ct);
+					var model = new ListModel<ThreadInfo>(descriptor, threads);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/ClrThreads.cshtml", model);
+					return new Fragment(html, null, model.CountSummary);
+				}
+
 			default:
 				return new Fragment(null, NotWiredYet(descriptor), NotImplemented: true);
 		}
@@ -173,6 +181,12 @@ public static class DumpRoutes {
 					// The existing envelope, unchanged. DATA_CONTRACT.md §3.3's `state` block is not part
 					// of Phase 2; it lands with the cache-state indicator in 6.5.
 					return Results.Content(JsonFormatter.FormatHeapStatistics(stats), "application/json; charset=utf-8");
+				}
+
+			case "clrthreads": {
+					var threads = await queue.Enqueue(
+						(session, _) => session.Threads.GetThreads(request.Parameters), "enumerating threads", ct);
+					return Results.Content(JsonFormatter.FormatThreads(threads), "application/json; charset=utf-8");
 				}
 
 			default:
