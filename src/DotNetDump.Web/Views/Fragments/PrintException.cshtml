@@ -1,0 +1,58 @@
+@*
+    Exception list view (task 3.3). Copies DumpHeap.cshtml's shape exactly -- see that file's
+    doc comment for the four rules this repeats: no style=, the htmx contract as markup, no
+    conditionals beyond presence/absence, and formatting logic staying out of the template.
+
+    Columns mirror MarkdownFormatter.FormatThreadExceptions exactly, distinguishing between
+    in-flight exceptions on threads and heap-resident exceptions.
+*@
+@model ListModel<ThreadExceptionInfo>
+
+<div id="v-@Model.View.Name">
+    <table class="dn-table">
+        <thead>
+            <tr>
+                <th scope="col" class="dn-th">Thread</th>
+                <th scope="col" class="dn-th dn-th--mono">Address</th>
+                <th scope="col" class="dn-th">Type</th>
+                <th scope="col" class="dn-th">Message</th>
+            </tr>
+        </thead>
+        <tbody id="rows-@Model.View.Name">
+            @foreach (var item in Model.Result.Items)
+            {
+                @if (item.Exception is not null)
+                {
+                    var type = MiddleTruncated.From(item.Exception.TypeName);
+                    <tr class="dn-tr">
+                        <td class="dn-td">@Display.ThreadOrHeap(item.ManagedThreadId, item.OSThreadId, item.Source)</td>
+                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Exception.Address)</span></td>
+                        <td class="dn-td dn-td--type" title="@type.Full">
+                            <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
+                        </td>
+                        <td class="dn-td">@Display.OrNone(item.Exception.Message)</td>
+                    </tr>
+                }
+            }
+
+            @if (Model.Result.Items.Count == 0 || Model.Result.Items.All(i => i.Exception is null))
+            {
+                <tr>
+                    <td colspan="4" class="dn-empty">
+                        @* Per DESIGN_BRIEF.md §5: an unfiltered empty result means no exceptions are present,
+                           whereas a filtered one means the filter is too narrow. *@
+                        @if (Model.Result.TotalUnfiltered > 0)
+                        {
+                            <div class="dn-empty__title">No exceptions match the current filter.</div>
+                            <a class="dn-btn" href="/views/@Model.View.Name">Clear filters</a>
+                        }
+                        else
+                        {
+                            <div class="dn-empty__title">This dump has no exceptions to show.</div>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
