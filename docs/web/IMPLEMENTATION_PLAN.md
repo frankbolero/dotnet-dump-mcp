@@ -2,7 +2,7 @@
 
 Status: **in progress** — Phase 0 complete and accepted. Phase 1 delivered, with three deviations
 recorded below. Phase 2 complete, measured and tested; all three exit-criterion checks met, awaiting
-sign-off. Phase 3 in progress: 3.1 and 3.2 done, 3.5 drafted, 3.3 and 3.4 outstanding. Phases 4–7
+sign-off. Phase 3 in progress: 3.1, 3.2 and 3.3 done, 3.5 drafted, 3.4 outstanding. Phases 4–7
 outstanding.
 
 Eight phases. Phases 0, 1 and 2 run in parallel; the rest are sequential. Each phase has an exit
@@ -244,7 +244,7 @@ Depends on 1 and 2. **In progress.**
 | :--- | :--- | :--- |
 | 3.1 | ✅ | Convert the synced components into Razor views taking view models. "Structure and classes stay byte-identical" was not achievable — there are no classes to keep, see Phase 1 above — so the pattern is instead: extract to `wwwroot/css/dndump.css`, and **no `.cshtml` may carry a `style=` attribute**. Demonstrated on the data table, the highest-risk component. |
 | 3.2 | ✅ | App shell, navigation across the six view groups, dump header bar. Collapsible nav (pure-CSS checkbox), theme toggle (one inline script, needed to set `data-theme` before first paint), and per-view `Command`/`Description` on `ViewDescriptor` for all 25 views. `DumpInfoService` memoizes `SessionAnalyzer.GetInfo` behind one `Enqueue` so the header does not re-enter the queue per request. |
-| 3.3 | ⬜ | Every list view on the data table component. **Eight total, one done:** `dumpheap` ✅; `listobj`, `gchandles`, `clrthreads`, `threadstate`, `syncblk`, `printexception`, `clrmodules` outstanding. |
+| 3.3 | ✅ | Every list view on the data table component. All eight wired: `dumpheap` (3.1), `clrmodules`, `clrthreads`, `listobj`, `gchandles`, `syncblk`, `threadstate`, `printexception`. The last seven landed as five delegated branches (two Sonnet, proving the pattern generalizes; three Haiku, copy-and-adapt, partitioned as listobj alone / gchandles+syncblk / threadstate+printexception), each in its own worktree per the working agreement. Every merge but one was a trivial additive conflict in `DumpRoutes.cs`'s two switch statements — different agents' cases landing adjacent — resolved by keeping both sides. `ViewRoutingTests.UnwiredView` moved from `gchandles` to `info` once every list view was wired. |
 | 3.4 | ⬜ | Every detail view. **Seventeen, not the eleven this table used to say** — the original list was taken from [`DATA_CONTRACT.md` §3.1](DATA_CONTRACT.md)'s navigation grouping, which omits `dumpobj`, `gcroot`, `verifyobj`, `verifyheap`, `dumpstack`, `clrstack` and `eestack`. Full set: `info`, `eeheap`, `verifyheap`, `verifyobj`, `dumpobj`, `gcroot`, `dumpstack`, `clrstack`, `eestack`, `threadpool`, `dumpmodule`, `dumpassembly`, `dumpmt`, `dumpmd`, `dumpclass`, `name2ee`, `ip2md`. |
 | 3.5 | 🟡 | Resync procedure drafted as [`../../src/DotNetDump.Web/DESIGN_RESYNC.md`](../../src/DotNetDump.Web/DESIGN_RESYNC.md), written during 3.1 because 3.3/3.4 need the rules before they fan out. Final form once every view exists. |
 
@@ -298,6 +298,13 @@ met would be false.
 **Suite as of 3.2.** 679 passed / 0 failed / 40 skipped on each of `net8.0`, `net9.0`, `net10.0`;
 `dotnet format --verify-no-changes` clean. The two new skips are `WiredViewRoutingTests`, which need
 a dump — run with `DOTNETDUMP_TEST_DUMP=<path>`; both pass against the 9.6 GB core.
+
+**Unchanged at 3.3.** Still 679/0/40 on all three frameworks after wiring the remaining seven list
+views — the generic `ViewRoutingTests` (page-vs-fragment, catalog-vs-404) already exercise a newly
+wired view automatically, so no new tests were needed for that property. None of the delegated
+agents had `DOTNETDUMP_TEST_DUMP` available, so none of the seven were visually verified against
+real row data — that check is still outstanding and should happen before Phase 4 builds filtering
+on top of them.
 
 ### Carried forward from Phase 3
 
