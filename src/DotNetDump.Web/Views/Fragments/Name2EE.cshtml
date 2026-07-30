@@ -1,0 +1,53 @@
+@*
+    name2ee detail (task 3.4). Not the address-taking shape every other detail view gets --
+    DumpRoutes.RenderName2EEView/RenderName2EEJson build this directly from the descriptor and
+    result, bypassing BuildFragment/RenderJson entirely, because the route takes two literal path
+    segments (module, type) rather than the single optional {address} those switches dispatch on
+    (IMPLEMENTATION_PLAN.md Phase 3.4).
+
+    Head rows mirror MarkdownFormatter.FormatName2EE: Module, Type, MethodTable (as .dn-addr, the
+    same "not distinct from EEClass" treatment used everywhere else in this codebase -- EEClass
+    itself is never shown), and Method only when a method name was part of the lookup. The
+    Overloads table below appears only when Methods is non-empty, exactly like the Markdown
+    formatter's own conditional.
+
+    Same discipline as every other fragment: no style=, htmx id derived from Model.View.Name.
+*@
+@model DetailModel<Name2EEResult>
+
+<div id="v-@Model.View.Name">
+    <div class="dn-card">
+        <div class="dn-card__head">
+            <div class="dn-card__row"><span class="dn-card__label">Module</span><span class="dn-mono--strong">@Model.Data.ModuleName</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Type</span><span class="dn-mono--strong">@Model.Data.TypeName</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">MethodTable</span><span class="dn-addr">@Display.Address(Model.Data.MethodTable)</span></div>
+            @if (!string.IsNullOrEmpty(Model.Data.MethodName))
+            {
+                <div class="dn-card__row"><span class="dn-card__label">Method</span><span class="dn-mono">@Model.Data.MethodName</span></div>
+            }
+        </div>
+
+        @if (Model.Data.Methods.Count > 0)
+        {
+            <table class="dn-table">
+                <thead>
+                    <tr>
+                        <th scope="col" class="dn-th dn-th--mono">MethodDesc</th>
+                        <th scope="col" class="dn-th">Signature</th>
+                        <th scope="col" class="dn-th">Jitted</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var method in Model.Data.Methods)
+                    {
+                        <tr class="dn-tr">
+                            <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(method.MethodDesc)</span></td>
+                            <td class="dn-td">@method.Signature</td>
+                            <td class="dn-td">@method.IsJitted</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
