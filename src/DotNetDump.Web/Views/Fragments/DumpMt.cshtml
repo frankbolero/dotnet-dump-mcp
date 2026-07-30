@@ -1,0 +1,54 @@
+@*
+    A type's MethodTable detail (task 3.4). Follows the same card-based structure as DumpObj.cshtml:
+    identity header with address, type name, module, size info, and a flags row listing only the
+    true booleans. Interfaces listed only if present.
+
+    Same discipline as every other fragment: no style=, the htmx id derived from Model.View.Name,
+    no conditionals beyond presence/absence, and formatting logic staying out of the template.
+*@
+@model DetailModel<MethodTableInfo>
+
+<div id="v-@Model.View.Name">
+    <div class="dn-card">
+        <div class="dn-card__head">
+            <div class="dn-card__row"><span class="dn-card__label">MethodTable</span><span class="dn-addr">@Display.Address(Model.Data.MethodTable)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Type</span><span class="dn-mono--strong">@Model.Data.TypeName</span></div>
+            @if (!string.IsNullOrEmpty(Model.Data.ModuleName))
+            {
+                <div class="dn-card__row"><span class="dn-card__label">Module</span><span class="dn-mono">@Model.Data.ModuleName</span></div>
+            }
+            <div class="dn-card__row"><span class="dn-card__label">BaseSize</span><span class="dn-mono" title="@Display.Bytes((long)Model.Data.BaseSize)">@Display.Size((long)Model.Data.BaseSize)</span></div>
+            @if (Model.Data.ComponentSize > 0)
+            {
+                <div class="dn-card__row"><span class="dn-card__label">ComponentSize</span><span class="dn-mono">@Model.Data.ComponentSize bytes</span></div>
+            }
+            <div class="dn-card__row"><span class="dn-card__label">Method count</span><span class="dn-mono">@Display.Count(Model.Data.MethodCount)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Metadata token</span><span class="dn-mono">@Display.MetadataToken(Model.Data.MetadataToken)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Visibility</span><span class="dn-mono">@Model.Data.Visibility</span></div>
+            @{
+                var flags = new List<string>();
+                if (Model.Data.IsValueType) flags.Add("ValueType");
+                if (Model.Data.IsInterface) flags.Add("Interface");
+                if (Model.Data.IsAbstract) flags.Add("Abstract");
+                if (Model.Data.IsSealed) flags.Add("Sealed");
+                if (Model.Data.IsEnum) flags.Add("Enum");
+                if (Model.Data.IsArray) flags.Add("Array");
+                if (Model.Data.IsString) flags.Add("String");
+                if (Model.Data.IsFinalizable) flags.Add("Finalizable");
+                if (Model.Data.ContainsPointers) flags.Add("ContainsPointers");
+            }
+            @if (flags.Count > 0)
+            {
+                <div class="dn-card__row"><span class="dn-card__label">Flags</span><span class="dn-mono">@Display.JoinOrDash(flags)</span></div>
+            }
+            @if (!string.IsNullOrEmpty(Model.Data.BaseTypeName))
+            {
+                <div class="dn-card__row"><span class="dn-card__label">Base type</span><span class="dn-mono">@Model.Data.BaseTypeName</span></div>
+            }
+            @if (Model.Data.Interfaces.Count > 0)
+            {
+                <div class="dn-card__row"><span class="dn-card__label">Interfaces</span><span class="dn-mono">@Display.JoinOrDash(Model.Data.Interfaces)</span></div>
+            }
+        </div>
+    </div>
+</div>

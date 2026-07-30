@@ -234,6 +234,42 @@ public static class DumpRoutes {
 					return new Fragment(html, null, model.CountSummary);
 				}
 
+			case "dumpmt": {
+					if (!TryRequireAddress(address, descriptor, out ulong methodTableAddress, out var badAddress)) {
+						return new Fragment(null, badAddress);
+					}
+
+					var methodTableInfo = await queue.Enqueue(
+						(session, _) => session.Metadata.GetMethodTable(methodTableAddress), "reading MethodTable", ct);
+					var model = new DetailModel<MethodTableInfo>(descriptor, methodTableInfo);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/DumpMt.cshtml", model);
+					return new Fragment(html, null);
+				}
+
+			case "dumpmd": {
+					if (!TryRequireAddress(address, descriptor, out ulong methodDescAddress, out var badAddress)) {
+						return new Fragment(null, badAddress);
+					}
+
+					var methodDescInfo = await queue.Enqueue(
+						(session, _) => session.Metadata.GetMethodDesc(methodDescAddress), "reading MethodDesc", ct);
+					var model = new DetailModel<MethodDescInfo>(descriptor, methodDescInfo);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/DumpMd.cshtml", model);
+					return new Fragment(html, null);
+				}
+
+			case "ip2md": {
+					if (!TryRequireAddress(address, descriptor, out ulong instructionPointer, out var badAddress)) {
+						return new Fragment(null, badAddress);
+					}
+
+					var methodDescInfo = await queue.Enqueue(
+						(session, _) => session.Modules.GetMethodByIP(instructionPointer), "resolving instruction pointer", ct);
+					var model = new DetailModel<MethodDescInfo>(descriptor, methodDescInfo);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/DumpMd.cshtml", model);
+					return new Fragment(html, null);
+				}
+
 			default:
 				return new Fragment(null, NotWiredYet(descriptor), NotImplemented: true);
 		}
@@ -313,6 +349,36 @@ public static class DumpRoutes {
 					var blocks = await queue.Enqueue(
 						(session, _) => session.Heap.GetSyncBlocks(request.Parameters), "enumerating sync blocks", ct);
 					return Results.Content(JsonFormatter.FormatSyncBlocks(blocks), "application/json; charset=utf-8");
+				}
+
+			case "dumpmt": {
+					if (!TryRequireAddress(address, descriptor, out ulong methodTableAddress, out var badAddress)) {
+						return badAddress;
+					}
+
+					var methodTableInfo = await queue.Enqueue(
+						(session, _) => session.Metadata.GetMethodTable(methodTableAddress), "reading MethodTable", ct);
+					return Results.Content(JsonFormatter.FormatMethodTable(methodTableInfo), "application/json; charset=utf-8");
+				}
+
+			case "dumpmd": {
+					if (!TryRequireAddress(address, descriptor, out ulong methodDescAddress, out var badAddress)) {
+						return badAddress;
+					}
+
+					var methodDescInfo = await queue.Enqueue(
+						(session, _) => session.Metadata.GetMethodDesc(methodDescAddress), "reading MethodDesc", ct);
+					return Results.Content(JsonFormatter.FormatMethodDesc(methodDescInfo), "application/json; charset=utf-8");
+				}
+
+			case "ip2md": {
+					if (!TryRequireAddress(address, descriptor, out ulong instructionPointer, out var badAddress)) {
+						return badAddress;
+					}
+
+					var methodDescInfo = await queue.Enqueue(
+						(session, _) => session.Modules.GetMethodByIP(instructionPointer), "resolving instruction pointer", ct);
+					return Results.Content(JsonFormatter.FormatMethodDesc(methodDescInfo), "application/json; charset=utf-8");
 				}
 
 			default:
