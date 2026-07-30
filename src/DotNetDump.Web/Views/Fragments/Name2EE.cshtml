@@ -43,7 +43,7 @@
                         <tr class="dn-tr">
                             <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(method.MethodDesc)</span></td>
                             <td class="dn-td">@method.Signature</td>
-                            <td class="dn-td">@method.IsJitted</td>
+                            <td class="dn-td">@(method.IsJitted ? "yes" : "no")</td>
                         </tr>
                     }
                 </tbody>
