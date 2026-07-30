@@ -126,6 +126,16 @@ public static class Display {
 		managedThreadId.HasValue ? $"Thread {managedThreadId} ({ThreadId(osThreadId ?? 0)})" : "Heap";
 
 	/// <summary>
+	/// A stack frame's method, qualified by module when known -- the same
+	/// <c>{ModuleName}!{MethodName}</c> convention <c>MarkdownFormatter.FormatDetailedStacks</c>
+	/// uses, falling back to <c>(unknown)</c> when the DAC could not resolve a method name at all.
+	/// </summary>
+	public static string StackFrameMethod(string? moduleName, string? methodName) {
+		string method = methodName ?? "(unknown)";
+		return string.IsNullOrEmpty(moduleName) ? method : $"{moduleName}!{method}";
+	}
+
+	/// <summary>
 	/// An object field's byte offset as hex, or a dash when the analyzer could not place it
 	/// (<c>ObjectField.Offset == -1</c>) — the same convention
 	/// <c>MarkdownFormatter.FormatObjectDetails</c> already uses.

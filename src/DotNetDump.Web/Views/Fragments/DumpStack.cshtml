@@ -1,0 +1,76 @@
+@*
+    Every thread's native and managed stack in one pass (task 3.4). Bound to ListModel<T> like a
+    list view -- GetDetailedStacks was converted to PagedResult<T> in Phase 0.5, purely for
+    pagination -- but each *item* is a whole thread's stack, not a table row, so this does not force
+    DumpHeap.cshtml's flat dn-table. Instead: one dn-card per thread, stacked inside the same
+    #v-dumpstack/#rows-dumpstack ids a list view uses, so Phase 4's infinite scroll can append more
+    cards the same way it appends more rows elsewhere.
+
+    Card head fields (Managed ID, OS ID, State, Exception) and the frame table's IP/SP/Kind/Method
+    columns mirror MarkdownFormatter.FormatDetailedStacks exactly, including the "(unknown)" method
+    fallback and the "{ModuleName}!{MethodName}" composition -- see Display.StackFrameMethod.
+*@
+@model ListModel<ThreadStackInfo>
+
+<div id="v-@Model.View.Name">
+    <div class="dn-card-list" id="rows-@Model.View.Name">
+        @foreach (var stack in Model.Result.Items)
+        {
+            <div class="dn-card">
+                <div class="dn-card__head">
+                    <div class="dn-card__row"><span class="dn-card__label">Managed ID</span><span class="dn-mono">@Display.Count(stack.ManagedThreadId)</span></div>
+                    <div class="dn-card__row"><span class="dn-card__label">OS ID</span><span class="dn-addr">@Display.ThreadId(stack.OSThreadId)</span></div>
+                    <div class="dn-card__row"><span class="dn-card__label">State</span><span class="dn-mono">@Display.ThreadState(stack.IsAlive)</span></div>
+                    <div class="dn-card__row"><span class="dn-card__label">Exception</span><span class="dn-mono">@Display.OrNone(stack.ExceptionType)</span></div>
+                </div>
+                <table class="dn-table">
+                    <thead>
+                        <tr>
+                            <th scope="col" class="dn-th dn-th--mono">IP</th>
+                            <th scope="col" class="dn-th dn-th--mono">SP</th>
+                            <th scope="col" class="dn-th">Kind</th>
+                            <th scope="col" class="dn-th">Method</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var frame in stack.Frames)
+                        {
+                            <tr class="dn-tr">
+                                <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(frame.InstructionPointer)</span></td>
+                                <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(frame.StackPointer)</span></td>
+                                <td class="dn-td">@frame.FrameKind</td>
+                                <td class="dn-td dn-td--mono">@Display.StackFrameMethod(frame.ModuleName, frame.MethodName)</td>
+                            </tr>
+                        }
+
+                        @if (stack.Frames.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="4" class="dn-empty">
+                                    <div class="dn-empty__title">This thread has no frames to show.</div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (Model.Result.Items.Count == 0)
+        {
+            @* Per DESIGN_BRIEF.md §5: an unfiltered empty result means the dump has no thread
+               stacks to show, whereas a filtered one means the filter is too narrow. *@
+            <div class="dn-empty">
+                @if (Model.Result.TotalUnfiltered > 0)
+                {
+                    <div class="dn-empty__title">No thread stacks match the current filter.</div>
+                    <a class="dn-btn" href="/views/@Model.View.Name">Clear filters</a>
+                }
+                else
+                {
+                    <div class="dn-empty__title">This dump has no thread stacks to show.</div>
+                }
+            </div>
+        }
+    </div>
+</div>
