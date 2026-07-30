@@ -48,6 +48,21 @@ public static class DumpRoutes {
 
 		app.MapGet("/api/{view}/{address?}", (string view, string? address, HttpContext http, DumpInfoService info, IAnalysisQueue queue, CancellationToken ct) =>
 			RenderJson(http, info, queue, view, address, ct));
+
+		// 'name2ee' takes two independent strings (module, type), not one optional address, so
+		// {address?} above cannot carry it -- it structurally captures at most one trailing
+		// segment. A dedicated two-segment route sits alongside the generic ones instead:
+		// IMPLEMENTATION_PLAN.md's Phase 3.4 notes settle this as the shape, and reject the
+		// query-string alternative because ViewRequestBinder already binds ?module=/?type= to
+		// FilterSpec for every view, and name2ee honors no filters (FilterField.None), so those
+		// exact keys would 400 as unsupported before a handler ever ran. Registration order
+		// relative to {address?} does not matter: a request with two trailing segments can only
+		// match this template, and one with zero or one can only match {address?}'s.
+		app.MapGet("/views/name2ee/{module}/{type}", (string module, string type, HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer, CancellationToken ct) =>
+			RenderName2EEView(http, dump, info, queue, renderer, module, type, ct));
+
+		app.MapGet("/api/name2ee/{module}/{type}", (string module, string type, IAnalysisQueue queue, CancellationToken ct) =>
+			RenderName2EEJson(queue, module, type, ct));
 	}
 
 	/// <summary>
@@ -556,6 +571,53 @@ public static class DumpRoutes {
 			default:
 				return NotWiredYet(descriptor);
 		}
+	}
+
+	/// <summary>
+	/// The whole-page-vs-fragment branch for <c>name2ee</c>, mirroring <see cref="RenderView"/> and
+	/// <see cref="RenderShell"/> without going through <see cref="BuildFragment"/> -- that switch
+	/// dispatches on a single <c>view</c> name with an optional single <c>address</c>, which does
+	/// not fit two required path segments. <see cref="ViewCatalog.Find(string)"/>,
+	/// <see cref="IAnalysisQueue.Enqueue{T}"/>, <see cref="IFragmentRenderer.RenderAsync"/> and
+	/// <see cref="ShellModel"/> are still the same ones every other view uses.
+	/// </summary>
+	private static async Task<IResult> RenderName2EEView(
+		HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer,
+		string module, string type, CancellationToken ct) {
+
+		var descriptor = ViewCatalog.Find("name2ee")!;
+
+		if (WantsFragment(http)) {
+			string swap = await BuildName2EEFragment(http, queue, renderer, descriptor, module, type, ct);
+			return Html(swap);
+		}
+
+		// Started before the fragment is awaited, exactly as RenderShell does, so the memoized info
+		// call and this fragment's own Enqueue both sit on the analysis queue as early as possible.
+		var infoTask = info.GetAsync();
+		string body = await BuildName2EEFragment(http, queue, renderer, descriptor, module, type, ct);
+
+		string html = await renderer.RenderAsync(http, "/Views/Shell/Index.cshtml",
+			new ShellModel(dump.Path, await infoTask, descriptor, ViewCatalog.All, new HtmlString(body), CountSummary: null));
+
+		return Html(html);
+	}
+
+	/// <summary>The JSON mirror of <see cref="RenderName2EEView"/>, per SERVER.md &#0167;2.</summary>
+	private static async Task<IResult> RenderName2EEJson(IAnalysisQueue queue, string module, string type, CancellationToken ct) {
+		var result = await queue.Enqueue(
+			(session, _) => session.Modules.Name2EE(module, type), "looking up name2ee", ct);
+		return Results.Content(JsonFormatter.FormatName2EE(result), "application/json; charset=utf-8");
+	}
+
+	private static async Task<string> BuildName2EEFragment(
+		HttpContext http, IAnalysisQueue queue, IFragmentRenderer renderer, ViewDescriptor descriptor,
+		string module, string type, CancellationToken ct) {
+
+		var result = await queue.Enqueue(
+			(session, _) => session.Modules.Name2EE(module, type), "looking up name2ee", ct);
+		var model = new DetailModel<Name2EEResult>(descriptor, result);
+		return await renderer.RenderAsync(http, "/Views/Fragments/Name2EE.cshtml", model);
 	}
 
 	/// <summary>
