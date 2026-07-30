@@ -65,10 +65,14 @@ These are what keep step 4 rare. All are checkable mechanically.
 Recorded so a resync does not "restore" them.
 
 * **Fonts are local.** See above. Non-negotiable.
-* **Light theme is CSS, not JavaScript.** The design page toggles `state.theme` and recomputes
-  inline styles. Here both palettes are CSS custom properties, defaulting to `prefers-color-scheme`
-  with a `data-theme` attribute override, which is what `DESIGN_BRIEF.md` §6 asked for and what
-  works without script.
+* **Light theme is CSS, not JavaScript, and dark is the default.** The design page toggles
+  `state.theme` and recomputes inline styles; here both palettes are CSS custom properties.
+  `DESIGN_BRIEF.md` §6 asked for `prefers-color-scheme` with a `data-theme` override, and that is
+  deliberately **not** what this does. Nocturne is dark-first — its readme opens "a quiet, compact
+  dark interface", its guidance is written throughout in terms of a dark ground, and its own
+  `Shell.dc.html` boots dark with a manual toggle. Following the OS preference put a developer on a
+  light machine in front of the face the product was not composed in, and it read as wrong without
+  being nameable. Dark is now the default and light is opt-in via `data-theme="light"`.
 * **Middle truncation is responsive.** `Shell.dc.html` truncates type names at a fixed 38/14
   character split in JavaScript, which cuts short names on a wide screen and long ones anyway on a
   narrow one. Here `MiddleTruncated` splits off a fixed-length tail and CSS flexes the head, so the

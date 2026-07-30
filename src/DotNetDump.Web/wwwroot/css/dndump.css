@@ -49,66 +49,29 @@
 /* ---------------------------------------------------------------------------
  * Tokens.
  *
- * Light is the base and dark arrives through prefers-color-scheme, with a
- * data-theme attribute overriding both in either direction (DESIGN_BRIEF.md §6).
- * The :not([data-theme="light"]) guard is what makes the override work downwards:
- * without it, a user who has asked for light on a dark-preferring OS would still
- * get dark, because the media query would out-specify the attribute.
+ * DARK IS THE DEFAULT, and this is a deliberate departure from DESIGN_BRIEF.md
+ * §6, which asked for prefers-color-scheme with a data-theme override.
+ *
+ * Nocturne is a dark-first system, not a system with two equal faces. Its readme
+ * opens "a quiet, compact dark interface"; its guidance is written in terms of a
+ * dark ground throughout ("on this dark ground use the dark steps 700-900 for
+ * tinted fills"); and its own Shell.dc.html boots with theme: 'dark' and offers a
+ * manual toggle. The light palette is a real, designed counterpart, but it is the
+ * secondary one. Honouring prefers-color-scheme means a developer on a light OS
+ * meets the product in the face it was not composed in, which is exactly what it
+ * looked like when this file did that.
+ *
+ * So: dark unless asked otherwise, and light is a deliberate choice the user makes
+ * and the theme toggle persists. Reverting to OS-following is a two-line change —
+ * move the light block into a @media (prefers-color-scheme: light) guarded by
+ * :not([data-theme='dark']).
  * ------------------------------------------------------------------------- */
 
-:root {
-	color-scheme: light dark;
-
-	/* themeTokens('light') — design-sync/Shell.dc.html */
-	--dn-bg: #f7f8fc;
-	--dn-surface: #ffffff;
-	--dn-surface-alt: #eef0f9;
-	--dn-border: #d7dae8;
-	--dn-border-strong: #b7bbd2;
-	--dn-text: #22232d;
-	--dn-text-muted: #5b5f74;
-	--dn-text-faint: #8a8ea3;
-	--dn-accent: #6e63b0;
-	--dn-accent-soft: #efedfb;
-	--dn-accent-text: #5d5294;
-	--dn-warn: #a3762a;
-	--dn-warn-soft: #faf1de;
-	--dn-warn-text: #7a5820;
-	--dn-danger: #b0453f;
-	--dn-danger-soft: #fbeceb;
-	--dn-ok: #3f8a55;
-	--dn-ok-soft: #eaf6ee;
-
-	--dn-font-body: 'Inter', system-ui, -apple-system, sans-serif;
-	--dn-font-heading: 'Inter', system-ui, -apple-system, sans-serif;
-	--dn-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-/* themeTokens('dark') — design-sync/Shell.dc.html */
-@media (prefers-color-scheme: dark) {
-	:root:not([data-theme='light']) {
-		--dn-bg: #161826;
-		--dn-surface: #232532;
-		--dn-surface-alt: #2c2f3e;
-		--dn-border: #3f424d;
-		--dn-border-strong: #595d6c;
-		--dn-text: #e9e9ed;
-		--dn-text-muted: #9397ab;
-		--dn-text-faint: #75798c;
-		--dn-accent: #9184d9;
-		--dn-accent-soft: rgba(145, 132, 217, 0.14);
-		--dn-accent-text: #d2cefd;
-		--dn-warn: #caa053;
-		--dn-warn-soft: rgba(202, 160, 83, 0.14);
-		--dn-warn-text: #e8cd94;
-		--dn-danger: #d16a6a;
-		--dn-danger-soft: rgba(209, 106, 106, 0.14);
-		--dn-ok: #6fae7f;
-		--dn-ok-soft: rgba(111, 174, 127, 0.14);
-	}
-}
-
+:root,
 :root[data-theme='dark'] {
+	color-scheme: dark;
+
+	/* themeTokens('dark') — design-sync/Shell.dc.html */
 	--dn-bg: #161826;
 	--dn-surface: #232532;
 	--dn-surface-alt: #2c2f3e;
@@ -127,6 +90,34 @@
 	--dn-danger-soft: rgba(209, 106, 106, 0.14);
 	--dn-ok: #6fae7f;
 	--dn-ok-soft: rgba(111, 174, 127, 0.14);
+
+	--dn-font-body: 'Inter', system-ui, -apple-system, sans-serif;
+	--dn-font-heading: 'Inter', system-ui, -apple-system, sans-serif;
+	--dn-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* themeTokens('light') — design-sync/Shell.dc.html. Opt-in only. */
+:root[data-theme='light'] {
+	color-scheme: light;
+
+	--dn-bg: #f7f8fc;
+	--dn-surface: #ffffff;
+	--dn-surface-alt: #eef0f9;
+	--dn-border: #d7dae8;
+	--dn-border-strong: #b7bbd2;
+	--dn-text: #22232d;
+	--dn-text-muted: #5b5f74;
+	--dn-text-faint: #8a8ea3;
+	--dn-accent: #6e63b0;
+	--dn-accent-soft: #efedfb;
+	--dn-accent-text: #5d5294;
+	--dn-warn: #a3762a;
+	--dn-warn-soft: #faf1de;
+	--dn-warn-text: #7a5820;
+	--dn-danger: #b0453f;
+	--dn-danger-soft: #fbeceb;
+	--dn-ok: #3f8a55;
+	--dn-ok-soft: #eaf6ee;
 }
 
 /* ---------------------------------------------------------------------------
