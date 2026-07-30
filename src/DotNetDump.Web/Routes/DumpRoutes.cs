@@ -167,6 +167,22 @@ public static class DumpRoutes {
 					return new Fragment(html, null, model.CountSummary);
 				}
 
+			case "threadstate": {
+					var states = await queue.Enqueue(
+						(session, _) => session.Threads.GetThreadStates(request.Parameters), "enumerating thread states", ct);
+					var model = new ListModel<ThreadStateInfo>(descriptor, states);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/ThreadState.cshtml", model);
+					return new Fragment(html, null, model.CountSummary);
+				}
+
+			case "printexception": {
+					var exceptions = await queue.Enqueue(
+						(session, _) => session.Threads.GetThreadExceptions(request.Parameters), "finding exceptions", ct);
+					var model = new ListModel<ThreadExceptionInfo>(descriptor, exceptions);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/PrintException.cshtml", model);
+					return new Fragment(html, null, model.CountSummary);
+				}
+
 			default:
 				return new Fragment(null, NotWiredYet(descriptor), NotImplemented: true);
 		}
@@ -201,6 +217,18 @@ public static class DumpRoutes {
 					var threads = await queue.Enqueue(
 						(session, _) => session.Threads.GetThreads(request.Parameters), "enumerating threads", ct);
 					return Results.Content(JsonFormatter.FormatThreads(threads), "application/json; charset=utf-8");
+				}
+
+			case "threadstate": {
+					var states = await queue.Enqueue(
+						(session, _) => session.Threads.GetThreadStates(request.Parameters), "enumerating thread states", ct);
+					return Results.Content(JsonFormatter.FormatThreadStates(states), "application/json; charset=utf-8");
+				}
+
+			case "printexception": {
+					var exceptions = await queue.Enqueue(
+						(session, _) => session.Threads.GetThreadExceptions(request.Parameters), "finding exceptions", ct);
+					return Results.Content(JsonFormatter.FormatThreadExceptions(exceptions), "application/json; charset=utf-8");
 				}
 
 			default:
