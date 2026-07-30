@@ -493,3 +493,6 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 GitVersion_Log.txt
+
+# Agent worktrees created by the Claude Code Agent tool.
+.claude/worktrees/
