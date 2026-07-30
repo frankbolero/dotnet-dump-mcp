@@ -1,7 +1,7 @@
 # Implementation plan
 
-Status: **in progress** — Phase 0 complete and accepted. Phase 2 code complete and measured, exit
-criterion partially met (serialization test outstanding). Phases 1, 3–7 outstanding.
+Status: **in progress** — Phase 0 complete and accepted. Phase 2 complete, measured and tested; all
+three exit-criterion checks met, awaiting sign-off. Phases 1, 3–7 outstanding.
 
 Eight phases. Phases 0, 1 and 2 run in parallel; the rest are sequential. Each phase has an exit
 criterion that is a demonstrable fact, not a feeling, and the phases that could invalidate later work
@@ -171,15 +171,31 @@ The 76 ms warm first-render, against 0.6 ms steady state, is JIT plus first-touc
 pipeline and the cache deserializer. That is precisely the cost 6.1's startup warm exists to move
 off the user's first request, and it is now a measured 76 ms rather than a guess.
 
-**Exit criterion.** ⚠️ **Partially met as of 2026-07-30 — the serialization test is outstanding.**
+**Exit criterion.** ✅ **All three met 2026-07-30. Awaiting sign-off.**
 
 | Check | Result |
 | :--- | :--- |
 | `dndump use X && dndump serve` shows real heap statistics | ✅ Verified against the 9.0 GiB core through both `--dump` and the `.dndump/session.json` path; `GET /` renders 1,976 type rows, and `/api/dumpheap?type=Http` reports `total: 172, totalUnfiltered: 1976` — the same 172 Phase 0 measured |
-| `curl -H 'Host: evil.example' http://127.0.0.1:5111/` is rejected | ✅ `400`. Also rejected: a loopback name on the wrong port, `localhost` with no port, and an absent `Host`. `localhost:<port>` is accepted |
-| Two concurrent requests are provably serialized (test, not inspection) | ❌ **Outstanding.** The queue is written and manually exercised, but the test that proves serialization does not exist yet, and this criterion explicitly does not accept inspection |
+| `curl -H 'Host: evil.example' http://127.0.0.1:5111/` is rejected | ✅ `400`, and covered by `WebSecurityTests` against a real Kestrel socket. Also rejected: a loopback name on the wrong port, `localhost` with no port, an absent `Host`, `127.0.0.1.evil.example`, and `localtest.me` (a real hostname resolving to 127.0.0.1 — rebinding without the attacker controlling DNS at request time) |
+| Two concurrent requests are provably serialized (test, not inspection) | ✅ `AnalysisQueueTests.ConcurrentSubmissions_NeverOverlapOnTheWorker`: 24 submitters released from a common start line, proven twice over — an occupancy counter whose peak must equal 1, and recorded enter/exit intervals that must not intersect after sorting. Mutation-verified: replacing `item.Run` with `ThreadPool.QueueUserWorkItem` fails 9 of 18 tests including this one |
 
-Phase 2 is not accepted until that test exists and passes.
+**Test suite.** 120 tests added across four suites, **669 passed / 0 failed / 38 skipped** on each of `net8.0`, `net9.0`, `net10.0` (the 38 skips are the pre-existing sample-dump integration tests). `dotnet format --verify-no-changes` clean. No agent modified a line of implementation — the whole diff since the measurement commit is four new test files.
+
+| Suite | Tests | Notes |
+| :--- | ---: | :--- |
+| `AnalysisQueueTests` | 18 | Serialization, FIFO, thread affinity, cancellation, re-entrancy, failure isolation, shutdown, depth |
+| `WebSecurityTests` (+ decision table, + binding env) | 52 | All eight controls mutation-verified able to fail |
+| `ViewRequestBinderTests` | 46 | Query-string contract and honored-field matrix |
+| `HtmxIntegrityTests` | 4 | SRI hash recomputed from the vendored file |
+
+Two tests are honest about being weaker than they look, and say so in their own doc comments rather than reading as coverage they do not provide:
+
+* **`HostHeader_Absent_IsRejected` does not exercise our middleware.** Kestrel rejects an absent `Host` with its own `400` before `LoopbackHostMiddleware` runs, so it stays green even with `IsLoopbackHost` replaced by `return true`. It is a valid end-to-end property; the middleware's own absent-`Host` branch is covered by `LoopbackHostDecisionTests`, which does go red under that mutation.
+* **`AbandonedJobThatThrows_ProducesNoUnobservedTaskException` is GC- and finalizer-dependent.** It cannot fail spuriously — only an exception carrying that run's unique sentinel is counted — but it can pass spuriously if the faulted task is not finalized inside the collection loop. Mutation-verified to fail when the `OnlyOnFaulted` continuation is deleted from `AwaitAbandonable`.
+
+The environment-clearing in `DumpWebHost.Build` needed a test of its own: deleting it leaves every address-inspecting test green, because the explicit `kestrel.Listen` overrides `urls` regardless. That is what makes it a genuine second lock and what made it invisible. `Build_ClearsTheBindingEnvironmentVariables` observes the lock rather than the door, and was itself mutation-verified.
+
+**Known gaps, deliberate.** No IPv6 non-loopback reachability assertion (IPv4 only). No coverage of `/views/{view}/rows`, `/trees/{tree}/{id?}` or `/status/{jobId}` — not implemented at this phase. `Dispose`'s 10-second `ShutdownGrace` timeout path is untested, since exercising it would put a 10-second stall in the suite.
 
 ## Phase 3 — Wire the design in
 
