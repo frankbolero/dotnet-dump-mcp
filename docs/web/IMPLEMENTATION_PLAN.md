@@ -1,6 +1,7 @@
 # Implementation plan
 
-Status: **in progress** — Phase 0 complete and accepted; Phases 1–7 outstanding.
+Status: **in progress** — Phase 0 complete and accepted. Phase 2 code complete and measured, exit
+criterion partially met (serialization test outstanding). Phases 1, 3–7 outstanding.
 
 Eight phases. Phases 0, 1 and 2 run in parallel; the rest are sequential. Each phase has an exit
 criterion that is a demonstrable fact, not a feeling, and the phases that could invalidate later work
@@ -121,13 +122,64 @@ breaking the layout or hiding the distinguishing tail of the name.
 | 2.6 | `ViewRequestBinder`: query string → `(FilterSpec, QueryParameters)`, with clamping and unsupported-field rejection. |
 | 2.7 | One route end to end — `GET /views/dumpheap` — in unstyled placeholder markup, plus `GET /api/dumpheap` through the existing `JsonFormatter`. |
 
-**Measurement (gates Phase 6).** Time `serve` startup to first byte on a cold cache and a warm one,
-and time a single cached `dumpheap` render. This is the baseline every Phase 6 target is measured
-against.
+**Measurement (gates Phase 6).** ✅ **Taken 2026-07-30. Verdict: every Phase 6 target is already met
+by the naive implementation. 6.4's cache-hit fast path is not needed for speed.** Reproduce with
+[`../../scripts/bench-serve.sh`](../../scripts/bench-serve.sh).
 
-**Exit criterion.** `dndump use X && dndump serve` opens a browser showing real heap statistics from
-a real dump. Two concurrent requests are provably serialized through the queue (test, not
-inspection). `curl -H 'Host: evil.example' http://127.0.0.1:5111/` is rejected.
+Same dump as Phase 0 (9.0 GiB core, 1,976 heap-stat rows), Release `net9.0`, isolated
+`DNDUMP_CACHE`, medians of 15, `--no-warm` throughout so the numbers describe the request path
+rather than 6.1's background warm.
+
+| | Cold cache | Warm cache |
+| :--- | ---: | ---: |
+| Process launch → listening | 1081.9 ms | 1063.9 ms |
+| Process launch → first byte of `GET /` | 3316.8 ms | 1139.9 ms |
+| **Implied cost of the step itself** | **2234.9 ms** (the walk) | **76.0 ms** (first render) |
+
+Against a process that is already up and warm:
+
+| Request | Median |
+| :--- | ---: |
+| `GET /views/dumpheap` | 0.6 ms |
+| `GET /views/dumpheap?type=Http` | 0.8 ms |
+| `GET /views/dumpheap?type=Http&sort=count&order=asc` | 0.7 ms |
+| `GET /api/dumpheap` | 0.6 ms |
+| `GET /health` — the HTTP floor | 0.4 ms |
+
+Four things follow, and they change what Phase 6 is for:
+
+* **The §4.3 targets are met with ~70× of headroom.** "Cache-hit filter/sort/page < 50 ms" is
+  0.7 ms. Subtracting the 0.4 ms `/health` floor leaves ~0.2–0.4 ms of actual analysis plus
+  fragment rendering, so most of the number is localhost round trip. The **decision point** below
+  ("if cache-hit filter/sort exceeds ~200 ms the bottleneck is fragment rendering") is decisively
+  not triggered, and the tier-2 object index stays off the table.
+* **Filtering and sorting are free again, in-process this time.** Filtered costs 0.2 ms more than
+  unfiltered and filtered-plus-sorted costs less than filtered — i.e. the difference is inside the
+  noise. This is the in-process confirmation Phase 0 said it could not give at CLI granularity.
+* **6.4's cache-hit fast path is no longer a performance task.** Serving a cached result off the
+  request thread cannot improve on 0.6 ms. Its remaining value is that a cache hit should not queue
+  behind a cold walk — a *latency-under-contention* property, not a throughput one. That is worth
+  keeping, but it should be built and justified as such, and it is no longer urgent.
+* **Startup is dominated by the host, not the dump.** Listening at ~1.07 s is the same cold and
+  warm, so it is not the walk and not the cache; Phase 0 measured ~190 ms for .NET startup plus
+  dump open in the CLI, which leaves roughly 0.9 s of ASP.NET Core host construction (MVC, the
+  Razor view engine, DI). If startup ever needs to come down, that is where it is, and
+  `AddMvcCore().AddRazorViewEngine()` in place of `AddControllersWithViews()` is the first thing to
+  try. Not urgent: it is paid once per `serve`, not once per request.
+
+The 76 ms warm first-render, against 0.6 ms steady state, is JIT plus first-touch of the Razor
+pipeline and the cache deserializer. That is precisely the cost 6.1's startup warm exists to move
+off the user's first request, and it is now a measured 76 ms rather than a guess.
+
+**Exit criterion.** ⚠️ **Partially met as of 2026-07-30 — the serialization test is outstanding.**
+
+| Check | Result |
+| :--- | :--- |
+| `dndump use X && dndump serve` shows real heap statistics | ✅ Verified against the 9.0 GiB core through both `--dump` and the `.dndump/session.json` path; `GET /` renders 1,976 type rows, and `/api/dumpheap?type=Http` reports `total: 172, totalUnfiltered: 1976` — the same 172 Phase 0 measured |
+| `curl -H 'Host: evil.example' http://127.0.0.1:5111/` is rejected | ✅ `400`. Also rejected: a loopback name on the wrong port, `localhost` with no port, and an absent `Host`. `localhost:<port>` is accepted |
+| Two concurrent requests are provably serialized (test, not inspection) | ❌ **Outstanding.** The queue is written and manually exercised, but the test that proves serialization does not exist yet, and this criterion explicitly does not accept inspection |
+
+Phase 2 is not accepted until that test exists and passes.
 
 ## Phase 3 — Wire the design in
 
