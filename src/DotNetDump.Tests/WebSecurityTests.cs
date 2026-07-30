@@ -175,6 +175,12 @@ public sealed class WebSecurityTests(LoopbackServerFixture server) {
 	public async Task HostHeader_Absent_IsRejected() {
 		// HttpClient will not send a request without a Host header, so this has to go out over a raw
 		// socket. HTTP/1.1 requires the header; a malformed request is not grounds to relax the check.
+		//
+		// Read this as an end-to-end property, not as coverage of our middleware: Kestrel rejects an
+		// absent Host with its own 400 before LoopbackHostMiddleware ever runs, so this test stays
+		// green even if IsLoopbackHost is replaced with `return true`. The middleware's own
+		// absent-Host branch is covered by LoopbackHostDecisionTests, which does go red under that
+		// mutation. Both are worth having; only one of them is about our code.
 		var response = await Send(RawRequest("GET", "/health", host: null));
 		Assert.Equal(400, response.StatusCode);
 	}
@@ -454,6 +460,52 @@ public sealed class WebBindingEnvironmentTests {
 
 			Environment.SetEnvironmentVariable("ASPNETCORE_URLS", savedUrls);
 			Environment.SetEnvironmentVariable("ASPNETCORE_HTTP_PORTS", savedPorts);
+		}
+	}
+
+	/// <summary>
+	/// That <see cref="DumpWebHost.Build"/> actually clears the binding variables.
+	/// </summary>
+	/// <remarks>
+	/// This observes the lock rather than the door, and it exists because the two tests above cannot.
+	/// Deleting the clearing loop outright leaves them green: the explicit <c>kestrel.Listen</c> call
+	/// overrides <c>urls</c> on its own, so the addresses come out loopback either way. That is
+	/// exactly what makes the clearing a genuine second lock — and exactly what makes it invisible to
+	/// any test that only inspects the resulting addresses. Asserting the variables are gone is the
+	/// only way the second lock's removal shows up as a failure rather than as nothing at all.
+	/// </remarks>
+	[Fact]
+	public async Task Build_ClearsTheBindingEnvironmentVariables() {
+		string[] variables = ["ASPNETCORE_URLS", "ASPNETCORE_HTTP_PORTS", "ASPNETCORE_HTTPS_PORTS", "DOTNET_URLS"];
+		var saved = variables.ToDictionary(name => name, Environment.GetEnvironmentVariable);
+		WebApplication? app = null;
+
+		try {
+			Environment.SetEnvironmentVariable("ASPNETCORE_URLS", "http://0.0.0.0:1234");
+			Environment.SetEnvironmentVariable("ASPNETCORE_HTTP_PORTS", "1234");
+			Environment.SetEnvironmentVariable("ASPNETCORE_HTTPS_PORTS", "1235");
+			Environment.SetEnvironmentVariable("DOTNET_URLS", "http://0.0.0.0:1236");
+
+			// Never started: the clearing happens in Build, before the builder reads configuration,
+			// and binding a socket would only add a way for this test to fail for another reason.
+			app = DumpWebHost.Build(new DumpWebHostOptions {
+				DumpPath = "(test)",
+				Context = new NoDumpContext(),
+				Cache = new MemoryAnalysisCache(),
+				Port = 0,
+			});
+
+			foreach (string variable in variables) {
+				Assert.Null(Environment.GetEnvironmentVariable(variable));
+			}
+		} finally {
+			if (app is not null) {
+				await app.DisposeAsync();
+			}
+
+			foreach (var (name, value) in saved) {
+				Environment.SetEnvironmentVariable(name, value);
+			}
 		}
 	}
 
