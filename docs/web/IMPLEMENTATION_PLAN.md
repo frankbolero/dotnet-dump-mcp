@@ -248,12 +248,40 @@ Depends on 1 and 2. **In progress.**
 | 3.4 | ⬜ | Every detail view. **Seventeen, not the eleven this table used to say** — the original list was taken from [`DATA_CONTRACT.md` §3.1](DATA_CONTRACT.md)'s navigation grouping, which omits `dumpobj`, `gcroot`, `verifyobj`, `verifyheap`, `dumpstack`, `clrstack` and `eestack`. Full set: `info`, `eeheap`, `verifyheap`, `verifyobj`, `dumpobj`, `gcroot`, `dumpstack`, `clrstack`, `eestack`, `threadpool`, `dumpmodule`, `dumpassembly`, `dumpmt`, `dumpmd`, `dumpclass`, `name2ee`, `ip2md`. |
 | 3.5 | 🟡 | Resync procedure drafted as [`../../src/DotNetDump.Web/DESIGN_RESYNC.md`](../../src/DotNetDump.Web/DESIGN_RESYNC.md), written during 3.1 because 3.3/3.4 need the rules before they fan out. Final form once every view exists. |
 
-**Blocking 3.4: seven detail views take an address argument and the routing has nowhere to put it.**
-`dumpobj`, `gcroot`, `verifyobj`, `dumpmt`, `dumpmd`, `dumpclass` and `dumpmodule` all need a target
-— `/views/dumpobj` alone is meaningless. Whether that is `?address=…` or `/views/{view}/{address}`
-is one decision for all seven, and it interacts with [`DATA_CONTRACT.md` §3.2](DATA_CONTRACT.md)'s
-rule that the query string *is* the view state. Settle it before 3.4 fans out. 3.3 has no such
-question and can proceed independently.
+**3.4's address-argument routing — decided.** `/views/{view}/{address?}`, an optional trailing route
+segment, not a query parameter; `/api/{view}/{address?}` mirrors it for JSON parity (`SERVER.md`
+§2). Three reasons: the trees in [`DATA_CONTRACT.md` §4.3/§4.5](DATA_CONTRACT.md) already route
+addresses this way (`gcroot/{address}`, `object/{address}`), and a second convention for the same
+kind of value would be its own bug; §3.2's "the query string *is* the view state" is a rule about
+*list*-view filter/sort/page state composing under `hx-include`, not about a detail view's identity
+— an address is not a filter dimension alongside `sort` and `limit`, it names which record the page
+*is*; and it leaves `ViewRequestBinder` untouched, since neither `FilterSpec` nor `QueryParameters`
+apply to a single-record view. The route and handler plumbing for the optional segment lands as
+shared-file setup immediately before 3.4 fans out, per the working agreement below — not before,
+since nothing consumes it yet and an unused code path is its own kind of bug.
+
+**Correction to the count: eight views need it, not seven, and one needs a different shape entirely.**
+The original list of seven missed `dumpassembly` and `ip2md` — both take a single hex address exactly
+like the other six (`ModuleAnalyzer.GetAssemblyDetails(address)`, `ModuleAnalyzer.GetMethodByIP(address)`).
+The address route covers eight: `dumpobj`, `verifyobj`, `dumpmt`, `dumpmd`, `dumpclass`, `dumpmodule`,
+`dumpassembly`, `ip2md`. `gcroot` also takes an address but is out of scope for 3.4 — it is a tree
+(5.3) with its own routed shape already in §4.3. `name2ee` takes two independent strings
+(`<module> <type>`), not an address, and needs its own shape when 3.4 reaches it; this decision does
+not cover it.
+
+**3.3's `listobj` — no separate walk-time scope in the web UI, deliberately.**
+`HeapAnalyzer.GetObjects` takes a `typeFilter` that narrows the walk itself and sits in the cache
+key, distinct from `parameters.Filter`'s post-walk filter — the distinction 0.4 protects for the
+CLI's `--filter` grammar precisely so `--type` is not aliased into it. The web contract in §3.2 has
+exactly one `type` parameter, shared across every list view and mapped to `FilterSpec.TypeName`.
+Rather than inventing a second `type`-shaped control for `listobj` alone, the web view passes
+`typeFilter: null` and always does the full walk, letting `type` filter post-walk like everywhere
+else. That trades away the walk-time pruning that makes a first-ever `listobj?type=Http` cheap on a
+huge heap; it is deferred, not silently dropped, because Phase 4's 10.2M-object exit criterion is
+exactly where it would start to matter. If the full walk proves intolerable there, that is a
+Phase 4/6-style decision point, taken with a real measurement, not a 3.3 one.
+
+3.3 has no routing question and is proceeding independently of the above.
 
 **Exit criterion.** All 25 commands are reachable and render correctly styled output. Re-running
 `/design-sync` after a purely visual change in Claude Design requires no C# edits — if it does, 3.1
