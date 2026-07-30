@@ -31,8 +31,12 @@ namespace DotNetDump.Tests;
 /// </remarks>
 [Collection(WebSecurityCollection.Name)]
 public sealed class ViewRoutingTests(LoopbackServerFixture server) {
-	/// <summary>A catalog view with no handler yet, so nothing here reaches an analyzer.</summary>
-	private const string UnwiredView = "gchandles";
+	/// <summary>
+	/// A catalog view with no handler yet, so nothing here reaches an analyzer. Every list view is
+	/// now wired (task 3.3), so this points at a still-unwired detail view instead; move it again
+	/// once 3.4 wires <c>info</c>.
+	/// </summary>
+	private const string UnwiredView = "info";
 
 	private async Task<(HttpStatusCode Status, string Body)> Send(string path, params (string Name, string Value)[] headers) {
 		using var client = new HttpClient();

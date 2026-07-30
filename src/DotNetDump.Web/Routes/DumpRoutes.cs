@@ -151,6 +151,14 @@ public static class DumpRoutes {
 					return new Fragment(html, null, model.CountSummary);
 				}
 
+			case "gchandles": {
+					var handles = await queue.Enqueue(
+						(session, _) => session.Heap.GetGCHandles(request.Parameters), "enumerating GC handles", ct);
+					var model = new ListModel<GCHandleInfo>(descriptor, handles);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/GCHandles.cshtml", model);
+					return new Fragment(html, null, model.CountSummary);
+				}
+
 			case "clrmodules": {
 					var modules = await queue.Enqueue(
 						(session, _) => session.Modules.GetModules(request.Parameters), "listing modules", ct);
@@ -191,6 +199,14 @@ public static class DumpRoutes {
 					return new Fragment(html, null, model.CountSummary);
 				}
 
+			case "syncblk": {
+					var blocks = await queue.Enqueue(
+						(session, _) => session.Heap.GetSyncBlocks(request.Parameters), "enumerating sync blocks", ct);
+					var model = new ListModel<SyncBlockInfo>(descriptor, blocks);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/SyncBlk.cshtml", model);
+					return new Fragment(html, null, model.CountSummary);
+				}
+
 			default:
 				return new Fragment(null, NotWiredYet(descriptor), NotImplemented: true);
 		}
@@ -213,6 +229,12 @@ public static class DumpRoutes {
 					// The existing envelope, unchanged. DATA_CONTRACT.md §3.3's `state` block is not part
 					// of Phase 2; it lands with the cache-state indicator in 6.5.
 					return Results.Content(JsonFormatter.FormatHeapStatistics(stats), "application/json; charset=utf-8");
+				}
+
+			case "gchandles": {
+					var handles = await queue.Enqueue(
+						(session, _) => session.Heap.GetGCHandles(request.Parameters), "enumerating GC handles", ct);
+					return Results.Content(JsonFormatter.FormatGCHandles(handles), "application/json; charset=utf-8");
 				}
 
 			case "clrmodules": {
@@ -243,6 +265,12 @@ public static class DumpRoutes {
 					var exceptions = await queue.Enqueue(
 						(session, _) => session.Threads.GetThreadExceptions(request.Parameters), "finding exceptions", ct);
 					return Results.Content(JsonFormatter.FormatThreadExceptions(exceptions), "application/json; charset=utf-8");
+				}
+
+			case "syncblk": {
+					var blocks = await queue.Enqueue(
+						(session, _) => session.Heap.GetSyncBlocks(request.Parameters), "enumerating sync blocks", ct);
+					return Results.Content(JsonFormatter.FormatSyncBlocks(blocks), "application/json; charset=utf-8");
 				}
 
 			default:
