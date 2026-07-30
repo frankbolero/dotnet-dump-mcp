@@ -100,4 +100,31 @@ public static class Display {
 	/// fallback <c>MarkdownFormatter.FormatThreads</c> uses for a thread with no exception in flight.
 	/// </summary>
 	public static string OrNone(string? value) => value ?? "(none)";
+
+	/// <summary>
+	/// Lock count rendered as a number, or the literal <c>unknown</c> when null. Per the comment
+	/// on <c>ThreadStateInfo.LockCount</c>, a null means the runtime did not supply one, not that
+	/// the count is zero — the DAC's "no data" sentinel must not be presented as a count.
+	/// </summary>
+	public static string LockCountOrUnknown(uint? value) => value.HasValue ? Count((long)value.Value) : "unknown";
+
+	/// <summary>
+	/// A list of strings joined with ", ", or a dash when empty. Used for rendering StateFlags
+	/// in thread state views where an empty list is more readable as a dash than a blank cell.
+	/// </summary>
+	public static string JoinOrDash(IEnumerable<string> values) =>
+		values.Any() ? string.Join(", ", values) : "-";
+
+	/// <summary>
+	/// Renders the owning thread of an exception, or "Heap" if it is heap-resident.
+	/// Combines managed and OS thread ids when present, using the convention of the CLI output.
+	/// </summary>
+	public static string ThreadOrHeap(int? managedThreadId, uint? osThreadId, DotNetDump.Core.Models.ExceptionSource source) {
+		if (managedThreadId.HasValue) {
+			// In-flight exception: show managed id and OS id
+			return $"Thread {managedThreadId} ({ThreadId(osThreadId ?? 0)})";
+		}
+		// Heap-resident exception
+		return "Heap";
+	}
 }
