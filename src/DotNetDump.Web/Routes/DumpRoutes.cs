@@ -167,6 +167,14 @@ public static class DumpRoutes {
 					return new Fragment(html, null, model.CountSummary);
 				}
 
+			case "listobj": {
+					var objects = await queue.Enqueue(
+						(session, _) => session.Heap.GetObjects(request.Parameters, typeFilter: null), "walking objects", ct);
+					var model = new ListModel<HeapObjectItem>(descriptor, objects);
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/ListObj.cshtml", model);
+					return new Fragment(html, null, model.CountSummary);
+				}
+
 			default:
 				return new Fragment(null, NotWiredYet(descriptor), NotImplemented: true);
 		}
@@ -201,6 +209,12 @@ public static class DumpRoutes {
 					var threads = await queue.Enqueue(
 						(session, _) => session.Threads.GetThreads(request.Parameters), "enumerating threads", ct);
 					return Results.Content(JsonFormatter.FormatThreads(threads), "application/json; charset=utf-8");
+				}
+
+			case "listobj": {
+					var objects = await queue.Enqueue(
+						(session, _) => session.Heap.GetObjects(request.Parameters, typeFilter: null), "walking objects", ct);
+					return Results.Content(JsonFormatter.FormatHeapObjects(objects), "application/json; charset=utf-8");
 				}
 
 			default:

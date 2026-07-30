@@ -1,0 +1,60 @@
+@*
+    Per-object heap listing (task 3.3). Copies ClrModules.cshtml's shape exactly -- see
+    DumpHeap.cshtml's doc comment for the four rules all templates exist to demonstrate.
+
+    Columns: object address, MethodTable, size (with byte count in title), type name (middle-
+    truncated, because type names are distinguished by their tail), and generation (which may
+    be null, rendered as "-").
+*@
+@model ListModel<HeapObjectItem>
+
+<div id="v-@Model.View.Name">
+    <table class="dn-table">
+        <thead>
+            <tr>
+                <th scope="col" class="dn-th dn-th--mono">Address</th>
+                <th scope="col" class="dn-th dn-th--mono">MethodTable</th>
+                <th scope="col" class="dn-th dn-th--num">Size</th>
+                <th scope="col" class="dn-th">Type</th>
+                <th scope="col" class="dn-th">Gen</th>
+            </tr>
+        </thead>
+        <tbody id="rows-@Model.View.Name">
+            @foreach (var item in Model.Result.Items)
+            {
+                var type = MiddleTruncated.From(item.TypeName);
+                <tr class="dn-tr">
+                    <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Address)</span></td>
+                    <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.MethodTable)</span></td>
+                    <td class="dn-td dn-td--num" title="@Display.Bytes((long)item.Size)">@Display.Size((long)item.Size)</td>
+                    <td class="dn-td dn-td--type" title="@type.Full">
+                        <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
+                    </td>
+                    <td class="dn-td">@(item.Generation?.ToString() ?? "-")</td>
+                </tr>
+            }
+
+            @if (Model.Result.Items.Count == 0)
+            {
+                <tr>
+                    <td colspan="5" class="dn-empty">
+                        @* Three different empty states are distinguished, per DESIGN_BRIEF.md §5:
+                           an unfiltered empty result means the dump holds no objects of this kind,
+                           whereas a filtered one means the filter is too narrow -- and telling a
+                           user "no data" when they have simply over-filtered sends them looking
+                           for a problem in the dump. *@
+                        @if (Model.Result.TotalUnfiltered > 0)
+                        {
+                            <div class="dn-empty__title">No objects match the current filter.</div>
+                            <a class="dn-btn" href="/views/@Model.View.Name">Clear filters</a>
+                        }
+                        else
+                        {
+                            <div class="dn-empty__title">This dump has no objects to show.</div>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
