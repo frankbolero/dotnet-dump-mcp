@@ -89,6 +89,8 @@ public static class ViewCatalog {
 			"eeheap -gc", "generation sizes and segment layout of the managed heap."),
 		new("verifyheap", "Heap verification", ViewGroup.Heap, ViewKind.Detail, FilterField.None,
 			"verifyheap", "walks the heap checking for corruption and reports the first inconsistency found."),
+		new("verifyobj", "Object verification", ViewGroup.Heap, ViewKind.Detail, FilterField.None,
+			"verifyobj <address>", "checks a single object for corruption without walking the whole heap."),
 		new("dumpobj", "Object", ViewGroup.Heap, ViewKind.Detail, FilterField.None,
 			"dumpobj <address>", "one object's fields, types and values at a given address."),
 		new("gcroot", "Retention paths", ViewGroup.Heap, ViewKind.Detail, FilterField.None,
