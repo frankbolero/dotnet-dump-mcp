@@ -1,7 +1,9 @@
 # Implementation plan
 
-Status: **in progress** — Phase 0 complete and accepted. Phase 2 complete, measured and tested; all
-three exit-criterion checks met, awaiting sign-off. Phases 1, 3–7 outstanding.
+Status: **in progress** — Phase 0 complete and accepted. Phase 1 delivered, with three deviations
+recorded below. Phase 2 complete, measured and tested; all three exit-criterion checks met, awaiting
+sign-off. Phase 3 in progress: 3.1 and 3.2 done, 3.5 drafted, 3.3 and 3.4 outstanding. Phases 4–7
+outstanding.
 
 Eight phases. Phases 0, 1 and 2 run in parallel; the rest are sequential. Each phase has an exit
 criterion that is a demonstrable fact, not a feeling, and the phases that could invalidate later work
@@ -92,21 +94,58 @@ Found while building it, each affecting a later phase. None blocks Phase 1 or 2.
 | **`WalkProgress.FractionComplete` may never reach 1.0.** `BytesSeen` sums live object sizes; `TotalBytes` sums segment lengths. If a segment's length includes committed-but-unallocated space, the fraction stalls short of 100%. The counts stay honest and `ReportFinal()` always emits the true totals — but a progress bar must treat walk completion, not the fraction, as its terminal signal. | 6.3, the pending-state progress panel |
 | **Core writes to `Console.Error`.** `Core.Utilities.DumpResolver.ResolveAndLoad` prints `Dump: <path>` unless `quiet: true` — relocated verbatim from the CLI in 0.6. The web host must pass `quiet: true` or print a dump banner to its own stderr on every resolve. | 2.2, `dndump serve` |
 
-## Phase 1 — Design
+## Phase 1 — Design ✅ delivered
 
 **Track B. Calendar time, no code dependency. Start on day one.**
 
-| Task | Detail |
-| :--- | :--- |
-| 1.1 | Review and adjust [`DESIGN_BRIEF.md`](DESIGN_BRIEF.md) — especially the §3 sample data, which should be replaced with rows from an actual dump you have. |
-| 1.2 | Create the Claude Design project; build the component library against the brief. |
-| 1.3 | Iterate on the four highest-risk components first: **data table** (must survive 200-character type names), **tree view** (four content variants from one component), **pending/progress panel**, **truncation banner**. |
-| 1.4 | `/design-sync` the library into `src/DotNetDump.Web/wwwroot/` + `Views/`. |
+| Task | Status | Detail |
+| :--- | :--- | :--- |
+| 1.1 | ✅ | Review and adjust [`DESIGN_BRIEF.md`](DESIGN_BRIEF.md) — especially the §3 sample data, which should be replaced with rows from an actual dump you have. |
+| 1.2 | ✅ | Create the Claude Design project; build the component library against the brief. Landed as **Nocturne**: a dark-first, compact interface on a near-neutral blue-grey ground with a single blurple accent. |
+| 1.3 | ✅ | Iterate on the four highest-risk components first: **data table**, **tree view**, **pending/progress panel**, **truncation banner**. All four are present. |
+| 1.4 | ✅ | `/design-sync` into `design-sync/` — seven component pages (`Shell`, `Data`, `Detail`, `Filtering`, `Trees`, `Status`, `Canvas`) plus a design-system directory. |
 
-**Exit criterion.** Every component in [`DESIGN_BRIEF.md` §5](DESIGN_BRIEF.md) exists, previews with
-real sample data, works in light and dark, and carries a `@dsCard` marker. The data table renders
-`System.Collections.Generic.Dictionary<System.String,MyApp.Domain.CacheEntry>+Entry[]` without
-breaking the layout or hiding the distinguishing tail of the name.
+**Exit criterion.** ⚠️ **Met on substance; three deviations, all resolved in Phase 3 rather than by
+re-running the design.**
+
+| Check | Result |
+| :--- | :--- |
+| Every [`DESIGN_BRIEF.md` §5](DESIGN_BRIEF.md) component exists | ✅ All six groups delivered |
+| Previews with real sample data | ✅ Real type names, real magnitudes |
+| Works in light and dark | ✅ Both palettes exist — as a `themeTokens(mode)` function in `Shell.dc.html`, not in the stylesheet, which is why a first look for `prefers-color-scheme` found nothing |
+| The long-`Dictionary` type name does not break the layout or hide its tail | ✅ Handled, though by a fixed 38/14 character split in JavaScript. Phase 3.1 replaced that with a responsive CSS split — see below |
+
+### What the sync actually produced, and why Phase 3 needed a translation layer
+
+The plan assumed synced files could be used as templates: [`README.md` §1](README.md) says
+"Claude Design emits plain HTML/CSS, so synced files are used as templates rather than ported into
+components — and re-ported on every resync." **That assumption did not hold.**
+
+Across the seven component pages there are **586 inline `style=` attributes and zero `class=`
+attributes**. Every value is computed in JavaScript from `themeTokens(mode)`. The design system
+directory *does* ship a class-based stylesheet, but no component page uses it, and it lacks roles
+the components rely on — `surfaceAlt`, `accentSoft`, `accentText`, the whole `warn`/`danger`/`ok`
+set — as well as the light palette entirely.
+
+`themeTokens()` is therefore the real source of truth, and 3.1 extracted it into
+`wwwroot/css/dndump.css`. The design system's own stylesheet is deliberately **not** linked: two
+token systems where nothing consumes one of them drift silently.
+
+The consequence for the Phase 3 exit criterion is real and should be read plainly: a **token** change
+resyncs into the `:root` blocks and nothing else, but a **structural or component-level** redesign
+requires re-extraction. That is weaker than "no C# edits ever", and it is a property of what the
+design tool emits rather than of how the templates were written. The procedure is
+[`../../src/DotNetDump.Web/DESIGN_RESYNC.md`](../../src/DotNetDump.Web/DESIGN_RESYNC.md).
+
+### Deviations from the design, made deliberately in 3.1
+
+Each is recorded in `DESIGN_RESYNC.md` so a resync does not silently restore it.
+
+| Deviation | Why |
+| :--- | :--- |
+| **Fonts vendored locally** | Every component page loads Inter and JetBrains Mono from `fonts.googleapis.com`. [`SERVER.md` §6](SERVER.md) forbids outbound requests of any kind from a tool that renders heap strings containing connection strings, tokens and PII. Both are now local latin-subset variable faces, 80 KB total. **Not negotiable, not a judgement call.** |
+| **Dark is the default; light is opt-in** | Departs from [`DESIGN_BRIEF.md` §6](DESIGN_BRIEF.md), which asked for `prefers-color-scheme` with a `data-theme` override. Nocturne is dark-first — its readme opens "a quiet, compact dark interface", its guidance is written throughout in terms of a dark ground, and its own `Shell.dc.html` boots dark with a manual toggle. Following the OS preference put a developer on a light machine in front of the face the product was not composed in, and it read as wrong without being nameable. Two lines revert it. |
+| **Middle truncation is responsive, not fixed** | The design cuts type names at a fixed 38/14 character split, which cuts short names on a wide screen and long ones anyway on a narrow one. `MiddleTruncated` splits off a fixed-length tail and CSS flexes the head, so the visible cut follows the column width. The tail is never cut — for a .NET type name the tail is what distinguishes it. |
 
 ## Phase 2 — Web host skeleton
 
@@ -199,19 +238,47 @@ The environment-clearing in `DumpWebHost.Build` needed a test of its own: deleti
 
 ## Phase 3 — Wire the design in
 
-Depends on 1 and 2.
+Depends on 1 and 2. **In progress.**
 
-| Task | Detail |
-| :--- | :--- |
-| 3.1 | Convert the synced HTML components into Razor views taking view models. Structure and classes stay byte-identical where possible; only data binding is introduced. |
-| 3.2 | App shell, navigation across the six view groups, dump header bar. |
-| 3.3 | Every list view rendering with the real data table component: `dumpheap`, `listobj`, `gchandles`, `clrthreads`, `threadstate`, `syncblk`, `printexception`, `clrmodules`. |
-| 3.4 | Every detail view with the detail components: `dumpobj`, `info`, `eeheap`, `threadpool`, `dumpmt`, `dumpmd`, `dumpclass`, `dumpmodule`, `dumpassembly`, `name2ee`, `ip2md`. |
-| 3.5 | Document the resync procedure: which files are copied verbatim, which are Razor-ified, and what a designer must not change without a code change. |
+| Task | Status | Detail |
+| :--- | :--- | :--- |
+| 3.1 | ✅ | Convert the synced components into Razor views taking view models. "Structure and classes stay byte-identical" was not achievable — there are no classes to keep, see Phase 1 above — so the pattern is instead: extract to `wwwroot/css/dndump.css`, and **no `.cshtml` may carry a `style=` attribute**. Demonstrated on the data table, the highest-risk component. |
+| 3.2 | ✅ | App shell, navigation across the six view groups, dump header bar. Collapsible nav (pure-CSS checkbox), theme toggle (one inline script, needed to set `data-theme` before first paint), and per-view `Command`/`Description` on `ViewDescriptor` for all 25 views. `DumpInfoService` memoizes `SessionAnalyzer.GetInfo` behind one `Enqueue` so the header does not re-enter the queue per request. |
+| 3.3 | ⬜ | Every list view on the data table component. **Eight total, one done:** `dumpheap` ✅; `listobj`, `gchandles`, `clrthreads`, `threadstate`, `syncblk`, `printexception`, `clrmodules` outstanding. |
+| 3.4 | ⬜ | Every detail view. **Seventeen, not the eleven this table used to say** — the original list was taken from [`DATA_CONTRACT.md` §3.1](DATA_CONTRACT.md)'s navigation grouping, which omits `dumpobj`, `gcroot`, `verifyobj`, `verifyheap`, `dumpstack`, `clrstack` and `eestack`. Full set: `info`, `eeheap`, `verifyheap`, `verifyobj`, `dumpobj`, `gcroot`, `dumpstack`, `clrstack`, `eestack`, `threadpool`, `dumpmodule`, `dumpassembly`, `dumpmt`, `dumpmd`, `dumpclass`, `name2ee`, `ip2md`. |
+| 3.5 | 🟡 | Resync procedure drafted as [`../../src/DotNetDump.Web/DESIGN_RESYNC.md`](../../src/DotNetDump.Web/DESIGN_RESYNC.md), written during 3.1 because 3.3/3.4 need the rules before they fan out. Final form once every view exists. |
+
+**Blocking 3.4: seven detail views take an address argument and the routing has nowhere to put it.**
+`dumpobj`, `gcroot`, `verifyobj`, `dumpmt`, `dumpmd`, `dumpclass` and `dumpmodule` all need a target
+— `/views/dumpobj` alone is meaningless. Whether that is `?address=…` or `/views/{view}/{address}`
+is one decision for all seven, and it interacts with [`DATA_CONTRACT.md` §3.2](DATA_CONTRACT.md)'s
+rule that the query string *is* the view state. Settle it before 3.4 fans out. 3.3 has no such
+question and can proceed independently.
 
 **Exit criterion.** All 25 commands are reachable and render correctly styled output. Re-running
 `/design-sync` after a purely visual change in Claude Design requires no C# edits — if it does, 3.1
 made the templates too clever and needs correcting before Phase 4 builds on them.
+
+⚠️ **The second half of this criterion needs restating before it can be judged.** As written it
+assumes the design tool emits reusable templates; it emits inline-styled previews (Phase 1 above).
+The property actually worth holding is the one `DESIGN_RESYNC.md` states: **a token change requires
+no C# edit, and no `.cshtml` may carry a `style=` attribute.** Both are mechanically checkable —
+`curl -s http://127.0.0.1:5111/ | grep -c 'style='` must print `0`. The stronger reading, that any
+visual change is C#-free, is not achievable with what this design tool produces, and recording it as
+met would be false.
+
+**Suite as of 3.2.** 679 passed / 0 failed / 40 skipped on each of `net8.0`, `net9.0`, `net10.0`;
+`dotnet format --verify-no-changes` clean. The two new skips are `WiredViewRoutingTests`, which need
+a dump — run with `DOTNETDUMP_TEST_DUMP=<path>`; both pass against the 9.6 GB core.
+
+### Carried forward from Phase 3
+
+| Finding | Bears on |
+| :--- | :--- |
+| **The navigation linked at the fragment route.** `/views/{view}` returns an HTML fragment, but the nav linked straight to it, so following any link produced a bare table with no `<html>`, stylesheet or navigation — for every view, not only the unwired ones. Fixed by branching on the `HX-Request` header: htmx gets the fragment, a browser gets the whole document. Found by using the product, not by a test. | 4.6's URL round-trip, which requires `/views/dumpheap?type=Http` to be pasteable |
+| **A decorative header bar could take down every page.** `DumpInfoService` propagated `SessionAnalyzer.GetInfo`'s "No dump loaded" exception, and since the header renders on every route, one failure 500'd the whole UI — permanently, because `Lazy<Task<T>>` caches a faulted task as readily as a successful one. It now degrades to blank metadata. | Any future shell-wide data; the same trap applies to 6.5's cache-state indicator |
+| **`ViewCatalog` is a second copy of the command surface, and it drifted immediately.** `verifyobj` was missing from the moment the catalog was written, and it failed silently — a missing view simply never appears in the navigation. `ViewCatalogCoverageTests` now makes the CLI the oracle in both directions. | Any future command; the catalog cannot be trusted to be complete by inspection |
+| **`clrstack` and `eestack` still have no `QueryParameters` overload.** They are backed by `GetStackTraceGroups`, which takes none, so they get no filter bar and no pagination. This is settled in [`DATA_CONTRACT.md` §2.3](DATA_CONTRACT.md) and the catalog refuses the pressure, but 3.4 will feel it again. | 3.4, and 4.1's per-view filter bar |
 
 ## Phase 4 — Interaction
 
@@ -337,9 +404,9 @@ Applies to every delegated task without exception.
 | 2.7 First route end to end | **Sonnet** | Placeholder markup by definition; the plumbing is the point. |
 | 3.1 Razor conversion pattern | **Lead / Opus** | Sets the template every later view copies. "Keep templates dumb" is precisely the constraint an agent will violate to make one view nicer. Do the first component yourself, then delegate against it. |
 | 3.2 App shell + navigation | **Sonnet** | Shared files — do this before any 3.3/3.4 fan-out. |
-| 3.3 Eight list views | **Sonnet**, then **Haiku** | First two by Sonnet to prove the pattern generalises; the remaining six are copy-and-adapt. Fan out at most three agents, partitioned by view. |
-| 3.4 Eleven detail views | **Sonnet**, then **Haiku** | Same shape as 3.3. |
-| 3.5 Resync procedure | **Sonnet** | Documenting a boundary the agent has just worked inside. |
+| 3.3 Eight list views | **Sonnet**, then **Haiku** | `dumpheap` landed with 3.1, so seven remain. First two by Sonnet to prove the pattern generalises; the rest are copy-and-adapt. Fan out at most three agents, partitioned by view. |
+| 3.4 Seventeen detail views | **Sonnet**, then **Haiku** | Not eleven — see the Phase 3 table. **The lead settles the address-argument routing first**; it is one decision for seven views and an agent taking it per-view would produce seven answers. `gcroot` is a tree and belongs to 5.3, not here. |
+| 3.5 Resync procedure | ~~Sonnet~~ **Lead** | Reassigned: 3.3 and 3.4 need the rules *before* they fan out, so it was written during 3.1 rather than after. An agent documenting a boundary it worked inside cannot also be the boundary the next agents are briefed against. |
 | 4.1–4.3 Filter bar, chips, sortable headers | **Sonnet** | Well-specified htmx wiring. **The lead writes the filter-preservation test first** (see the risk register) and the agent makes it pass; an agent asked to test its own work here will write the test that passes. |
 | 4.4 Infinite scroll | **Sonnet** | Sentinel protocol is fully specified. |
 | 4.5 Out-of-band updates | **Sonnet** | |
@@ -375,7 +442,8 @@ and an agent working inside a single task has no standing to change it.
 | A sort or page action silently drops the active filter | **High** | Per-view tests in Phase 4. This bug returns wrong data that looks right. |
 | Truncated `gcroot` read as a conclusive answer | Medium | Truncation banner is inside task 5.3, not a follow-up. `state.truncated` in the JSON envelope so API callers see it too. |
 | Object-reference tree expands forever on a cyclic graph | **High** — object graphs are routinely cyclic | Cycle detection and depth cap in 5.4, with a deliberately cyclic test fixture. |
-| Design resync requires C# changes every time | Medium | Phase 3 exit criterion tests exactly this; keep templates dumb. |
+| Design resync requires C# changes every time | **Realised, partially** | The design tool emits inline-styled previews rather than reusable templates (Phase 1), so a *structural* redesign does require re-extraction. Reduced rather than eliminated: token changes are CSS-only, and "no `style=` in any `.cshtml`" is mechanically checkable. |
+| A view exists in the navigation but is unreachable, or exists in the CLI and not the navigation | **Realised** (`verifyobj`) | `ViewCatalogCoverageTests` makes the CLI the oracle in both directions; `ViewRoutingTests` asserts no catalog entry answers 404. Both were written after the fact, because the failure is silent — a missing view simply never appears. |
 | Docker example published without the `127.0.0.1:` prefix | Medium | One copy-pasted command undoes the entire security posture. Wrapper script emits the safe form; README shows only that form. |
 | Long cold walk blocks all other requests | Medium | Inherent to the thread-safety constraint. Mitigated by cache-hit fast path (6.4) and startup warm (6.1), not eliminated. |
 | Scope creep into retained size / dominators | Medium | Explicitly out of scope in [`README.md` §4](README.md). The trigger for revisiting is a feature decision, not a performance one ([`../CLI_DESIGN.md` §11.3](../CLI_DESIGN.md)). |
