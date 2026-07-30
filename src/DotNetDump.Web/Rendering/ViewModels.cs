@@ -49,3 +49,11 @@ public sealed record ListModel<T>(ViewDescriptor View, PagedResult<T> Result) {
 
 /// <summary>A single record: what every <see cref="ViewKind.Detail"/> fragment binds to.</summary>
 public sealed record DetailModel<T>(ViewDescriptor View, T Data);
+
+/// <summary>
+/// <c>verifyobj</c>'s own record shape, bound as <c>DetailModel&lt;ObjectVerificationModel&gt;</c>.
+/// A bare <c>List&lt;HeapCorruptionInfo&gt;</c> can't say which address was checked once the list
+/// is empty -- the pass case, and the common one -- so the route's own parsed address rides along
+/// instead of being re-derived from a (possibly absent) first item.
+/// </summary>
+public sealed record ObjectVerificationModel(ulong Address, List<HeapCorruptionInfo> Corruptions);

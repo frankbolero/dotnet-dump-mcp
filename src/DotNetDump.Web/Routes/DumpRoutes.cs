@@ -234,6 +234,18 @@ public static class DumpRoutes {
 					return new Fragment(html, null, model.CountSummary);
 				}
 
+			case "verifyobj": {
+					if (!TryRequireAddress(address, descriptor, out ulong objectAddress, out var badAddress)) {
+						return new Fragment(null, badAddress);
+					}
+
+					var corruptions = await queue.Enqueue(
+						(session, _) => session.Heap.VerifyObject(objectAddress).ToList(), "verifying object", ct);
+					var model = new DetailModel<ObjectVerificationModel>(descriptor, new ObjectVerificationModel(objectAddress, corruptions));
+					string html = await renderer.RenderAsync(http, "/Views/Fragments/VerifyObj.cshtml", model);
+					return new Fragment(html, null);
+				}
+
 			default:
 				return new Fragment(null, NotWiredYet(descriptor), NotImplemented: true);
 		}
@@ -313,6 +325,16 @@ public static class DumpRoutes {
 					var blocks = await queue.Enqueue(
 						(session, _) => session.Heap.GetSyncBlocks(request.Parameters), "enumerating sync blocks", ct);
 					return Results.Content(JsonFormatter.FormatSyncBlocks(blocks), "application/json; charset=utf-8");
+				}
+
+			case "verifyobj": {
+					if (!TryRequireAddress(address, descriptor, out ulong objectAddress, out var badAddress)) {
+						return badAddress;
+					}
+
+					var corruptions = await queue.Enqueue(
+						(session, _) => session.Heap.VerifyObject(objectAddress).ToList(), "verifying object", ct);
+					return Results.Content(JsonFormatter.FormatObjectVerification(corruptions), "application/json; charset=utf-8");
 				}
 
 			default:
