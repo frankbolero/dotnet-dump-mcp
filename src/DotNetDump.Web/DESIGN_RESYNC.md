@@ -1,8 +1,13 @@
 # Design resync procedure
 
 How a change made in Claude Design reaches this application, and what a designer may change without
-a C# edit. Task 3.1 established this; task 3.5 is where it gets its final form once every view
-exists.
+a C# edit. Task 3.1 established this; task 3.5 is its final form, written once all 25 views existed
+(3.3's eight list views, 3.4's seventeen detail views) so the shape inventory below is complete
+rather than a guess extrapolated from `dumpheap` alone.
+
+Verified mechanically against the current tree, not just asserted: `grep -rn 'style='
+Views/` matches only inside `@* ... *@` doc comments that describe the rule in prose (19 hits, zero
+of them an actual attribute), and `grep -c 'https\?://'` across every view and the layout is `0`.
 
 The property being protected is the Phase 3 exit criterion: **re-running `/design-sync` after a
 purely visual change must require no C# edits.** If it does, the templates got too clever.
@@ -10,7 +15,12 @@ purely visual change must require no C# edits.** If it does, the templates got t
 ## What arrived, and why there is a translation layer at all
 
 `/design-sync` writes `design-sync/`: seven component pages (`*.dc.html`) plus a design-system
-directory (`_ds/nocturne-*/`).
+directory (`_ds/nocturne-*/`). Of the seven, this application currently consumes three:
+`Shell.dc.html` (the app shell, 3.2), `Data.dc.html` (the list-view table, 3.1/3.3) and
+`Detail.dc.html` (the detail-view shapes, 3.4). `Filtering.dc.html` bears on Phase 4,
+`Trees.dc.html` on Phase 5, and `Status.dc.html` on Phase 6 — none of them ported yet, so a resync
+touching only those three pages has nothing in this codebase to update. `Canvas.dc.html` is the
+design system's own demo scaffold and was never a source for anything here.
 
 The component pages **do not use** the design system's stylesheet. Across all seven there are 586
 inline `style=` attributes and zero `class=` attributes; every value is computed in JavaScript from
@@ -32,15 +42,42 @@ systems, one of which nothing consumes, drift silently.
 | Structure | `Views/**/*.cshtml` | Only when the *markup* changes, not the styling |
 | Data | `Rendering/ViewModels.cs`, `Rendering/Display.cs` | Only when the data shown changes |
 
+## The four fragment shapes
+
+Not visible until 3.4 wired all seventeen detail views: a fragment is one of four shapes, and which
+one a new view gets is a mechanical decision, not a per-view judgment call.
+
+| Shape | Bound to | Example | Chosen when |
+| :--- | :--- | :--- | :--- |
+| Table | `ListModel<T>` | `DumpHeap.cshtml` | The view is a filtered/sorted/paged collection of like rows. |
+| Key-value | `DetailModel<T>` | `Info.cshtml` | One record, no address identity, no field list — `threadpool`, `eeheap`, `verifyheap`. |
+| Identity card + table | `DetailModel<T>` | `DumpObj.cshtml` | One record *with* an address identity (`verifyobj`, `dumpmt`, `dumpmd`, `dumpclass`, `dumpmodule`, `dumpassembly`, `ip2md`) or a two-segment lookup identity (`name2ee`, which bypasses the address-routing switch entirely — see `Name2EE.cshtml`'s own comment). |
+| Card list | `ListModel<T>` | `DumpStack.cshtml` | `ViewKind.Detail` in the catalog, but the underlying data is `PagedResult<T>` (`dumpstack`, `verifyheap` if it grows rows) — each *item* is itself a multi-row record, so it gets one `dn-card` per item inside the same `#rows-@Model.View.Name` id a table body would use, rather than being forced into `dn-table`'s flat rows. This is the shape to reach for if a future view is "paginated but each row is a small record," not a special case invented for stacks alone. |
+
+Card-shaped and key-value-shaped views all still use the single `#v-@Model.View.Name` /
+`#rows-@Model.View.Name` id pair — Phase 4's infinite scroll and Phase 4.5's out-of-band updates
+key off that pair regardless of which of the four shapes fills it.
+
+The `{address?}` route (`/views/{view}/{address?}`, mirrored at `/api/{view}/{address?}`) covers
+the identity-card shape's eight address-taking views. `name2ee` is the one exception with its own
+two-segment route (`/views/name2ee/{module}/{type}`) and its own handler path
+(`RenderName2EEView`/`RenderName2EEJson`), documented in `DumpRoutes.cs` and in `Name2EE.cshtml`'s
+own header comment. A future view needing more than one free-form identity argument copies that
+precedent rather than overloading `{address?}`.
+
 ## Resyncing
 
 1. Re-run `/design-sync`.
 2. **Tokens.** Diff `themeTokens()` in `design-sync/Shell.dc.html` against the two `:root` blocks in
    `dndump.css`. A colour change is this step and nothing else.
 3. **Components.** For each changed inline style, update the corresponding class. The class names
-   are `dn-`-prefixed and follow the page they came from.
+   are `dn-`-prefixed and follow the page they came from — `dn-table`/`dn-th`/`dn-td` from
+   `Data.dc.html`, `dn-card`/`dn-kv` from `Detail.dc.html`, `dn-nav`/`dn-dumpbar` from
+   `Shell.dc.html`.
 4. **Structure.** Only if elements were added, removed or reordered.
-5. Rebuild and check the discipline below.
+5. **New view.** If the sync adds a command with no fragment yet, pick its shape from the table
+   above before writing any markup — it is a lookup, not a design decision to redo per view.
+6. Rebuild and check the discipline below.
 
 ## Rules a view must obey
 

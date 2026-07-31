@@ -1,8 +1,9 @@
 # Implementation plan
 
 Status: **in progress** — Phase 0 complete and accepted. Phase 1 delivered, with three deviations
-recorded below. Phase 2 complete, measured, tested, and signed off. Phase 3 in progress: 3.1–3.4
-done, 3.5 drafted and ready for its final form now that every view exists. Phases 4–7 outstanding.
+recorded below. Phase 2 complete, measured, tested, and signed off. Phase 3's five tasks (3.1–3.5)
+are all complete and its restated exit criterion mechanically verified, awaiting sign-off.
+Phases 4–7 outstanding.
 
 Eight phases. Phases 0, 1 and 2 run in parallel; the rest are sequential. Each phase has an exit
 criterion that is a demonstrable fact, not a feeling, and the phases that could invalidate later work
@@ -237,7 +238,8 @@ The environment-clearing in `DumpWebHost.Build` needed a test of its own: deleti
 
 ## Phase 3 — Wire the design in
 
-Depends on 1 and 2. **In progress.**
+Depends on 1 and 2. All five tasks (3.1–3.5) complete. Exit criterion restated and mechanically
+verified below; awaiting sign-off.
 
 | Task | Status | Detail |
 | :--- | :--- | :--- |
@@ -245,7 +247,7 @@ Depends on 1 and 2. **In progress.**
 | 3.2 | ✅ | App shell, navigation across the six view groups, dump header bar. Collapsible nav (pure-CSS checkbox), theme toggle (one inline script, needed to set `data-theme` before first paint), and per-view `Command`/`Description` on `ViewDescriptor` for all 25 views. `DumpInfoService` memoizes `SessionAnalyzer.GetInfo` behind one `Enqueue` so the header does not re-enter the queue per request. |
 | 3.3 | ✅ | Every list view on the data table component. All eight wired: `dumpheap` (3.1), `clrmodules`, `clrthreads`, `listobj`, `gchandles`, `syncblk`, `threadstate`, `printexception`. The last seven landed as five delegated branches (two Sonnet, proving the pattern generalizes; three Haiku, copy-and-adapt, partitioned as listobj alone / gchandles+syncblk / threadstate+printexception), each in its own worktree per the working agreement. Every merge but one was a trivial additive conflict in `DumpRoutes.cs`'s two switch statements — different agents' cases landing adjacent — resolved by keeping both sides. `ViewRoutingTests.UnwiredView` moved from `gchandles` to `info` once every list view was wired. |
 | 3.4 | ✅ | Every detail view. **Seventeen, not the eleven this table used to say** — the original list was taken from [`DATA_CONTRACT.md` §3.1](DATA_CONTRACT.md)'s navigation grouping, which omits `dumpobj`, `gcroot`, `verifyobj`, `verifyheap`, `dumpstack`, `clrstack` and `eestack`. Full set: `info`, `eeheap`, `verifyheap`, `verifyobj`, `dumpobj`, `gcroot`, `dumpstack`, `clrstack`, `eestack`, `threadpool`, `dumpmodule`, `dumpassembly`, `dumpmt`, `dumpmd`, `dumpclass`, `name2ee`, `ip2md`. Sixteen wired; `gcroot` deferred to 5.3 as planned. The lead built `info` and `dumpobj` first as the two reference `DetailModel<T>` shapes (plain key-value, and address-identity card + table), then fanned the remaining fourteen out to six agents: three Sonnet for the shapes with no precedent yet (`verifyobj`+`dumpclass`; `dumpstack`+`verifyheap`, both `ViewKind.Detail` despite being `PagedResult`-backed; `name2ee`'s dedicated two-path-segment route), three Haiku copying the established shapes. Two of six agents' worktrees tracked a stale git ancestor despite the actual file content being current and correct — caught by diffing against the real tip before merging, and hand-applied instead of merged where a normal merge would have let git's algorithm compare against the wrong shared history. One agent's Razor file had a genuine `@{ }`-inside-an-already-open-code-block bug (`RZ1010`) caught by the lead's own build, not the agent's report of a clean one. Verified end to end against a real 9.6 GB dump: full suite at 722/0/0 with `DOTNETDUMP_TEST_DUMP` set, plus a manual `dndump serve` + `curl` pass over all sixteen wired views and `gcroot`'s continued 501. |
-| 3.5 | 🟡 | Resync procedure drafted as [`../../src/DotNetDump.Web/DESIGN_RESYNC.md`](../../src/DotNetDump.Web/DESIGN_RESYNC.md), written during 3.1 because 3.3/3.4 need the rules before they fan out. Final form once every view exists. |
+| 3.5 | ✅ | Resync procedure at [`../../src/DotNetDump.Web/DESIGN_RESYNC.md`](../../src/DotNetDump.Web/DESIGN_RESYNC.md) brought to final form now that all 25 views exist. Added the four-fragment-shape inventory (table, key-value, identity-card, card-list) that only became visible once 3.4 wired all seventeen detail views, the `{address?}`/`name2ee` routing convention, and which of the seven synced component pages this codebase actually consumes (`Shell`, `Data`, `Detail`; `Filtering`/`Trees`/`Status` await Phases 4–6). Re-verified mechanically against the current tree rather than re-asserted: `grep` for `style=` across `Views/` matches only prose inside doc comments (0 real attributes), and `https?://` matches nowhere. |
 
 **3.4's address-argument routing — decided.** `/views/{view}/{address?}`, an optional trailing route
 segment, not a query parameter; `/api/{view}/{address?}` mirrors it for JSON parity (`SERVER.md`
@@ -293,6 +295,11 @@ no C# edit, and no `.cshtml` may carry a `style=` attribute.** Both are mechanic
 `curl -s http://127.0.0.1:5111/ | grep -c 'style='` must print `0`. The stronger reading, that any
 visual change is C#-free, is not achievable with what this design tool produces, and recording it as
 met would be false.
+
+**Restated property verified 2026-07-31, at 3.5's final form of `DESIGN_RESYNC.md`.** `grep -rn
+'style=' Views/` across all 25 wired views matches only prose inside `@* ... *@` doc comments — zero
+real attributes — and `grep -c 'https\?://'` matches nowhere. The restated criterion holds; awaiting
+sign-off alongside the rest of Phase 3.
 
 **Suite as of 3.2.** 679 passed / 0 failed / 40 skipped on each of `net8.0`, `net9.0`, `net10.0`;
 `dotnet format --verify-no-changes` clean. The two new skips are `WiredViewRoutingTests`, which need
