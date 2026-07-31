@@ -46,6 +46,15 @@ public static class DumpRoutes {
 		app.MapGet("/views/{view}/{address?}", (string view, string? address, HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer, CancellationToken ct) =>
 			RenderView(http, dump, info, queue, renderer, view, address, ct));
 
+		// Infinite scroll (task 4.4, SERVER.md §5.1 rule 3): the sentinel row's own hx-get, answering
+		// with the next page's <tr> rows plus a fresh sentinel -- never the whole #v-{view} fragment.
+		// Registered ahead of {address?} above for the same reason name2ee's two-segment route is:
+		// a request for /views/{view}/rows can only match this fixed second segment, never the
+		// generic one-segment template, so registration order between them does not actually matter,
+		// but this reads better next to the route it is a page of.
+		app.MapGet("/views/{view}/rows", (string view, HttpContext http, IAnalysisQueue queue, IFragmentRenderer renderer, CancellationToken ct) =>
+			RenderRows(http, queue, renderer, view, ct));
+
 		app.MapGet("/api/{view}/{address?}", (string view, string? address, HttpContext http, DumpInfoService info, IAnalysisQueue queue, CancellationToken ct) =>
 			RenderJson(http, info, queue, view, address, ct));
 
@@ -384,6 +393,103 @@ public static class DumpRoutes {
 			default:
 				return new Fragment(null, NotWiredYet(descriptor), NotImplemented: true);
 		}
+	}
+
+	/// <summary>
+	/// <c>GET /views/{view}/rows</c> (task 4.4): the infinite-scroll sentinel's own target. Answers
+	/// with the next page's <c>&lt;tr&gt;</c> rows plus a fresh sentinel row -- via the same
+	/// <c>_*Rows.cshtml</c> partial <see cref="BuildFragment"/> includes for the first page -- never
+	/// the whole <c>#v-{view}</c> fragment those rows normally live inside.
+	/// </summary>
+	/// <remarks>
+	/// A third switch alongside <see cref="BuildFragment"/>'s and <see cref="RenderJson"/>'s, but a
+	/// much smaller one: only the 8 <see cref="ViewKind.List"/> views page past their first request,
+	/// and each case here is one analyzer call plus one call to <see cref="RowsHtml{T}"/> -- it does
+	/// not re-render a whole fragment (that stays <see cref="BuildFragment"/>'s job) or re-serialize
+	/// JSON (that stays <see cref="RenderJson"/>'s), so there is no full-fragment logic to triplicate,
+	/// just the same one-line-per-view analyzer dispatch <see cref="BuildFragment"/> and
+	/// <see cref="RenderJson"/> already each have their own copy of.
+	/// </remarks>
+	private static async Task<IResult> RenderRows(
+		HttpContext http, IAnalysisQueue queue, IFragmentRenderer renderer, string viewName, CancellationToken ct) {
+
+		var descriptor = ViewCatalog.Find(viewName);
+		if (descriptor is null) {
+			return Results.NotFound();
+		}
+
+		if (descriptor.Kind != ViewKind.List) {
+			return Results.Text(
+				$"'{descriptor.Name}' has no infinite scroll -- only {nameof(ViewKind.List)} views page past their first request.",
+				"text/plain; charset=utf-8",
+				statusCode: StatusCodes.Status400BadRequest);
+		}
+
+		if (!TryBind(http, descriptor, out var request, out var badRequest)) {
+			return badRequest;
+		}
+
+		switch (descriptor.Name) {
+			case "dumpheap": {
+					var stats = await queue.Enqueue(
+						(session, _) => session.Heap.GetHeapStatistics(request.Parameters), "walking heap", ct);
+					return await RowsHtml(http, renderer, new ListModel<HeapStatItem>(descriptor, stats), "/Views/Fragments/_DumpHeapRows.cshtml");
+				}
+
+			case "listobj": {
+					var objects = await queue.Enqueue(
+						(session, _) => session.Heap.GetObjects(request.Parameters, typeFilter: null), "walking objects", ct);
+					return await RowsHtml(http, renderer, new ListModel<HeapObjectItem>(descriptor, objects), "/Views/Fragments/_ListObjRows.cshtml");
+				}
+
+			case "gchandles": {
+					var handles = await queue.Enqueue(
+						(session, _) => session.Heap.GetGCHandles(request.Parameters), "enumerating GC handles", ct);
+					return await RowsHtml(http, renderer, new ListModel<GCHandleInfo>(descriptor, handles), "/Views/Fragments/_GCHandlesRows.cshtml");
+				}
+
+			case "clrmodules": {
+					var modules = await queue.Enqueue(
+						(session, _) => session.Modules.GetModules(request.Parameters), "listing modules", ct);
+					return await RowsHtml(http, renderer, new ListModel<ModuleInfo>(descriptor, modules), "/Views/Fragments/_ClrModulesRows.cshtml");
+				}
+
+			case "clrthreads": {
+					var threads = await queue.Enqueue(
+						(session, _) => session.Threads.GetThreads(request.Parameters), "enumerating threads", ct);
+					return await RowsHtml(http, renderer, new ListModel<ThreadInfo>(descriptor, threads), "/Views/Fragments/_ClrThreadsRows.cshtml");
+				}
+
+			case "threadstate": {
+					var states = await queue.Enqueue(
+						(session, _) => session.Threads.GetThreadStates(request.Parameters), "enumerating thread states", ct);
+					return await RowsHtml(http, renderer, new ListModel<ThreadStateInfo>(descriptor, states), "/Views/Fragments/_ThreadStateRows.cshtml");
+				}
+
+			case "printexception": {
+					var exceptions = await queue.Enqueue(
+						(session, _) => session.Threads.GetThreadExceptions(request.Parameters), "finding exceptions", ct);
+					return await RowsHtml(http, renderer, new ListModel<ThreadExceptionInfo>(descriptor, exceptions), "/Views/Fragments/_PrintExceptionRows.cshtml");
+				}
+
+			case "syncblk": {
+					var blocks = await queue.Enqueue(
+						(session, _) => session.Heap.GetSyncBlocks(request.Parameters), "enumerating sync blocks", ct);
+					return await RowsHtml(http, renderer, new ListModel<SyncBlockInfo>(descriptor, blocks), "/Views/Fragments/_SyncBlkRows.cshtml");
+				}
+
+			default:
+				// Every ViewKind.List view has a case above. Reachable only if a new one is added to
+				// ViewCatalog without a matching case here -- the same "known but not wired" honesty
+				// as BuildFragment's own default arm, not a silent 404 for a view the nav still links to.
+				return NotWiredYet(descriptor);
+		}
+	}
+
+	/// <summary>Renders <paramref name="partialPath"/> alone -- the shared last step of every <see cref="RenderRows"/> case.</summary>
+	private static async Task<IResult> RowsHtml<T>(HttpContext http, IFragmentRenderer renderer, ListModel<T> model, string partialPath) {
+		string html = await renderer.RenderAsync(http, partialPath, model);
+		return Html(html);
 	}
 
 	private static async Task<IResult> RenderJson(HttpContext http, DumpInfoService info, IAnalysisQueue queue, string viewName, string? address, CancellationToken ct) {
