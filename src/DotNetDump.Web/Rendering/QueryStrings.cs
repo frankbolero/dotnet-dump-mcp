@@ -29,13 +29,23 @@ internal static class QueryStrings {
 	/// A <c>/views/{view}</c> URL carrying <paramref name="pairs"/> whose value is non-null. Order is
 	/// preserved as given, so callers control it rather than this method guessing at one.
 	/// </summary>
-	public static string BuildUrl(string viewName, IEnumerable<(string Key, string? Value)> pairs) {
+	public static string BuildUrl(string viewName, IEnumerable<(string Key, string? Value)> pairs) =>
+		BuildUrl(viewName, pairs, segment: null);
+
+	/// <summary>
+	/// The same URL as <see cref="BuildUrl(string, IEnumerable{(string Key, string? Value)})"/>, with
+	/// an extra path segment after the view name -- <c>/views/{view}/{segment}</c> -- for routes that
+	/// sit alongside a view rather than being it, e.g. <c>InfiniteScroll.SentinelHref</c>'s
+	/// <c>/views/{view}/rows</c>.
+	/// </summary>
+	public static string BuildUrl(string viewName, IEnumerable<(string Key, string? Value)> pairs, string? segment) {
+		string basePath = segment is null ? $"/views/{viewName}" : $"/views/{viewName}/{segment}";
 		var kept = pairs.Where(pair => pair.Value != null).ToList();
 		if (kept.Count == 0) {
-			return $"/views/{viewName}";
+			return basePath;
 		}
 
 		string query = string.Join("&", kept.Select(pair => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value!)}"));
-		return $"/views/{viewName}?{query}";
+		return $"{basePath}?{query}";
 	}
 }
