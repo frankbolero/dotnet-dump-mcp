@@ -2,8 +2,9 @@
 
 Status: **in progress** — Phase 0 complete and accepted. Phase 1 delivered, with three deviations
 recorded below. Phase 2 complete, measured, tested, and signed off. Phase 3's five tasks (3.1–3.5)
-are all complete and its restated exit criterion mechanically verified, awaiting sign-off.
-Phases 4–7 outstanding.
+are all complete and its restated exit criterion mechanically verified, awaiting sign-off. Phase 4
+in progress: 4.1–4.3 (filter bar, chips, sortable headers) done and verified against a real dump;
+4.4–4.6 outstanding. Phases 5–7 outstanding.
 
 Eight phases. Phases 0, 1 and 2 run in parallel; the rest are sequential. Each phase has an exit
 criterion that is a demonstrable fact, not a feeling, and the phases that could invalidate later work
@@ -329,16 +330,57 @@ its no-walk-time-scope decision above, and a full page (nav, shell) on direct na
 
 ## Phase 4 — Interaction
 
-Depends on 0 and 3. This is where the interface becomes usable rather than viewable.
+Depends on 0 and 3. This is where the interface becomes usable rather than viewable. **In progress:
+4.1–4.3 done, 4.4–4.6 outstanding.**
 
-| Task | Detail |
-| :--- | :--- |
-| 4.1 | Filter bar wired per view, exposing only the fields that view honors. `hx-trigger="input changed delay:250ms"`, `hx-include="closest form"`, `hx-push-url="true"`. |
-| 4.2 | Active-filter chips with individual and clear-all removal. |
-| 4.3 | Sortable headers with three-state `aria-sort`, preserving the active filter. |
-| 4.4 | Infinite scroll: `/views/{view}/rows`, the sentinel row that replaces itself, and the end-of-data state driven by `HasMore`. |
-| 4.5 | Out-of-band updates for result counts, pagination footer and cache-state indicator. |
-| 4.6 | URL state round-trip: every filter, sort and page position survives copy-paste of the address bar, back and forward. |
+| Task | Status | Detail |
+| :--- | :--- | :--- |
+| 4.1 | ✅ | Filter bar wired per view, exposing only the fields that view honors. `hx-trigger="input changed delay:250ms"`, `hx-include="closest form"`, `hx-push-url="true"`. Data-driven over `ViewDescriptor.HonoredFilters` (`Rendering/FilterBar.cs`) rather than 8 hand-copied field lists, rendered through one shared `Views/Shared/_FilterBar.cshtml`. |
+| 4.2 | ✅ | Active-filter chips with individual and clear-all removal. Each chip's own URL keeps every other active filter and drops only its own field; "clear all" drops every filter field but keeps `limit`. |
+| 4.3 | ✅ | Sortable headers with three-state `aria-sort`, preserving the active filter. Only columns a view's analyzer has a dedicated `SortBy` string for get a sortable header — e.g. `dumpheap` sorts on `count`/`typename` only, `MethodTable`/`Total size` stay plain. |
+| 4.4 | | Infinite scroll: `/views/{view}/rows`, the sentinel row that replaces itself, and the end-of-data state driven by `HasMore`. |
+| 4.5 | | Out-of-band updates for result counts, pagination footer and cache-state indicator. |
+| 4.6 | | URL state round-trip: every filter, sort and page position survives copy-paste of the address bar, back and forward. |
+
+**4.1–4.3, delegated and reviewed.** Per the delegation table, the lead wrote
+[`FilterPreservationTests.cs`](../../src/DotNetDump.Tests/FilterPreservationTests.cs) — the risk
+register's named top bug, encoded as an executable oracle against the 9.6 GB dump fixture — *before*
+handing the three tasks to a Sonnet subagent in an isolated worktree, so the agent implemented
+against a fixed target rather than grading its own htmx wiring. Confirmed as a real oracle both
+ways: 4 of 5 checks failed pre-implementation, 5 of 5 passed after.
+
+Scope is exactly the 8 `ViewKind.List` views (`dumpheap`, `listobj`, `gchandles`, `clrthreads`,
+`threadstate`, `syncblk`, `printexception`, `clrmodules`). `dumpstack` is deliberately excluded —
+it is `ViewKind.Detail` despite being filterable (`ThreadStackInfoFilter.Honored`), and the `ViewKind`
+enum's own doc comment reserves the filter bar, sortable headers and infinite scroll for `List`
+views only.
+
+**A trade-off the agent surfaced and the lead kept: sort is not preserved across a filter change.**
+`SERVER.md` §5.1 asks for `hx-include="closest form"` "so a sort keeps the active filter and vice
+versa." Only the first direction is implemented. Baking the *current* `sort`/`order` into a filter
+control's or chip's own action URL would create two competing sources for the same query parameter
+on the one request that has both — the control's own URL, and whatever `hx-include="closest form"`
+reads live from the DOM — and if the stale one ever won that race, a sort header click would
+silently stop changing the sort. That is the exact "silently wrong data" failure class this phase
+exists to prevent, aimed at the opposite parameter than the one named in the risk register. The
+cost is narrow and one-directional: typing a filter or removing one resets the view to its default
+sort rather than preserving a previously chosen one; a sort click always keeps the active filter.
+Revisiting this (e.g. threading the current sort through as a hidden form field the filter bar's own
+`hx-include` would then pick up, rather than through each control's own href) is left for the lead
+to pick up if it proves worth the complexity — not done speculatively here.
+
+**Lead review before merge.** All 15 sortable headers across the 8 views had `aria-sort` on the
+nested sort `<a>` rather than the enclosing `<th>` — functionally inert for the assertions written
+against it, but wrong per WAI-ARIA's sortable-table pattern, which expects a screen reader to read
+sort state from the columnheader itself. Moved in review, along with the corresponding fix to
+`FilterPreservationTests.cs`'s own assertion shape (it originally looked for `aria-sort` on the same
+tag as the sort link, which stopped being true once the two are different elements).
+
+**Verified.** `FilterPreservationTests`: 5/5 against the 9.6 GB dump. Full suite: 727/0/0 with the
+dump, 679/0/48 without, on `net8.0`/`net9.0`/`net10.0`. `dotnet format --verify-no-changes` clean.
+Zero real `style=` attributes in any `.cshtml`. Manual `curl` smoke test against a live `dndump
+serve` confirmed filter values, chips, clear-all, and sort headers (`aria-sort`, direction toggling)
+all render and function correctly for a combined `?type=Http&sort=count&order=asc` request.
 
 **Exit criterion.** Filtering `listobj` on a 10.2M-object dump returns correct results with an honest
 "N of 10,238,441" count and stays responsive while typing. Sorting a filtered view keeps the filter.
