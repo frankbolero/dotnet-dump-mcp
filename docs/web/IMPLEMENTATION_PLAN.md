@@ -1,9 +1,8 @@
 # Implementation plan
 
 Status: **in progress** — Phase 0 complete and accepted. Phase 1 delivered, with three deviations
-recorded below. Phase 2 complete, measured and tested; all three exit-criterion checks met, awaiting
-sign-off. Phase 3 in progress: 3.1–3.4 done, 3.5 drafted and ready for its final form now that
-every view exists. Phases 4–7 outstanding.
+recorded below. Phase 2 complete, measured, tested, and signed off. Phase 3 in progress: 3.1–3.4
+done, 3.5 drafted and ready for its final form now that every view exists. Phases 4–7 outstanding.
 
 Eight phases. Phases 0, 1 and 2 run in parallel; the rest are sequential. Each phase has an exit
 criterion that is a demonstrable fact, not a feeling, and the phases that could invalidate later work
@@ -210,7 +209,7 @@ The 76 ms warm first-render, against 0.6 ms steady state, is JIT plus first-touc
 pipeline and the cache deserializer. That is precisely the cost 6.1's startup warm exists to move
 off the user's first request, and it is now a measured 76 ms rather than a guess.
 
-**Exit criterion.** ✅ **All three met 2026-07-30. Awaiting sign-off.**
+**Exit criterion.** ✅ **All three met 2026-07-30. Signed off 2026-07-31.**
 
 | Check | Result |
 | :--- | :--- |
