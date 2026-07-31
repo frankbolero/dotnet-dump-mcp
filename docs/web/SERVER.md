@@ -194,10 +194,10 @@ Every view fragment has a stable id, `#v-{view}`, and swaps `outerHTML`. Every t
 
 <!-- infinite scroll sentinel: last row of the current page -->
 <tr hx-get="/views/dumpheap/rows?offset=50" hx-trigger="intersect once"
-    hx-swap="afterend" hx-target="this"><td colspan="4" class="loading">…</td></tr>
+    hx-swap="outerHTML" hx-target="this"><td colspan="4" class="loading">…</td></tr>
 ```
 
-Three rules the markup must obey:
+Four rules the markup must obey:
 
 1. **`hx-push-url="true"` on every state change.** The query string is the view state
    ([`DATA_CONTRACT.md` §3.2](DATA_CONTRACT.md)), so back/forward and bookmarking work with no
@@ -205,9 +205,13 @@ Three rules the markup must obey:
 2. **`hx-include="closest form"`** on filter and sort controls, so a sort keeps the active filter and
    vice versa. Getting this wrong silently drops the user's filter — the most likely bug in the whole
    UI.
-3. **The scroll sentinel is the last row and replaces itself.** `hx-swap="afterend"` with
-   `hx-target="this"` appends the next page and the server emits a fresh sentinel — unless
-   `HasMore` is false, in which case it emits none and the scrolling stops naturally.
+3. **The scroll sentinel is the last row and replaces itself.** `hx-swap="outerHTML"` with
+   `hx-target="this"` means the response — the next page's rows, plus a fresh sentinel if `HasMore`
+   is still true — replaces the sentinel `<tr>` outright, so exactly one "Loading…" row is ever on
+   screen at a time. **Not `hx-swap="afterend"`**: that inserts the response as a new sibling
+   *without removing the sentinel*, leaving a permanent, non-functional "Loading…" row behind after
+   every page — found in the field after 4.4 first shipped with this mistake in its own example
+   markup.
 4. **The sentinel's trigger is `intersect once`, never `revealed`.** This app's tables scroll inside
    `.dn-view-pad` (`overflow: auto`), nested in a fixed shell (`.dn-app`/`.dn-main`,
    `overflow: hidden`) — the window itself never scrolls. htmx's `revealed` trigger is driven by

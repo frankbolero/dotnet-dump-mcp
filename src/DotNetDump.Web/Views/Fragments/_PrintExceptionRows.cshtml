@@ -23,7 +23,7 @@
 {
     int nextOffset = Model.Result.Offset + Model.Result.Items.Count;
     string href = InfiniteScroll.SentinelHref(Model.View, Context.Request.Query, nextOffset, Model.Result.Limit);
-    <tr hx-get="@href" hx-trigger="intersect once" hx-swap="afterend" hx-target="this">
+    <tr hx-get="@href" hx-trigger="intersect once" hx-swap="outerHTML" hx-target="this">
         <td colspan="4" class="dn-sentinel"><span class="dn-sentinel__muted">Loading&hellip;</span></td>
     </tr>
 }
