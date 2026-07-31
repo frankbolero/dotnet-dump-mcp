@@ -3,8 +3,8 @@
 Status: **in progress** — Phase 0 complete and accepted. Phase 1 delivered, with three deviations
 recorded below. Phase 2 complete, measured, tested, and signed off. Phase 3's five tasks (3.1–3.5)
 are all complete and its restated exit criterion mechanically verified, awaiting sign-off. Phase 4
-in progress: 4.1–4.3 (filter bar, chips, sortable headers) done and verified against a real dump;
-4.4–4.6 outstanding. Phases 5–7 outstanding.
+in progress: 4.1–4.4 (filter bar, chips, sortable headers, infinite scroll) done and verified against
+a real dump; 4.5–4.6 outstanding. Phases 5–7 outstanding.
 
 Eight phases. Phases 0, 1 and 2 run in parallel; the rest are sequential. Each phase has an exit
 criterion that is a demonstrable fact, not a feeling, and the phases that could invalidate later work
@@ -331,16 +331,32 @@ its no-walk-time-scope decision above, and a full page (nav, shell) on direct na
 ## Phase 4 — Interaction
 
 Depends on 0 and 3. This is where the interface becomes usable rather than viewable. **In progress:
-4.1–4.3 done, 4.4–4.6 outstanding.**
+4.1–4.4 done, 4.5–4.6 outstanding.**
 
 | Task | Status | Detail |
 | :--- | :--- | :--- |
 | 4.1 | ✅ | Filter bar wired per view, exposing only the fields that view honors. `hx-trigger="input changed delay:250ms"`, `hx-include="closest form"`, `hx-push-url="true"`. Data-driven over `ViewDescriptor.HonoredFilters` (`Rendering/FilterBar.cs`) rather than 8 hand-copied field lists, rendered through one shared `Views/Shared/_FilterBar.cshtml`. |
 | 4.2 | ✅ | Active-filter chips with individual and clear-all removal. Each chip's own URL keeps every other active filter and drops only its own field; "clear all" drops every filter field but keeps `limit`. |
 | 4.3 | ✅ | Sortable headers with three-state `aria-sort`, preserving the active filter. Only columns a view's analyzer has a dedicated `SortBy` string for get a sortable header — e.g. `dumpheap` sorts on `count`/`typename` only, `MethodTable`/`Total size` stay plain. |
-| 4.4 | | Infinite scroll: `/views/{view}/rows`, the sentinel row that replaces itself, and the end-of-data state driven by `HasMore`. |
+| 4.4 | ✅ | Infinite scroll: `GET /views/{view}/rows` answers with the next page's `<tr>` rows plus a fresh sentinel, driven by `PagedResult.HasMore`. Each view's row loop factored into a shared `_{View}Rows.cshtml` partial so the initial page and the incremental route render identically rather than drifting apart. |
 | 4.5 | | Out-of-band updates for result counts, pagination footer and cache-state indicator. |
 | 4.6 | | URL state round-trip: every filter, sort and page position survives copy-paste of the address bar, back and forward. |
+
+**4.4's own version of the risk register's named bug, correctly avoided.** The sentinel cannot reuse
+4.1–4.3's `hx-include="closest form"` pattern — it fires from `hx-trigger="revealed"`, not a form
+control, and there is no hidden field carrying `sort`/`order` for `hx-include` to find even if there
+were. `Rendering/InfiniteScroll.SentinelHref` instead bakes the complete current request (every
+active filter field, `sort`, `order`, the next `offset`, and the clamped `limit`) explicitly into its
+own `hx-get`. Getting this wrong would have silently reset a sorted, filtered view's sort order the
+moment a user scrolled past the first page — the same failure class the risk register names, aimed
+at a parameter the register's own wording doesn't mention. Verified with a dedicated test
+(`InfiniteScrollTests.RowsRoute_PreservesActiveFilterAndSort_AcrossThePageBoundary`) and a manual
+`curl` walk across two page boundaries of a `type=Http&sort=count&order=asc` request.
+
+**Verified.** Full suite: 733/0/0 with the 9.6 GB dump, 679/0/54 without, on
+`net8.0`/`net9.0`/`net10.0`. `dotnet format --verify-no-changes` clean. Zero real `style=`
+attributes. `dumpstack/rows` (a `ViewKind.Detail` view despite being filterable) returns `400`, not
+`404` or `500`.
 
 **4.1–4.3, delegated and reviewed.** Per the delegation table, the lead wrote
 [`FilterPreservationTests.cs`](../../src/DotNetDump.Tests/FilterPreservationTests.cs) — the risk
