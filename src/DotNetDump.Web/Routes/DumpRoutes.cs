@@ -489,9 +489,11 @@ public static class DumpRoutes {
 	/// <summary>
 	/// Renders <paramref name="partialPath"/> plus the count out-of-band swap (task 4.5) -- the
 	/// shared last step of every <see cref="RenderRows"/> case. <paramref name="model"/> already
-	/// carries the same <see cref="ListModel{T}.CountSummary"/> the initial page's fragment used, so
-	/// the count keeps climbing as further pages load instead of freezing at whatever it read on the
-	/// first request.
+	/// carries the same <see cref="ListModel{T}.CountSummary"/> the initial page's fragment used.
+	/// The number itself does not change as further pages load -- <c>TotalAvailable</c>/
+	/// <c>TotalUnfiltered</c> describe the full filtered/unfiltered result, independent of
+	/// <c>Offset</c>/<c>Limit</c> -- but before this task this route carried no count element at
+	/// all, so scrolling left the header showing whatever the last full page load happened to say.
 	/// </summary>
 	private static async Task<IResult> RowsHtml<T>(HttpContext http, IFragmentRenderer renderer, ListModel<T> model, string partialPath) {
 		string html = await renderer.RenderAsync(http, partialPath, model);
