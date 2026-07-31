@@ -1,0 +1,23 @@
+@*
+    The row loop for ClrThreads.cshtml, factored out (task 4.4) -- see _DumpHeapRows.cshtml's doc
+    comment for why this exists and what the trailing sentinel <tr> does.
+*@
+@model ListModel<ThreadInfo>
+@foreach (var item in Model.Result.Items)
+{
+    <tr class="dn-tr">
+        <td class="dn-td dn-td--num">@Display.Count(item.ManagedThreadId)</td>
+        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.ThreadId(item.OSThreadId)</span></td>
+        <td class="dn-td">@Display.ThreadState(item.IsAlive)</td>
+        <td class="dn-td" title="@item.ExceptionMessage">@Display.OrNone(item.ExceptionType)</td>
+    </tr>
+}
+
+@if (Model.Result.HasMore)
+{
+    int nextOffset = Model.Result.Offset + Model.Result.Items.Count;
+    string href = InfiniteScroll.SentinelHref(Model.View, Context.Request.Query, nextOffset, Model.Result.Limit);
+    <tr hx-get="@href" hx-trigger="revealed" hx-swap="afterend" hx-target="this">
+        <td colspan="4" class="dn-sentinel"><span class="dn-sentinel__muted">Loading&hellip;</span></td>
+    </tr>
+}

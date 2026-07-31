@@ -12,6 +12,8 @@
     _FilterBar.cshtml's doc comment. HeapAnalyzer.GetSyncBlocks only recognizes "recursion" and
     "waiting" as SortBy values (anything else falls back to ObjectAddress), so Object, Type, Lock,
     Held and Owner Thread stay plain, unsortable headers.
+
+    Task 4.4: the <tr> loop lives in _SyncBlkRows.cshtml -- see DumpHeap.cshtml's doc comment for why.
 *@
 @model ListModel<SyncBlockInfo>
 @{
@@ -40,25 +42,7 @@
                 </tr>
             </thead>
             <tbody id="rows-@Model.View.Name">
-                @foreach (var item in Model.Result.Items)
-                {
-                    var type = MiddleTruncated.From(item.TypeName);
-                    string owner = item.ManagedThreadId.HasValue
-                        ? Display.Count(item.ManagedThreadId.Value)
-                        : (item.HoldingThreadAddress != 0 ? "@" + Display.Address(item.HoldingThreadAddress) : "none");
-                    string kind = item.IsThinLock ? "thin" : "syncblk";
-                    <tr class="dn-tr">
-                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.ObjectAddress)</span></td>
-                        <td class="dn-td dn-td--type" title="@type.Full">
-                            <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
-                        </td>
-                        <td class="dn-td">@kind</td>
-                        <td class="dn-td">@(item.IsMonitorHeld ? "yes" : "no")</td>
-                        <td class="dn-td dn-td--mono">@owner</td>
-                        <td class="dn-td dn-td--num">@Display.Count(item.RecursionCount)</td>
-                        <td class="dn-td dn-td--num">@Display.Count(item.WaitingThreadCount)</td>
-                    </tr>
-                }
+                <partial name="/Views/Fragments/_SyncBlkRows.cshtml" model="@Model" />
 
                 @if (Model.Result.Items.Count == 0)
                 {

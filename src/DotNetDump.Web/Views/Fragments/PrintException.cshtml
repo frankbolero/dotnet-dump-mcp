@@ -12,6 +12,8 @@
     dedicated string). The Thread column is the one place that value is shown -- Display.ThreadOrHeap
     renders the OS thread id inside it -- so it is the sortable header here; Address, Type and
     Message stay plain.
+
+    Task 4.4: the <tr> loop lives in _PrintExceptionRows.cshtml -- see DumpHeap.cshtml's doc comment for why.
 *@
 @model ListModel<ThreadExceptionInfo>
 @{
@@ -34,21 +36,7 @@
                 </tr>
             </thead>
             <tbody id="rows-@Model.View.Name">
-                @foreach (var item in Model.Result.Items)
-                {
-                    @if (item.Exception is not null)
-                    {
-                        var type = MiddleTruncated.From(item.Exception.TypeName);
-                        <tr class="dn-tr">
-                            <td class="dn-td">@Display.ThreadOrHeap(item.ManagedThreadId, item.OSThreadId)</td>
-                            <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Exception.Address)</span></td>
-                            <td class="dn-td dn-td--type" title="@type.Full">
-                                <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
-                            </td>
-                            <td class="dn-td">@Display.OrNone(item.Exception.Message)</td>
-                        </tr>
-                    }
-                }
+                <partial name="/Views/Fragments/_PrintExceptionRows.cshtml" model="@Model" />
 
                 @if (Model.Result.Items.Count == 0 || Model.Result.Items.All(i => i.Exception is null))
                 {

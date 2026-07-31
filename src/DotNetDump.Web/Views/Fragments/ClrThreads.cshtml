@@ -11,6 +11,8 @@
     _FilterBar.cshtml's doc comment. ThreadAnalyzer.GetThreads only recognizes "exception" and
     "osthreadid" as SortBy values (anything else falls back to ManagedThreadId), so Mgd ID and
     State stay plain, unsortable headers.
+
+    Task 4.4: the <tr> loop lives in _ClrThreadsRows.cshtml -- see DumpHeap.cshtml's doc comment for why.
 *@
 @model ListModel<ThreadInfo>
 @{
@@ -36,15 +38,7 @@
                 </tr>
             </thead>
             <tbody id="rows-@Model.View.Name">
-                @foreach (var item in Model.Result.Items)
-                {
-                    <tr class="dn-tr">
-                        <td class="dn-td dn-td--num">@Display.Count(item.ManagedThreadId)</td>
-                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.ThreadId(item.OSThreadId)</span></td>
-                        <td class="dn-td">@Display.ThreadState(item.IsAlive)</td>
-                        <td class="dn-td" title="@item.ExceptionMessage">@Display.OrNone(item.ExceptionType)</td>
-                    </tr>
-                }
+                <partial name="/Views/Fragments/_ClrThreadsRows.cshtml" model="@Model" />
 
                 @if (Model.Result.Items.Count == 0)
                 {
