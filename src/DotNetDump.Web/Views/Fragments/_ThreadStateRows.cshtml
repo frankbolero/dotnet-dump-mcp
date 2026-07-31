@@ -1,0 +1,27 @@
+@*
+    The row loop for ThreadState.cshtml, factored out (task 4.4) -- see _DumpHeapRows.cshtml's doc
+    comment for why this exists and what the trailing sentinel <tr> does.
+*@
+@model ListModel<ThreadStateInfo>
+@foreach (var item in Model.Result.Items)
+{
+    <tr class="dn-tr">
+        <td class="dn-td dn-td--num">@Display.Count(item.ManagedThreadId)</td>
+        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.ThreadId(item.OSThreadId)</span></td>
+        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Address)</span></td>
+        <td class="dn-td">@item.GcMode</td>
+        <td class="dn-td">@item.ApartmentState</td>
+        <td class="dn-td dn-td--num">@Display.LockCountOrUnknown(item.LockCount)</td>
+        <td class="dn-td">@Display.OrNone(item.ExceptionType)</td>
+        <td class="dn-td">@(Display.JoinOrDash(item.StateFlags))</td>
+    </tr>
+}
+
+@if (Model.Result.HasMore)
+{
+    int nextOffset = Model.Result.Offset + Model.Result.Items.Count;
+    string href = InfiniteScroll.SentinelHref(Model.View, Context.Request.Query, nextOffset, Model.Result.Limit);
+    <tr hx-get="@href" hx-trigger="revealed" hx-swap="afterend" hx-target="this">
+        <td colspan="8" class="dn-sentinel"><span class="dn-sentinel__muted">Loading&hellip;</span></td>
+    </tr>
+}

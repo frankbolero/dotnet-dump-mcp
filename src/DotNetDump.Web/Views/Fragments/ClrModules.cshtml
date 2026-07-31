@@ -15,6 +15,8 @@
     _FilterBar.cshtml's doc comment. ModuleAnalyzer.GetModules only recognizes "size" and "name" as
     SortBy values (anything else falls back to ImageBase), so Base address and Kind stay plain,
     unsortable headers.
+
+    Task 4.4: the <tr> loop lives in _ClrModulesRows.cshtml -- see DumpHeap.cshtml's doc comment for why.
 *@
 @model ListModel<ModuleInfo>
 @{
@@ -40,15 +42,7 @@
                 </tr>
             </thead>
             <tbody id="rows-@Model.View.Name">
-                @foreach (var item in Model.Result.Items)
-                {
-                    <tr class="dn-tr">
-                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.ImageBase)</span></td>
-                        <td class="dn-td dn-td--num" title="@Display.Bytes((long)item.Size)">@Display.Size((long)item.Size)</td>
-                        <td class="dn-td">@(item.IsUserCode ? "user code" : "system")</td>
-                        <td class="dn-td dn-td--text">@item.Name</td>
-                    </tr>
-                }
+                <partial name="/Views/Fragments/_ClrModulesRows.cshtml" model="@Model" />
 
                 @if (Model.Result.Items.Count == 0)
                 {

@@ -1,0 +1,35 @@
+@*
+    The row loop for DumpHeap.cshtml, factored out (task 4.4) so it can be rendered twice: once
+    inline inside the full fragment's <tbody>, and once alone by GET /views/dumpheap/rows for
+    infinite scroll. Keeping the <tr> markup in one place means the two can never drift apart.
+
+    The trailing sentinel <tr> is part of this partial, not the caller's, because both call sites
+    need the *same* rule: it appears only when Model.Result.HasMore is true (SERVER.md §5.1 rule 3),
+    and its own hx-get bakes in the complete next request -- every query parameter the current one
+    carried, with only offset and limit overwritten -- rather than relying on hx-include, which the
+    sentinel has no form to reach into. See InfiniteScroll.SentinelHref's remarks for why that
+    matters: an omitted sort/order here would silently reset a sorted, filtered view the moment a
+    user scrolls past the first page.
+*@
+@model ListModel<HeapStatItem>
+@foreach (var item in Model.Result.Items)
+{
+    var type = MiddleTruncated.From(item.TypeName);
+    <tr class="dn-tr">
+        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.MethodTable)</span></td>
+        <td class="dn-td dn-td--num">@Display.Count(item.Count)</td>
+        <td class="dn-td dn-td--num" title="@Display.Bytes(item.TotalSize)">@Display.Size(item.TotalSize)</td>
+        <td class="dn-td dn-td--type" title="@type.Full">
+            <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
+        </td>
+    </tr>
+}
+
+@if (Model.Result.HasMore)
+{
+    int nextOffset = Model.Result.Offset + Model.Result.Items.Count;
+    string href = InfiniteScroll.SentinelHref(Model.View, Context.Request.Query, nextOffset, Model.Result.Limit);
+    <tr hx-get="@href" hx-trigger="revealed" hx-swap="afterend" hx-target="this">
+        <td colspan="4" class="dn-sentinel"><span class="dn-sentinel__muted">Loading&hellip;</span></td>
+    </tr>
+}

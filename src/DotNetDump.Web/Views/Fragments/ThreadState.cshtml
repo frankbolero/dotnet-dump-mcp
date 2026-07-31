@@ -10,6 +10,8 @@
     _FilterBar.cshtml's doc comment. ThreadAnalyzer.GetThreadStates only recognizes "osthreadid"
     and "lockcount" as SortBy values (anything else falls back to ManagedThreadId), so Mgd ID,
     Address, GC Mode, Apartment, Exception and Flags stay plain, unsortable headers.
+
+    Task 4.4: the <tr> loop lives in _ThreadStateRows.cshtml -- see DumpHeap.cshtml's doc comment for why.
 *@
 @model ListModel<ThreadStateInfo>
 @{
@@ -39,19 +41,7 @@
                 </tr>
             </thead>
             <tbody id="rows-@Model.View.Name">
-                @foreach (var item in Model.Result.Items)
-                {
-                    <tr class="dn-tr">
-                        <td class="dn-td dn-td--num">@Display.Count(item.ManagedThreadId)</td>
-                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.ThreadId(item.OSThreadId)</span></td>
-                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Address)</span></td>
-                        <td class="dn-td">@item.GcMode</td>
-                        <td class="dn-td">@item.ApartmentState</td>
-                        <td class="dn-td dn-td--num">@Display.LockCountOrUnknown(item.LockCount)</td>
-                        <td class="dn-td">@Display.OrNone(item.ExceptionType)</td>
-                        <td class="dn-td">@(Display.JoinOrDash(item.StateFlags))</td>
-                    </tr>
-                }
+                <partial name="/Views/Fragments/_ThreadStateRows.cshtml" model="@Model" />
 
                 @if (Model.Result.Items.Count == 0)
                 {

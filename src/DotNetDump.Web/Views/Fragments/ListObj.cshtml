@@ -9,6 +9,8 @@
     Task 4.1-4.3: filter bar, chips and sortable headers inside one <form> -- see
     _FilterBar.cshtml's doc comment. HeapAnalyzer.GetObjects only recognizes "size" and "address" as
     SortBy values, so MethodTable, Type and Gen stay plain, unsortable headers.
+
+    Task 4.4: the <tr> loop lives in _ListObjRows.cshtml -- see DumpHeap.cshtml's doc comment for why.
 *@
 @model ListModel<HeapObjectItem>
 @{
@@ -35,19 +37,7 @@
                 </tr>
             </thead>
             <tbody id="rows-@Model.View.Name">
-                @foreach (var item in Model.Result.Items)
-                {
-                    var type = MiddleTruncated.From(item.TypeName);
-                    <tr class="dn-tr">
-                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Address)</span></td>
-                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.MethodTable)</span></td>
-                        <td class="dn-td dn-td--num" title="@Display.Bytes((long)item.Size)">@Display.Size((long)item.Size)</td>
-                        <td class="dn-td dn-td--type" title="@type.Full">
-                            <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
-                        </td>
-                        <td class="dn-td">@(item.Generation?.ToString() ?? "-")</td>
-                    </tr>
-                }
+                <partial name="/Views/Fragments/_ListObjRows.cshtml" model="@Model" />
 
                 @if (Model.Result.Items.Count == 0)
                 {
