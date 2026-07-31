@@ -23,12 +23,12 @@
         <table class="dn-table">
             <thead>
                 <tr>
-                    <th scope="col" class="dn-th dn-th--mono">
-                        <a class="dn-th__sort" aria-sort="@addressSort.AriaSort" hx-get="@addressSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Address@(addressSort.Indicator)</a>
+                    <th scope="col" class="dn-th dn-th--mono" aria-sort="@addressSort.AriaSort">
+                        <a class="dn-th__sort" hx-get="@addressSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Address@(addressSort.Indicator)</a>
                     </th>
                     <th scope="col" class="dn-th dn-th--mono">MethodTable</th>
-                    <th scope="col" class="dn-th dn-th--num">
-                        <a class="dn-th__sort" aria-sort="@sizeSort.AriaSort" hx-get="@sizeSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Size@(sizeSort.Indicator)</a>
+                    <th scope="col" class="dn-th dn-th--num" aria-sort="@sizeSort.AriaSort">
+                        <a class="dn-th__sort" hx-get="@sizeSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Size@(sizeSort.Indicator)</a>
                     </th>
                     <th scope="col" class="dn-th">Type</th>
                     <th scope="col" class="dn-th">Gen</th>

@@ -26,14 +26,14 @@
                 <tr>
                     <th scope="col" class="dn-th dn-th--mono">Handle</th>
                     <th scope="col" class="dn-th dn-th--mono">Object</th>
-                    <th scope="col" class="dn-th">
-                        <a class="dn-th__sort" aria-sort="@kindSort.AriaSort" hx-get="@kindSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Kind@(kindSort.Indicator)</a>
+                    <th scope="col" class="dn-th" aria-sort="@kindSort.AriaSort">
+                        <a class="dn-th__sort" hx-get="@kindSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Kind@(kindSort.Indicator)</a>
                     </th>
                     <th scope="col" class="dn-th">Strong</th>
                     <th scope="col" class="dn-th dn-th--num">RefCount</th>
                     <th scope="col" class="dn-th dn-th--mono">Dependent</th>
-                    <th scope="col" class="dn-th">
-                        <a class="dn-th__sort" aria-sort="@typeSort.AriaSort" hx-get="@typeSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Type@(typeSort.Indicator)</a>
+                    <th scope="col" class="dn-th" aria-sort="@typeSort.AriaSort">
+                        <a class="dn-th__sort" hx-get="@typeSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Type@(typeSort.Indicator)</a>
                     </th>
                 </tr>
             </thead>

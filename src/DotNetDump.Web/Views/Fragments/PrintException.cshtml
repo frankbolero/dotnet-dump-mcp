@@ -25,8 +25,8 @@
         <table class="dn-table">
             <thead>
                 <tr>
-                    <th scope="col" class="dn-th">
-                        <a class="dn-th__sort" aria-sort="@threadSort.AriaSort" hx-get="@threadSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Thread@(threadSort.Indicator)</a>
+                    <th scope="col" class="dn-th" aria-sort="@threadSort.AriaSort">
+                        <a class="dn-th__sort" hx-get="@threadSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Thread@(threadSort.Indicator)</a>
                     </th>
                     <th scope="col" class="dn-th dn-th--mono">Address</th>
                     <th scope="col" class="dn-th">Type</th>

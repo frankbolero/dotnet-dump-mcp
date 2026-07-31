@@ -30,12 +30,12 @@
             <thead>
                 <tr>
                     <th scope="col" class="dn-th dn-th--mono">Base address</th>
-                    <th scope="col" class="dn-th dn-th--num">
-                        <a class="dn-th__sort" aria-sort="@sizeSort.AriaSort" hx-get="@sizeSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Size@(sizeSort.Indicator)</a>
+                    <th scope="col" class="dn-th dn-th--num" aria-sort="@sizeSort.AriaSort">
+                        <a class="dn-th__sort" hx-get="@sizeSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Size@(sizeSort.Indicator)</a>
                     </th>
                     <th scope="col" class="dn-th">Kind</th>
-                    <th scope="col" class="dn-th">
-                        <a class="dn-th__sort" aria-sort="@nameSort.AriaSort" hx-get="@nameSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Name@(nameSort.Indicator)</a>
+                    <th scope="col" class="dn-th" aria-sort="@nameSort.AriaSort">
+                        <a class="dn-th__sort" hx-get="@nameSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Name@(nameSort.Indicator)</a>
                     </th>
                 </tr>
             </thead>

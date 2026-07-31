@@ -50,6 +50,25 @@ public sealed class FilterPreservationTests(FilterPreservationHostFixture fixtur
 		return string.Empty; // unreachable
 	}
 
+	/// <summary>
+	/// Returns the smallest <c>&lt;tagName ...&gt;...&lt;/tagName&gt;</c> block whose contents
+	/// contain <paramref name="needle"/>. <c>aria-sort</c> belongs on the <c>&lt;th&gt;</c> itself
+	/// (WAI-ARIA's sortable-table pattern; a screen reader announces a column's sort state from the
+	/// columnheader, not from a link nested inside it), one level up from the <c>&lt;a&gt;</c> whose
+	/// <c>hx-get</c> carries the sort key -- so finding "the tag with both attributes" (what
+	/// <see cref="TagContaining"/> does) is the wrong shape for this assertion.
+	/// </summary>
+	private static string ElementContaining(string html, string tagName, string needle) {
+		foreach (Match element in Regex.Matches(html, $"<{tagName}\\b[^>]*>.*?</{tagName}>", RegexOptions.Singleline)) {
+			if (element.Value.Contains(needle, StringComparison.Ordinal)) {
+				return element.Value;
+			}
+		}
+
+		Assert.Fail($"No <{tagName}> element in the response contains '{needle}'. Response was:\n{html}");
+		return string.Empty; // unreachable
+	}
+
 	[SkippableFact]
 	public async Task SortHeader_CarriesHxInclude_SoClickingItResubmitsTheActiveFilter() {
 		fixture.SkipIfUnavailable();
@@ -127,10 +146,10 @@ public sealed class FilterPreservationTests(FilterPreservationHostFixture fixtur
 
 		string body = await GetFragment("?sort=count&order=asc&limit=5");
 
-		string countHeader = TagContaining(body, "sort=count");
+		string countHeader = ElementContaining(body, "th", "sort=count");
 		Assert.Contains("aria-sort=\"ascending\"", countHeader, StringComparison.Ordinal);
 
-		string typeHeader = TagContaining(body, "sort=typename");
+		string typeHeader = ElementContaining(body, "th", "sort=typename");
 		Assert.DoesNotContain("aria-sort=\"ascending\"", typeHeader, StringComparison.Ordinal);
 		Assert.DoesNotContain("aria-sort=\"descending\"", typeHeader, StringComparison.Ordinal);
 	}

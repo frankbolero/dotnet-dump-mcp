@@ -35,12 +35,12 @@
             <thead>
                 <tr>
                     <th scope="col" class="dn-th dn-th--mono">MethodTable</th>
-                    <th scope="col" class="dn-th dn-th--num">
-                        <a class="dn-th__sort" aria-sort="@countSort.AriaSort" hx-get="@countSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Count@(countSort.Indicator)</a>
+                    <th scope="col" class="dn-th dn-th--num" aria-sort="@countSort.AriaSort">
+                        <a class="dn-th__sort" hx-get="@countSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Count@(countSort.Indicator)</a>
                     </th>
                     <th scope="col" class="dn-th dn-th--num">Total size</th>
-                    <th scope="col" class="dn-th">
-                        <a class="dn-th__sort" aria-sort="@typeSort.AriaSort" hx-get="@typeSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Type@(typeSort.Indicator)</a>
+                    <th scope="col" class="dn-th" aria-sort="@typeSort.AriaSort">
+                        <a class="dn-th__sort" hx-get="@typeSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Type@(typeSort.Indicator)</a>
                     </th>
                 </tr>
             </thead>

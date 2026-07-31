@@ -31,11 +31,11 @@
                     <th scope="col" class="dn-th">Lock</th>
                     <th scope="col" class="dn-th">Held</th>
                     <th scope="col" class="dn-th">Owner Thread</th>
-                    <th scope="col" class="dn-th dn-th--num">
-                        <a class="dn-th__sort" aria-sort="@recursionSort.AriaSort" hx-get="@recursionSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Recursion@(recursionSort.Indicator)</a>
+                    <th scope="col" class="dn-th dn-th--num" aria-sort="@recursionSort.AriaSort">
+                        <a class="dn-th__sort" hx-get="@recursionSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Recursion@(recursionSort.Indicator)</a>
                     </th>
-                    <th scope="col" class="dn-th dn-th--num">
-                        <a class="dn-th__sort" aria-sort="@waitingSort.AriaSort" hx-get="@waitingSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Waiting@(waitingSort.Indicator)</a>
+                    <th scope="col" class="dn-th dn-th--num" aria-sort="@waitingSort.AriaSort">
+                        <a class="dn-th__sort" hx-get="@waitingSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Waiting@(waitingSort.Indicator)</a>
                     </th>
                 </tr>
             </thead>
