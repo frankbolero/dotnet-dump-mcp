@@ -10,6 +10,16 @@
     sentinel has no form to reach into. See InfiniteScroll.SentinelHref's remarks for why that
     matters: an omitted sort/order here would silently reset a sorted, filtered view the moment a
     user scrolls past the first page.
+
+    hx-trigger="intersect once", not "revealed" (found and fixed after 4.4 first shipped). This
+    app's scroll container is .dn-view-pad (overflow: auto), inside a fixed .dn-app/.dn-main shell
+    (overflow: hidden) -- so the window itself never scrolls. htmx's "revealed" trigger (see the
+    vendored wwwroot/lib/htmx.min.js's xt/bt functions) is driven entirely by window-level scroll
+    and resize listeners plus a 200ms poll, not by an IntersectionObserver, so scrolling the table
+    never woke it up; only an unrelated window resize (e.g. toggling DevTools) ever did, which is
+    why more rows appeared but only after that. "intersect" is htmx 2.x's other built-in trigger,
+    backed by a real IntersectionObserver per element, which correctly detects on-screen position
+    regardless of which ancestor is doing the scrolling -- no extension or vendoring change needed.
 *@
 @model ListModel<HeapStatItem>
 @foreach (var item in Model.Result.Items)
@@ -29,7 +39,7 @@
 {
     int nextOffset = Model.Result.Offset + Model.Result.Items.Count;
     string href = InfiniteScroll.SentinelHref(Model.View, Context.Request.Query, nextOffset, Model.Result.Limit);
-    <tr hx-get="@href" hx-trigger="revealed" hx-swap="afterend" hx-target="this">
+    <tr hx-get="@href" hx-trigger="intersect once" hx-swap="afterend" hx-target="this">
         <td colspan="4" class="dn-sentinel"><span class="dn-sentinel__muted">Loading&hellip;</span></td>
     </tr>
 }

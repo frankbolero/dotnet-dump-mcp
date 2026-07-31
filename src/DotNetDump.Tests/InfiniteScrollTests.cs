@@ -50,9 +50,11 @@ public sealed class InfiniteScrollTests(FilterPreservationHostFixture fixture) {
 		var (status, body) = await Get("/views/dumpheap?limit=5");
 		Assert.Equal(HttpStatusCode.OK, status);
 
-		// SERVER.md §5.1's markup, verbatim: revealed/afterend/this, not the sort/filter controls'
-		// own hx-target="#v-{view}".
-		Assert.Contains("hx-trigger=\"revealed\"", body, StringComparison.Ordinal);
+		// SERVER.md §5.1's markup, verbatim: intersect once/afterend/this, not the sort/filter
+		// controls' own hx-target="#v-{view}". Not "revealed" -- see _DumpHeapRows.cshtml's doc
+		// comment: this app's tables scroll inside .dn-view-pad, not the window, and "revealed" is
+		// driven entirely by window-level scroll/resize, so it never fired from real scrolling here.
+		Assert.Contains("hx-trigger=\"intersect once\"", body, StringComparison.Ordinal);
 		Assert.Contains("hx-swap=\"afterend\"", body, StringComparison.Ordinal);
 		Assert.Contains("hx-target=\"this\"", body, StringComparison.Ordinal);
 
@@ -115,7 +117,7 @@ public sealed class InfiniteScrollTests(FilterPreservationHostFixture fixture) {
 		var (status, body) = await Get("/views/dumpheap/rows?offset=999999999&limit=5");
 		Assert.Equal(HttpStatusCode.OK, status);
 
-		Assert.DoesNotContain("hx-trigger=\"revealed\"", body, StringComparison.Ordinal);
+		Assert.DoesNotContain("hx-trigger=\"intersect once\"", body, StringComparison.Ordinal);
 		Assert.DoesNotContain("dn-tr", body, StringComparison.Ordinal);
 	}
 

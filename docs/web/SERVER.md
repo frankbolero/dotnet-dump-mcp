@@ -193,7 +193,7 @@ Every view fragment has a stable id, `#v-{view}`, and swaps `outerHTML`. Every t
        hx-target="#v-dumpheap" hx-push-url="true">Total size ▾</a></th>
 
 <!-- infinite scroll sentinel: last row of the current page -->
-<tr hx-get="/views/dumpheap/rows?offset=50" hx-trigger="revealed"
+<tr hx-get="/views/dumpheap/rows?offset=50" hx-trigger="intersect once"
     hx-swap="afterend" hx-target="this"><td colspan="4" class="loading">…</td></tr>
 ```
 
@@ -208,6 +208,14 @@ Three rules the markup must obey:
 3. **The scroll sentinel is the last row and replaces itself.** `hx-swap="afterend"` with
    `hx-target="this"` appends the next page and the server emits a fresh sentinel — unless
    `HasMore` is false, in which case it emits none and the scrolling stops naturally.
+4. **The sentinel's trigger is `intersect once`, never `revealed`.** This app's tables scroll inside
+   `.dn-view-pad` (`overflow: auto`), nested in a fixed shell (`.dn-app`/`.dn-main`,
+   `overflow: hidden`) — the window itself never scrolls. htmx's `revealed` trigger is driven by
+   `window`-level `scroll`/`resize` listeners plus a poll, not an `IntersectionObserver`, so it never
+   wakes up from scrolling this app's actual scroll container; only an unrelated window resize
+   (e.g. toggling browser DevTools) ever did, which is exactly the bug this rule exists to prevent
+   from recurring. `intersect` is htmx 2.x's other built-in trigger, backed by a real
+   `IntersectionObserver`, and needs no extension or vendoring change.
 
 ### 5.2 Out-of-band updates
 
