@@ -708,3 +708,96 @@ a {
 	white-space: nowrap;
 	overflow-x: auto;
 }
+
+/* ---------------------------------------------------------------------------
+ * Filtering: filter bar, active-filter chips, sortable headers (task 4.1-4.3).
+ *
+ * Lifted from design-sync/Filtering.dc.html's "bar", "field", "chip" and "clearBtn"
+ * sections. The <form> wrapping a fragment's filter bar and its table needs no class
+ * of its own -- it is a plain block container, and its only job is being the
+ * ancestor hx-include="closest form" resolves to.
+ * ------------------------------------------------------------------------- */
+
+.dn-filterform {
+	display: block;
+}
+
+.dn-filterbar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+	padding: 12px 0;
+}
+
+.dn-filterbar__field {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.dn-filterbar__label {
+	color: var(--dn-text-muted);
+	font-size: 11.5px;
+	white-space: nowrap;
+}
+
+.dn-filterbar__dash {
+	color: var(--dn-text-faint);
+}
+
+.dn-input {
+	background: var(--dn-surface);
+	border: 1px solid var(--dn-border);
+	color: var(--dn-text);
+	border-radius: 6px;
+	padding: 7px 10px;
+	font-size: 12.5px;
+	font-family: var(--dn-font-body);
+}
+
+.dn-input--num {
+	width: 100px;
+	font-family: var(--dn-font-mono);
+}
+
+.dn-chiprow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	padding-bottom: 12px;
+}
+
+.dn-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	background: var(--dn-accent-soft);
+	color: var(--dn-accent-text);
+	border: 1px solid var(--dn-accent);
+	border-radius: 100px;
+	padding: 3px 6px 3px 10px;
+	font-size: 11.5px;
+	cursor: pointer;
+}
+
+.dn-chip__x {
+	opacity: 0.7;
+	padding: 0 3px;
+}
+
+/* A sortable header is a plain <th> whose only child is the <a> below -- the link carries the
+   click target, the <th> carries aria-sort so assistive tech reads the column's state from the
+   header itself rather than from inside an anchor. */
+.dn-th__sort {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	cursor: pointer;
+	color: inherit;
+}
+
+.dn-th__sort:hover {
+	color: var(--dn-text);
+}

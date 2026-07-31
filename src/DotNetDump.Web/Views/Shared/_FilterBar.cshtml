@@ -1,0 +1,73 @@
+@*
+    Shared filter bar + active-filter chips for every ViewKind.List fragment (tasks 4.1/4.2). Which
+    controls appear is entirely FilterBar.Build's data-driven mapping over
+    ViewDescriptor.HonoredFilters -- this partial only renders whatever FilterBarModel it is handed,
+    so a new honored field needs no new markup here, and no view hand-lists its own fields.
+
+    Callers must render this partial *inside* the same <form> that also holds the fragment's
+    sortable headers (see e.g. DumpHeap.cshtml). hx-include="closest form" is what makes a sort
+    click resubmit the active filter and a filter keystroke resubmit the active sort (SERVER.md
+    §5.1 rule 2) -- it only works because both live inside one shared <form>, which is also why
+    every control's own action URL (FilterBarModel.ActionUrl) carries sort/order/limit but not the
+    filter fields themselves: those come from hx-include reading the DOM, live, not from a URL this
+    partial would otherwise have to keep in sync with it.
+
+    The @switch below picks an HTML control per FilterControlKind, not between two page layouts --
+    it is the one conditional this data-driven component cannot avoid, since a filter bar that
+    composes an arbitrary honored-field subset is unavoidably a small set of control kinds.
+*@
+@model FilterBarModel
+
+<div class="dn-filterbar">
+    @foreach (var control in Model.Controls)
+    {
+        <div class="dn-filterbar__field">
+            <label class="dn-filterbar__label">@control.Label</label>
+            @switch (control.Kind)
+            {
+                case FilterControlKind.Text:
+                    <input class="dn-input" type="search" name="@control.Name" value="@control.Value" placeholder="@control.Placeholder"
+                           hx-get="@Model.ActionUrl" hx-target="#v-@Model.View.Name" hx-push-url="true"
+                           hx-include="closest form" hx-trigger="input changed delay:250ms, search" />
+                    break;
+                case FilterControlKind.Number:
+                    <input class="dn-input dn-input--num" type="number" min="0" name="@control.Name" value="@control.Value" placeholder="@control.Placeholder"
+                           hx-get="@Model.ActionUrl" hx-target="#v-@Model.View.Name" hx-push-url="true"
+                           hx-include="closest form" hx-trigger="input changed delay:250ms" />
+                    break;
+                case FilterControlKind.Range:
+                    <input class="dn-input dn-input--num" type="number" min="0" name="@control.Name" value="@control.Value" placeholder="@control.Placeholder"
+                           hx-get="@Model.ActionUrl" hx-target="#v-@Model.View.Name" hx-push-url="true"
+                           hx-include="closest form" hx-trigger="input changed delay:250ms" />
+                    <span class="dn-filterbar__dash" aria-hidden="true">&ndash;</span>
+                    <input class="dn-input dn-input--num" type="number" min="0" name="@control.SecondaryName" value="@control.SecondaryValue" placeholder="@control.SecondaryPlaceholder"
+                           hx-get="@Model.ActionUrl" hx-target="#v-@Model.View.Name" hx-push-url="true"
+                           hx-include="closest form" hx-trigger="input changed delay:250ms" />
+                    break;
+                case FilterControlKind.Select:
+                    <select class="dn-input" name="@control.Name"
+                            hx-get="@Model.ActionUrl" hx-target="#v-@Model.View.Name" hx-push-url="true"
+                            hx-include="closest form" hx-trigger="change">
+                        @foreach (var option in control.Options!)
+                        {
+                            <option value="@option.Value" selected="@(option.Value == (control.Value ?? string.Empty) ? "selected" : null)">@option.Label</option>
+                        }
+                    </select>
+                    break;
+            }
+        </div>
+    }
+</div>
+
+@if (Model.Chips.Count > 0)
+{
+    <div class="dn-chiprow">
+        @foreach (var chip in Model.Chips)
+        {
+            <a class="dn-chip" hx-get="@chip.RemoveUrl" hx-target="#v-@Model.View.Name" hx-push-url="true">
+                @chip.Label <span class="dn-chip__x" aria-hidden="true">&times;</span>
+            </a>
+        }
+        <a class="dn-btn" hx-get="@Model.ClearAllUrl" hx-target="#v-@Model.View.Name" hx-push-url="true">Clear all</a>
+    </div>
+}
