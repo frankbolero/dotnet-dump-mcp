@@ -5,59 +5,76 @@
 
     The columns mirror MarkdownFormatter.FormatGCHandles: handle address (mono), object address
     (mono), kind, strong (bool as text), ref count (with "-" when zero), type name.
+
+    Task 4.1-4.3: filter bar, chips and sortable headers inside one <form> -- see
+    _FilterBar.cshtml's doc comment. HeapAnalyzer.GetGCHandles only recognizes "kind" and
+    "typename" as SortBy values (anything else falls back to Address), so Handle, Object, Strong,
+    RefCount and Dependent stay plain, unsortable headers.
 *@
 @model ListModel<GCHandleInfo>
+@{
+    var filterBar = FilterBar.Build(Model.View, Context.Request.Query);
+    var kindSort = SortHeader.For(Model.View, Context.Request.Query, "kind", SortDirection.Asc);
+    var typeSort = SortHeader.For(Model.View, Context.Request.Query, "typename", SortDirection.Asc);
+}
 
 <div id="v-@Model.View.Name">
-    <table class="dn-table">
-        <thead>
-            <tr>
-                <th scope="col" class="dn-th dn-th--mono">Handle</th>
-                <th scope="col" class="dn-th dn-th--mono">Object</th>
-                <th scope="col" class="dn-th">Kind</th>
-                <th scope="col" class="dn-th">Strong</th>
-                <th scope="col" class="dn-th dn-th--num">RefCount</th>
-                <th scope="col" class="dn-th dn-th--mono">Dependent</th>
-                <th scope="col" class="dn-th">Type</th>
-            </tr>
-        </thead>
-        <tbody id="rows-@Model.View.Name">
-            @foreach (var item in Model.Result.Items)
-            {
-                var type = MiddleTruncated.From(item.TypeName);
-                string refCount = item.ReferenceCount != 0 ? Display.Count(item.ReferenceCount) : "-";
-                string dependent = item.DependentTarget != 0 ? Display.Address(item.DependentTarget) : "-";
-                <tr class="dn-tr">
-                    <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Address)</span></td>
-                    <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Object)</span></td>
-                    <td class="dn-td">@Display.OrNone(item.Kind)</td>
-                    <td class="dn-td">@(item.IsStrong ? "yes" : "no")</td>
-                    <td class="dn-td dn-td--num">@refCount</td>
-                    <td class="dn-td dn-td--mono">@dependent</td>
-                    <td class="dn-td dn-td--type" title="@type.Full">
-                        <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
-                    </td>
-                </tr>
-            }
-
-            @if (Model.Result.Items.Count == 0)
-            {
+    <form class="dn-filterform">
+        <partial name="/Views/Shared/_FilterBar.cshtml" model="@filterBar" />
+        <table class="dn-table">
+            <thead>
                 <tr>
-                    <td colspan="7" class="dn-empty">
-                        @* Per DESIGN_BRIEF.md §5: an unfiltered empty result means the dump has no
-                           GC handles, whereas a filtered one means the filter is too narrow. *@
-                        @if (Model.Result.TotalUnfiltered > 0)
-                        {
-                            <div class="dn-empty__title">No handles match the current filter.</div>
-                            <a class="dn-btn" href="/views/@Model.View.Name">Clear filters</a>
-                        }
-                        else
-                        {
-                            <div class="dn-empty__title">This dump has no GC handles to show.</div>
-                        }
-                    </td>
+                    <th scope="col" class="dn-th dn-th--mono">Handle</th>
+                    <th scope="col" class="dn-th dn-th--mono">Object</th>
+                    <th scope="col" class="dn-th">
+                        <a class="dn-th__sort" aria-sort="@kindSort.AriaSort" hx-get="@kindSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Kind@(kindSort.Indicator)</a>
+                    </th>
+                    <th scope="col" class="dn-th">Strong</th>
+                    <th scope="col" class="dn-th dn-th--num">RefCount</th>
+                    <th scope="col" class="dn-th dn-th--mono">Dependent</th>
+                    <th scope="col" class="dn-th">
+                        <a class="dn-th__sort" aria-sort="@typeSort.AriaSort" hx-get="@typeSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Type@(typeSort.Indicator)</a>
+                    </th>
                 </tr>
-            }
-        </tbody>
-    </table>
+            </thead>
+            <tbody id="rows-@Model.View.Name">
+                @foreach (var item in Model.Result.Items)
+                {
+                    var type = MiddleTruncated.From(item.TypeName);
+                    string refCount = item.ReferenceCount != 0 ? Display.Count(item.ReferenceCount) : "-";
+                    string dependent = item.DependentTarget != 0 ? Display.Address(item.DependentTarget) : "-";
+                    <tr class="dn-tr">
+                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Address)</span></td>
+                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Object)</span></td>
+                        <td class="dn-td">@Display.OrNone(item.Kind)</td>
+                        <td class="dn-td">@(item.IsStrong ? "yes" : "no")</td>
+                        <td class="dn-td dn-td--num">@refCount</td>
+                        <td class="dn-td dn-td--mono">@dependent</td>
+                        <td class="dn-td dn-td--type" title="@type.Full">
+                            <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
+                        </td>
+                    </tr>
+                }
+
+                @if (Model.Result.Items.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="dn-empty">
+                            @* Per DESIGN_BRIEF.md §5: an unfiltered empty result means the dump has no
+                               GC handles, whereas a filtered one means the filter is too narrow. *@
+                            @if (Model.Result.TotalUnfiltered > 0)
+                            {
+                                <div class="dn-empty__title">No handles match the current filter.</div>
+                                <a class="dn-btn" href="@(filterBar.ClearAllUrl ?? $"/views/{Model.View.Name}")">Clear filters</a>
+                            }
+                            else
+                            {
+                                <div class="dn-empty__title">This dump has no GC handles to show.</div>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </form>
 </div>

@@ -5,56 +5,72 @@
     Columns: object address, MethodTable, size (with byte count in title), type name (middle-
     truncated, because type names are distinguished by their tail), and generation (which may
     be null, rendered as "-").
+
+    Task 4.1-4.3: filter bar, chips and sortable headers inside one <form> -- see
+    _FilterBar.cshtml's doc comment. HeapAnalyzer.GetObjects only recognizes "size" and "address" as
+    SortBy values, so MethodTable, Type and Gen stay plain, unsortable headers.
 *@
 @model ListModel<HeapObjectItem>
+@{
+    var filterBar = FilterBar.Build(Model.View, Context.Request.Query);
+    var addressSort = SortHeader.For(Model.View, Context.Request.Query, "address", SortDirection.Asc);
+    var sizeSort = SortHeader.For(Model.View, Context.Request.Query, "size", SortDirection.Desc);
+}
 
 <div id="v-@Model.View.Name">
-    <table class="dn-table">
-        <thead>
-            <tr>
-                <th scope="col" class="dn-th dn-th--mono">Address</th>
-                <th scope="col" class="dn-th dn-th--mono">MethodTable</th>
-                <th scope="col" class="dn-th dn-th--num">Size</th>
-                <th scope="col" class="dn-th">Type</th>
-                <th scope="col" class="dn-th">Gen</th>
-            </tr>
-        </thead>
-        <tbody id="rows-@Model.View.Name">
-            @foreach (var item in Model.Result.Items)
-            {
-                var type = MiddleTruncated.From(item.TypeName);
-                <tr class="dn-tr">
-                    <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Address)</span></td>
-                    <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.MethodTable)</span></td>
-                    <td class="dn-td dn-td--num" title="@Display.Bytes((long)item.Size)">@Display.Size((long)item.Size)</td>
-                    <td class="dn-td dn-td--type" title="@type.Full">
-                        <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
-                    </td>
-                    <td class="dn-td">@(item.Generation?.ToString() ?? "-")</td>
-                </tr>
-            }
-
-            @if (Model.Result.Items.Count == 0)
-            {
+    <form class="dn-filterform">
+        <partial name="/Views/Shared/_FilterBar.cshtml" model="@filterBar" />
+        <table class="dn-table">
+            <thead>
                 <tr>
-                    <td colspan="5" class="dn-empty">
-                        @* Three different empty states are distinguished, per DESIGN_BRIEF.md §5:
-                           an unfiltered empty result means the dump holds no objects of this kind,
-                           whereas a filtered one means the filter is too narrow -- and telling a
-                           user "no data" when they have simply over-filtered sends them looking
-                           for a problem in the dump. *@
-                        @if (Model.Result.TotalUnfiltered > 0)
-                        {
-                            <div class="dn-empty__title">No objects match the current filter.</div>
-                            <a class="dn-btn" href="/views/@Model.View.Name">Clear filters</a>
-                        }
-                        else
-                        {
-                            <div class="dn-empty__title">This dump has no objects to show.</div>
-                        }
-                    </td>
+                    <th scope="col" class="dn-th dn-th--mono">
+                        <a class="dn-th__sort" aria-sort="@addressSort.AriaSort" hx-get="@addressSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Address@(addressSort.Indicator)</a>
+                    </th>
+                    <th scope="col" class="dn-th dn-th--mono">MethodTable</th>
+                    <th scope="col" class="dn-th dn-th--num">
+                        <a class="dn-th__sort" aria-sort="@sizeSort.AriaSort" hx-get="@sizeSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Size@(sizeSort.Indicator)</a>
+                    </th>
+                    <th scope="col" class="dn-th">Type</th>
+                    <th scope="col" class="dn-th">Gen</th>
                 </tr>
-            }
-        </tbody>
-    </table>
+            </thead>
+            <tbody id="rows-@Model.View.Name">
+                @foreach (var item in Model.Result.Items)
+                {
+                    var type = MiddleTruncated.From(item.TypeName);
+                    <tr class="dn-tr">
+                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Address)</span></td>
+                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.MethodTable)</span></td>
+                        <td class="dn-td dn-td--num" title="@Display.Bytes((long)item.Size)">@Display.Size((long)item.Size)</td>
+                        <td class="dn-td dn-td--type" title="@type.Full">
+                            <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
+                        </td>
+                        <td class="dn-td">@(item.Generation?.ToString() ?? "-")</td>
+                    </tr>
+                }
+
+                @if (Model.Result.Items.Count == 0)
+                {
+                    <tr>
+                        <td colspan="5" class="dn-empty">
+                            @* Three different empty states are distinguished, per DESIGN_BRIEF.md §5:
+                               an unfiltered empty result means the dump holds no objects of this kind,
+                               whereas a filtered one means the filter is too narrow -- and telling a
+                               user "no data" when they have simply over-filtered sends them looking
+                               for a problem in the dump. *@
+                            @if (Model.Result.TotalUnfiltered > 0)
+                            {
+                                <div class="dn-empty__title">No objects match the current filter.</div>
+                                <a class="dn-btn" href="@(filterBar.ClearAllUrl ?? $"/views/{Model.View.Name}")">Clear filters</a>
+                            }
+                            else
+                            {
+                                <div class="dn-empty__title">This dump has no objects to show.</div>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </form>
 </div>

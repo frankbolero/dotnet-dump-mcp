@@ -6,48 +6,65 @@
     OSThreadId, the Alive/Dead state, and the exception column mirror
     MarkdownFormatter.FormatThreads exactly, so an id or a state word copied from this table means
     the same thing it does in the CLI or the MCP server's output.
+
+    Task 4.1-4.3: filter bar, chips and sortable headers inside one <form> -- see
+    _FilterBar.cshtml's doc comment. ThreadAnalyzer.GetThreads only recognizes "exception" and
+    "osthreadid" as SortBy values (anything else falls back to ManagedThreadId), so Mgd ID and
+    State stay plain, unsortable headers.
 *@
 @model ListModel<ThreadInfo>
+@{
+    var filterBar = FilterBar.Build(Model.View, Context.Request.Query);
+    var osIdSort = SortHeader.For(Model.View, Context.Request.Query, "osthreadid", SortDirection.Asc);
+    var exceptionSort = SortHeader.For(Model.View, Context.Request.Query, "exception", SortDirection.Desc);
+}
 
 <div id="v-@Model.View.Name">
-    <table class="dn-table">
-        <thead>
-            <tr>
-                <th scope="col" class="dn-th dn-th--num">Mgd ID</th>
-                <th scope="col" class="dn-th dn-th--mono">OS ID</th>
-                <th scope="col" class="dn-th">State</th>
-                <th scope="col" class="dn-th">Exception</th>
-            </tr>
-        </thead>
-        <tbody id="rows-@Model.View.Name">
-            @foreach (var item in Model.Result.Items)
-            {
-                <tr class="dn-tr">
-                    <td class="dn-td dn-td--num">@Display.Count(item.ManagedThreadId)</td>
-                    <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.ThreadId(item.OSThreadId)</span></td>
-                    <td class="dn-td">@Display.ThreadState(item.IsAlive)</td>
-                    <td class="dn-td" title="@item.ExceptionMessage">@Display.OrNone(item.ExceptionType)</td>
-                </tr>
-            }
-
-            @if (Model.Result.Items.Count == 0)
-            {
+    <form class="dn-filterform">
+        <partial name="/Views/Shared/_FilterBar.cshtml" model="@filterBar" />
+        <table class="dn-table">
+            <thead>
                 <tr>
-                    <td colspan="4" class="dn-empty">
-                        @* Per DESIGN_BRIEF.md §5: an unfiltered empty result means the dump has no
-                           managed threads, whereas a filtered one means the filter is too narrow. *@
-                        @if (Model.Result.TotalUnfiltered > 0)
-                        {
-                            <div class="dn-empty__title">No threads match the current filter.</div>
-                            <a class="dn-btn" href="/views/@Model.View.Name">Clear filters</a>
-                        }
-                        else
-                        {
-                            <div class="dn-empty__title">This dump has no managed threads to show.</div>
-                        }
-                    </td>
+                    <th scope="col" class="dn-th dn-th--num">Mgd ID</th>
+                    <th scope="col" class="dn-th dn-th--mono">
+                        <a class="dn-th__sort" aria-sort="@osIdSort.AriaSort" hx-get="@osIdSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">OS ID@(osIdSort.Indicator)</a>
+                    </th>
+                    <th scope="col" class="dn-th">State</th>
+                    <th scope="col" class="dn-th">
+                        <a class="dn-th__sort" aria-sort="@exceptionSort.AriaSort" hx-get="@exceptionSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Exception@(exceptionSort.Indicator)</a>
+                    </th>
                 </tr>
-            }
-        </tbody>
-    </table>
+            </thead>
+            <tbody id="rows-@Model.View.Name">
+                @foreach (var item in Model.Result.Items)
+                {
+                    <tr class="dn-tr">
+                        <td class="dn-td dn-td--num">@Display.Count(item.ManagedThreadId)</td>
+                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.ThreadId(item.OSThreadId)</span></td>
+                        <td class="dn-td">@Display.ThreadState(item.IsAlive)</td>
+                        <td class="dn-td" title="@item.ExceptionMessage">@Display.OrNone(item.ExceptionType)</td>
+                    </tr>
+                }
+
+                @if (Model.Result.Items.Count == 0)
+                {
+                    <tr>
+                        <td colspan="4" class="dn-empty">
+                            @* Per DESIGN_BRIEF.md §5: an unfiltered empty result means the dump has no
+                               managed threads, whereas a filtered one means the filter is too narrow. *@
+                            @if (Model.Result.TotalUnfiltered > 0)
+                            {
+                                <div class="dn-empty__title">No threads match the current filter.</div>
+                                <a class="dn-btn" href="@(filterBar.ClearAllUrl ?? $"/views/{Model.View.Name}")">Clear filters</a>
+                            }
+                            else
+                            {
+                                <div class="dn-empty__title">This dump has no managed threads to show.</div>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </form>
 </div>
