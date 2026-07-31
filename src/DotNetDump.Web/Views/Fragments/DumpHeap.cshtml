@@ -13,54 +13,73 @@
          a template a designer cannot safely re-generate is a template that has failed.
       4. The type column truncates in the middle, never at the end. See MiddleTruncated: the tail
          of a .NET type name is what distinguishes it, so cutting the tail loses the answer.
+
+    Task 4.1-4.3 adds the filter bar, active-filter chips and sortable headers, all inside one
+    <form> -- see _FilterBar.cshtml's own doc comment for why the form is what makes
+    hx-include="closest form" preserve a filter across a sort click and vice versa.
+    HeapAnalyzer.GetHeapStatistics only recognizes "count" and "typename" as SortBy values (anything
+    else, including no value, falls back to TotalSize -- there is no dedicated string for that
+    default), so MethodTable and Total size stay plain, unsortable headers.
 *@
 @model ListModel<HeapStatItem>
+@{
+    var filterBar = FilterBar.Build(Model.View, Context.Request.Query);
+    var countSort = SortHeader.For(Model.View, Context.Request.Query, "count", SortDirection.Desc);
+    var typeSort = SortHeader.For(Model.View, Context.Request.Query, "typename", SortDirection.Asc);
+}
 
 <div id="v-@Model.View.Name">
-    <table class="dn-table">
-        <thead>
-            <tr>
-                <th scope="col" class="dn-th dn-th--mono">MethodTable</th>
-                <th scope="col" class="dn-th dn-th--num">Count</th>
-                <th scope="col" class="dn-th dn-th--num">Total size</th>
-                <th scope="col" class="dn-th">Type</th>
-            </tr>
-        </thead>
-        <tbody id="rows-@Model.View.Name">
-            @foreach (var item in Model.Result.Items)
-            {
-                var type = MiddleTruncated.From(item.TypeName);
-                <tr class="dn-tr">
-                    <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.MethodTable)</span></td>
-                    <td class="dn-td dn-td--num">@Display.Count(item.Count)</td>
-                    <td class="dn-td dn-td--num" title="@Display.Bytes(item.TotalSize)">@Display.Size(item.TotalSize)</td>
-                    <td class="dn-td dn-td--type" title="@type.Full">
-                        <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
-                    </td>
-                </tr>
-            }
-
-            @if (Model.Result.Items.Count == 0)
-            {
+    <form class="dn-filterform">
+        <partial name="/Views/Shared/_FilterBar.cshtml" model="@filterBar" />
+        <table class="dn-table">
+            <thead>
                 <tr>
-                    <td colspan="4" class="dn-empty">
-                        @* Three different empty states are distinguished, per DESIGN_BRIEF.md §5:
-                           an unfiltered empty result means the dump holds nothing of this kind,
-                           whereas a filtered one means the filter is too narrow -- and telling a
-                           user "no data" when they have simply over-filtered sends them looking
-                           for a problem in the dump. *@
-                        @if (Model.Result.TotalUnfiltered > 0)
-                        {
-                            <div class="dn-empty__title">No rows match the current filter.</div>
-                            <a class="dn-btn" href="/views/@Model.View.Name">Clear filters</a>
-                        }
-                        else
-                        {
-                            <div class="dn-empty__title">This dump has no heap statistics to show.</div>
-                        }
-                    </td>
+                    <th scope="col" class="dn-th dn-th--mono">MethodTable</th>
+                    <th scope="col" class="dn-th dn-th--num" aria-sort="@countSort.AriaSort">
+                        <a class="dn-th__sort" hx-get="@countSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Count@(countSort.Indicator)</a>
+                    </th>
+                    <th scope="col" class="dn-th dn-th--num">Total size</th>
+                    <th scope="col" class="dn-th" aria-sort="@typeSort.AriaSort">
+                        <a class="dn-th__sort" hx-get="@typeSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Type@(typeSort.Indicator)</a>
+                    </th>
                 </tr>
-            }
-        </tbody>
-    </table>
+            </thead>
+            <tbody id="rows-@Model.View.Name">
+                @foreach (var item in Model.Result.Items)
+                {
+                    var type = MiddleTruncated.From(item.TypeName);
+                    <tr class="dn-tr">
+                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.MethodTable)</span></td>
+                        <td class="dn-td dn-td--num">@Display.Count(item.Count)</td>
+                        <td class="dn-td dn-td--num" title="@Display.Bytes(item.TotalSize)">@Display.Size(item.TotalSize)</td>
+                        <td class="dn-td dn-td--type" title="@type.Full">
+                            <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
+                        </td>
+                    </tr>
+                }
+
+                @if (Model.Result.Items.Count == 0)
+                {
+                    <tr>
+                        <td colspan="4" class="dn-empty">
+                            @* Three different empty states are distinguished, per DESIGN_BRIEF.md §5:
+                               an unfiltered empty result means the dump holds nothing of this kind,
+                               whereas a filtered one means the filter is too narrow -- and telling a
+                               user "no data" when they have simply over-filtered sends them looking
+                               for a problem in the dump. *@
+                            @if (Model.Result.TotalUnfiltered > 0)
+                            {
+                                <div class="dn-empty__title">No rows match the current filter.</div>
+                                <a class="dn-btn" href="@(filterBar.ClearAllUrl ?? $"/views/{Model.View.Name}")">Clear filters</a>
+                            }
+                            else
+                            {
+                                <div class="dn-empty__title">This dump has no heap statistics to show.</div>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </form>
 </div>

@@ -5,54 +5,70 @@
 
     Columns mirror MarkdownFormatter.FormatThreadExceptions exactly, distinguishing between
     in-flight exceptions on threads and heap-resident exceptions.
+
+    Task 4.1-4.3: filter bar, chips and sortable headers inside one <form> -- see
+    _FilterBar.cshtml's doc comment. ThreadAnalyzer.GetThreadExceptions only recognizes
+    "osthreadid" as a SortBy value (anything else falls back to ManagedThreadId, itself not a
+    dedicated string). The Thread column is the one place that value is shown -- Display.ThreadOrHeap
+    renders the OS thread id inside it -- so it is the sortable header here; Address, Type and
+    Message stay plain.
 *@
 @model ListModel<ThreadExceptionInfo>
+@{
+    var filterBar = FilterBar.Build(Model.View, Context.Request.Query);
+    var threadSort = SortHeader.For(Model.View, Context.Request.Query, "osthreadid", SortDirection.Asc);
+}
 
 <div id="v-@Model.View.Name">
-    <table class="dn-table">
-        <thead>
-            <tr>
-                <th scope="col" class="dn-th">Thread</th>
-                <th scope="col" class="dn-th dn-th--mono">Address</th>
-                <th scope="col" class="dn-th">Type</th>
-                <th scope="col" class="dn-th">Message</th>
-            </tr>
-        </thead>
-        <tbody id="rows-@Model.View.Name">
-            @foreach (var item in Model.Result.Items)
-            {
-                @if (item.Exception is not null)
+    <form class="dn-filterform">
+        <partial name="/Views/Shared/_FilterBar.cshtml" model="@filterBar" />
+        <table class="dn-table">
+            <thead>
+                <tr>
+                    <th scope="col" class="dn-th" aria-sort="@threadSort.AriaSort">
+                        <a class="dn-th__sort" hx-get="@threadSort.Href" hx-target="#v-@Model.View.Name" hx-push-url="true" hx-include="closest form">Thread@(threadSort.Indicator)</a>
+                    </th>
+                    <th scope="col" class="dn-th dn-th--mono">Address</th>
+                    <th scope="col" class="dn-th">Type</th>
+                    <th scope="col" class="dn-th">Message</th>
+                </tr>
+            </thead>
+            <tbody id="rows-@Model.View.Name">
+                @foreach (var item in Model.Result.Items)
                 {
-                    var type = MiddleTruncated.From(item.Exception.TypeName);
-                    <tr class="dn-tr">
-                        <td class="dn-td">@Display.ThreadOrHeap(item.ManagedThreadId, item.OSThreadId)</td>
-                        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Exception.Address)</span></td>
-                        <td class="dn-td dn-td--type" title="@type.Full">
-                            <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
+                    @if (item.Exception is not null)
+                    {
+                        var type = MiddleTruncated.From(item.Exception.TypeName);
+                        <tr class="dn-tr">
+                            <td class="dn-td">@Display.ThreadOrHeap(item.ManagedThreadId, item.OSThreadId)</td>
+                            <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Exception.Address)</span></td>
+                            <td class="dn-td dn-td--type" title="@type.Full">
+                                <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
+                            </td>
+                            <td class="dn-td">@Display.OrNone(item.Exception.Message)</td>
+                        </tr>
+                    }
+                }
+
+                @if (Model.Result.Items.Count == 0 || Model.Result.Items.All(i => i.Exception is null))
+                {
+                    <tr>
+                        <td colspan="4" class="dn-empty">
+                            @* Per DESIGN_BRIEF.md §5: an unfiltered empty result means no exceptions are present,
+                               whereas a filtered one means the filter is too narrow. *@
+                            @if (Model.Result.TotalUnfiltered > 0)
+                            {
+                                <div class="dn-empty__title">No exceptions match the current filter.</div>
+                                <a class="dn-btn" href="@(filterBar.ClearAllUrl ?? $"/views/{Model.View.Name}")">Clear filters</a>
+                            }
+                            else
+                            {
+                                <div class="dn-empty__title">This dump has no exceptions to show.</div>
+                            }
                         </td>
-                        <td class="dn-td">@Display.OrNone(item.Exception.Message)</td>
                     </tr>
                 }
-            }
-
-            @if (Model.Result.Items.Count == 0 || Model.Result.Items.All(i => i.Exception is null))
-            {
-                <tr>
-                    <td colspan="4" class="dn-empty">
-                        @* Per DESIGN_BRIEF.md §5: an unfiltered empty result means no exceptions are present,
-                           whereas a filtered one means the filter is too narrow. *@
-                        @if (Model.Result.TotalUnfiltered > 0)
-                        {
-                            <div class="dn-empty__title">No exceptions match the current filter.</div>
-                            <a class="dn-btn" href="/views/@Model.View.Name">Clear filters</a>
-                        }
-                        else
-                        {
-                            <div class="dn-empty__title">This dump has no exceptions to show.</div>
-                        }
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+            </tbody>
+        </table>
+    </form>
 </div>
