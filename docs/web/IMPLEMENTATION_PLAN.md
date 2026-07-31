@@ -3,8 +3,8 @@
 Status: **in progress** — Phase 0 complete and accepted. Phase 1 delivered, with three deviations
 recorded below. Phase 2 complete, measured, tested, and signed off. Phase 3's five tasks (3.1–3.5)
 are all complete and its restated exit criterion mechanically verified, awaiting sign-off. Phase 4
-in progress: 4.1–4.4 (filter bar, chips, sortable headers, infinite scroll) done and verified against
-a real dump; 4.5–4.6 outstanding. Phases 5–7 outstanding.
+in progress: 4.1–4.5 (filter bar, chips, sortable headers, infinite scroll, OOB row count) done and
+verified against a real dump; 4.6 outstanding. Phases 5–7 outstanding.
 
 Eight phases. Phases 0, 1 and 2 run in parallel; the rest are sequential. Each phase has an exit
 criterion that is a demonstrable fact, not a feeling, and the phases that could invalidate later work
@@ -331,7 +331,7 @@ its no-walk-time-scope decision above, and a full page (nav, shell) on direct na
 ## Phase 4 — Interaction
 
 Depends on 0 and 3. This is where the interface becomes usable rather than viewable. **In progress:
-4.1–4.4 done, 4.5–4.6 outstanding.**
+4.1–4.5 done, 4.6 outstanding.**
 
 | Task | Status | Detail |
 | :--- | :--- | :--- |
@@ -339,8 +339,36 @@ Depends on 0 and 3. This is where the interface becomes usable rather than viewa
 | 4.2 | ✅ | Active-filter chips with individual and clear-all removal. Each chip's own URL keeps every other active filter and drops only its own field; "clear all" drops every filter field but keeps `limit`. |
 | 4.3 | ✅ | Sortable headers with three-state `aria-sort`, preserving the active filter. Only columns a view's analyzer has a dedicated `SortBy` string for get a sortable header — e.g. `dumpheap` sorts on `count`/`typename` only, `MethodTable`/`Total size` stay plain. |
 | 4.4 | ✅ | Infinite scroll: `GET /views/{view}/rows` answers with the next page's `<tr>` rows plus a fresh sentinel, driven by `PagedResult.HasMore`. Each view's row loop factored into a shared `_{View}Rows.cshtml` partial so the initial page and the incremental route render identically rather than drifting apart. |
-| 4.5 | | Out-of-band updates for result counts, pagination footer and cache-state indicator. |
+| 4.5 | ✅ | Out-of-band update for the view header's row count, on both the htmx-fragment path and the `/rows` continuation. **Narrower than the row's original wording — see below.** |
 | 4.6 | | URL state round-trip: every filter, sort and page position survives copy-paste of the address bar, back and forward. |
+
+**4.5's scope, corrected against what the codebase actually has.** The plan row and `SERVER.md` §5.2
+both mention three things — result count, pagination footer, cache-state indicator — but only the
+first is real work this task could do. `IAnalysisCache.GetOrCompute<T>` has no way to tell a caller a
+cache hit from a fresh computation, let alone a timestamp, so a genuine cache-state indicator needs
+that plumbing built first — squarely Phase 6's job (6.1 startup warm, 6.4 cache-hit fast path, 6.5
+the indicator itself), not invented here as a fake/static stand-in. And no distinct "pagination
+footer" element exists anywhere in the design: `DESIGN_BRIEF.md`'s Shell group explicitly specifies
+"no footer chrome," and none of the seven `design-sync/*.dc.html` pages show one — the view header's
+row count is the only element either mention could be describing, written before 4.1–4.4 existed to
+give it a concrete home. Scoped down to that one element before delegating, and the agent's own
+`grep` across the design pages confirmed the same conclusion independently.
+
+**A wrinkle the agent found and the lead's own brief got wrong.** The count does not numerically
+"climb" as more pages load via infinite scroll — `PagedResult.TotalAvailable`/`TotalUnfiltered`
+describe the full filtered/unfiltered result, independent of `Offset`/`Limit`, so "172 of 1,976 rows"
+reads identically on every page under a fixed filter. The actual bug 4.5 fixes is narrower than that:
+the count was computed on *every* fragment request already (`ListModel<T>.CountSummary`) but silently
+discarded on the htmx-fragment-only path and never present at all on `/rows`, so the header simply
+froze at whatever a full page load last showed — including through a filter or sort change. Caught in
+review: a doc comment the agent wrote still claimed the "keeps climbing" framing after the agent's
+own test proved otherwise; corrected before merge.
+
+**Verified.** Full suite: 737/0/0 with the 9.6 GB dump, 679/0/58 without, on
+`net8.0`/`net9.0`/`net10.0`. `dotnet format --verify-no-changes` clean. Zero real `style=`
+attributes. Manual `curl` confirmed the `hx-swap-oob="true"` count element appears with the correct
+filtered total on both the fragment and `/rows` responses, and the plain (non-OOB) element renders
+correctly on a full page load.
 
 **4.4's own version of the risk register's named bug, correctly avoided.** The sentinel cannot reuse
 4.1–4.3's `hx-include="closest form"` pattern — it fires from `hx-trigger="revealed"`, not a form
