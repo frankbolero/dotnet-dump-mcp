@@ -158,7 +158,7 @@ public static class DumpRoutes {
 
 		if (WantsFragment(http)) {
 			var swap = await BuildFragment(http, info, queue, renderer, descriptor, address, ct);
-			return swap.Html is null ? swap.Failure! : Html(swap.Html);
+			return swap.Html is null ? swap.Failure! : Html(AppendCountOob(swap.Html, swap.CountSummary));
 		}
 
 		return await RenderShell(http, dump, info, queue, renderer, descriptor, address, ct);
@@ -486,10 +486,18 @@ public static class DumpRoutes {
 		}
 	}
 
-	/// <summary>Renders <paramref name="partialPath"/> alone -- the shared last step of every <see cref="RenderRows"/> case.</summary>
+	/// <summary>
+	/// Renders <paramref name="partialPath"/> plus the count out-of-band swap (task 4.5) -- the
+	/// shared last step of every <see cref="RenderRows"/> case. <paramref name="model"/> already
+	/// carries the same <see cref="ListModel{T}.CountSummary"/> the initial page's fragment used.
+	/// The number itself does not change as further pages load -- <c>TotalAvailable</c>/
+	/// <c>TotalUnfiltered</c> describe the full filtered/unfiltered result, independent of
+	/// <c>Offset</c>/<c>Limit</c> -- but before this task this route carried no count element at
+	/// all, so scrolling left the header showing whatever the last full page load happened to say.
+	/// </summary>
 	private static async Task<IResult> RowsHtml<T>(HttpContext http, IFragmentRenderer renderer, ListModel<T> model, string partialPath) {
 		string html = await renderer.RenderAsync(http, partialPath, model);
-		return Html(html);
+		return Html(AppendCountOob(html, model.CountSummary));
 	}
 
 	private static async Task<IResult> RenderJson(HttpContext http, DumpInfoService info, IAnalysisQueue queue, string viewName, string? address, CancellationToken ct) {
@@ -760,6 +768,34 @@ public static class DumpRoutes {
 			statusCode: StatusCodes.Status400BadRequest);
 		return false;
 	}
+
+	/// <summary>
+	/// The id shared by the view header's count element (<c>_Layout.cshtml</c>'s <c>dn-view-count</c>
+	/// div) and the out-of-band swap below that keeps it live. There is only ever one on the page, so
+	/// unlike the per-view <c>#v-{view}</c>/<c>#rows-{view}</c> ids it does not need to be keyed by
+	/// view name.
+	/// </summary>
+	private const string ViewCountElementId = "view-count";
+
+	/// <summary>
+	/// Appends an out-of-band swap (task 4.5, SERVER.md &#0167;5.2) that keeps the view header's row
+	/// count live across a filter, sort, or scroll action. Without it the header shows whatever was
+	/// true on the last full page load: <see cref="ListModel{T}.CountSummary"/> is computed for every
+	/// fragment already, but on the htmx-fragment path (this method's caller, and
+	/// <see cref="RowsHtml{T}"/>) nothing carried it back to the header, which lives outside the
+	/// swapped fragment and is never re-rendered by a fragment-only response.
+	/// </summary>
+	/// <remarks>
+	/// <paramref name="countSummary"/> is <see langword="null"/> for every <see cref="ViewKind.Detail"/>
+	/// fragment, which appends nothing: a <c>Detail</c> view has no count to show, and switching to one
+	/// is always a full page navigation (no <c>HX-Request</c> header on a plain nav link), so the
+	/// shell's own render already carries the correct, absent, header state -- there is no stale count
+	/// for this path to leave behind.
+	/// </remarks>
+	private static string AppendCountOob(string html, string? countSummary) =>
+		countSummary is null
+			? html
+			: html + $"<div id=\"{ViewCountElementId}\" class=\"dn-view-count\" hx-swap-oob=\"true\">{System.Net.WebUtility.HtmlEncode(countSummary)}</div>";
 
 	private static IResult Html(string markup) => Results.Content(markup, "text/html; charset=utf-8");
 
