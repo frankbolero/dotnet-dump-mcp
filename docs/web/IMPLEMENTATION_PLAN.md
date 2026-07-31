@@ -2,9 +2,10 @@
 
 Status: **in progress** — Phase 0 complete and accepted. Phase 1 delivered, with three deviations
 recorded below. Phase 2 complete, measured, tested, and signed off. Phase 3's five tasks (3.1–3.5)
-are all complete and its restated exit criterion mechanically verified, awaiting sign-off. Phase 4
-in progress: 4.1–4.5 (filter bar, chips, sortable headers, infinite scroll, OOB row count) done and
-verified against a real dump; 4.6 outstanding. Phases 5–7 outstanding.
+are all complete and its restated exit criterion mechanically verified, awaiting sign-off. Phase 4's
+six tasks (filter bar, chips, sortable headers, infinite scroll, OOB row count, URL round-trip) are
+all complete and verified against a real dump; its exit criterion's 10.2M-object scale claim
+specifically is not yet measured (see Phase 4's own notes). Phases 5–7 outstanding.
 
 Eight phases. Phases 0, 1 and 2 run in parallel; the rest are sequential. Each phase has an exit
 criterion that is a demonstrable fact, not a feeling, and the phases that could invalidate later work
@@ -330,8 +331,8 @@ its no-walk-time-scope decision above, and a full page (nav, shell) on direct na
 
 ## Phase 4 — Interaction
 
-Depends on 0 and 3. This is where the interface becomes usable rather than viewable. **In progress:
-4.1–4.5 done, 4.6 outstanding.**
+Depends on 0 and 3. This is where the interface becomes usable rather than viewable. **All six
+tasks complete. Exit criterion partly verified — see below.**
 
 | Task | Status | Detail |
 | :--- | :--- | :--- |
@@ -340,7 +341,16 @@ Depends on 0 and 3. This is where the interface becomes usable rather than viewa
 | 4.3 | ✅ | Sortable headers with three-state `aria-sort`, preserving the active filter. Only columns a view's analyzer has a dedicated `SortBy` string for get a sortable header — e.g. `dumpheap` sorts on `count`/`typename` only, `MethodTable`/`Total size` stay plain. |
 | 4.4 | ✅ | Infinite scroll: `GET /views/{view}/rows` answers with the next page's `<tr>` rows plus a fresh sentinel, driven by `PagedResult.HasMore`. Each view's row loop factored into a shared `_{View}Rows.cshtml` partial so the initial page and the incremental route render identically rather than drifting apart. |
 | 4.5 | ✅ | Out-of-band update for the view header's row count, on both the htmx-fragment path and the `/rows` continuation. **Narrower than the row's original wording — see below.** |
-| 4.6 | | URL state round-trip: every filter, sort and page position survives copy-paste of the address bar, back and forward. |
+| 4.6 | ✅ | URL state round-trip. Turned out to be verification-only: every 4.1–4.3 control already carried `hx-push-url="true"` correctly (audited across all 8 views, not assumed), and the infinite-scroll sentinel correctly carries none. The actual gap was that no test had ever requested a filtered/sorted URL **without** `HX-Request` — i.e. a fresh full-page load, exactly what a pasted URL or a back/forward-restored history entry produces. `UrlRoundTripTests.cs` closes that gap for both a text-filter view (`dumpheap`) and a `<select>`-kind filter view (`clrthreads`), each reconstructing the correct filter value, chip and `aria-sort` state from a cold request. |
+
+**4.6's proxy for "the back button undoes a filter change."** No browser automation exists in this
+project, so the back button itself is untestable directly. The credible server-side property, stated
+explicitly in the test's own doc comment: a back/forward navigation is, from the server's perspective,
+indistinguishable from "request the previous URL again" (the browser or htmx's history cache re-issues
+a plain `GET`, per `DumpRoutes.WantsFragment`'s `HX-History-Restore-Request` handling). If two
+different query strings each independently and deterministically reconstruct correct state when
+requested fresh — which `UrlRoundTripTests` now proves — back and forward are correct by construction,
+because pressing them cannot produce a request this suite has not already covered.
 
 **4.5's scope, corrected against what the codebase actually has.** The plan row and `SERVER.md` §5.2
 both mention three things — result count, pagination footer, cache-state indicator — but only the
@@ -430,9 +440,27 @@ all render and function correctly for a combined `?type=Http&sort=count&order=as
 "N of 10,238,441" count and stays responsive while typing. Sorting a filtered view keeps the filter.
 The back button undoes a filter change.
 
+⚠️ **Partly verified, not fully.** "Sorting a filtered view keeps the filter" is verified —
+`FilterPreservationTests` and `InfiniteScrollTests` prove it directly, against the 9.6 GB fixture,
+for every view this phase covers. "The back button undoes a filter change" is verified by the
+server-side proxy argument above. **The specific 10.2M-object `listobj` scale claim is not measured
+and should not be read as met.** Every test and manual check in 4.1–4.6 ran against the same 9.6 GB
+core this whole plan has used elsewhere — real, but nowhere near 10.2M objects on `listobj`'s own
+per-instance walk (as opposed to `dumpheap`'s aggregated ~1,976 type-stat rows). "Stays responsive
+while typing" against a heap that large is exactly the kind of claim [`README.md` §3](README.md)
+and this plan's own measurement discipline says must be taken with a real number, not assumed from a
+smaller fixture. Phase 0's `HeapObjectItemFilter` and 0.2's per-object `Generation` capture were
+measured at that CLI granularity (§0's "carried forward" findings), but the *web* path's filter-typing
+latency at `listobj` scale has not been. Re-take this measurement against a dump with an object count
+in that range before treating Phase 4 as fully signed off — if none is on hand, this is worth a note
+to revisit rather than a blocking gate on Phase 5, which does not depend on it.
+
 **Watch for.** The most likely bug in the whole project is a sort or page action dropping the active
 filter because `hx-include` was omitted — silently returning unfiltered data that looks plausible.
-Test it explicitly for every view.
+Test it explicitly for every view. **Realized twice during this phase**, both caught before merge:
+4.1–4.3's aria-sort placement (cosmetic/accessibility, not a data bug) and 4.4's sentinel needing to
+bake in `sort`/`order` explicitly rather than relying on `hx-include` (a genuine instance of this
+exact risk, aimed at a parameter the original wording didn't name).
 
 ## Phase 5 — Trees
 
