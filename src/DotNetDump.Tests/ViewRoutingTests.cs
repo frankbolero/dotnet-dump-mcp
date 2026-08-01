@@ -5,41 +5,41 @@ using DotNetDump.Web.Catalog;
 namespace DotNetDump.Tests;
 
 /// <summary>
-/// That <c>/views/{view}</c> serves a whole page to a browser and a bare fragment to htmx.
+/// What <c>/views/{view}</c> answers before any analyzer is involved: unknown names, rejected query
+/// strings, and the one view whose HTML surface lives somewhere else.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The route is two things at once, told apart by the <c>HX-Request</c> header. Serving the
-/// fragment to both is a defect that presents as a styling problem: the navigation links point
-/// here, so every view rendered as an unstyled table with no shell, no stylesheet and no way back.
+/// <strong>This class used to test the whole-page-versus-fragment branch, and no longer can.</strong>
+/// That branch is real and remains a correctness requirement — the route is two things at once, told
+/// apart by the <c>HX-Request</c> header, and serving the fragment to both renders every view as an
+/// unstyled table with no shell and no way back. It was testable here because these tests run
+/// against <see cref="LoopbackServerFixture"/>, whose <see cref="NoDumpContext"/> has no runtime: any
+/// view that reaches an analyzer throws before either branch produces a response, so the branch could
+/// only be exercised through a view that reached no analyzer at all. That meant a view in the catalog
+/// with no handler yet, and the constant naming it moved twice as Phase 3.3 and 3.4 wired views
+/// (<c>gchandles</c>, then <c>info</c>) before settling on <c>gcroot</c>.
 /// </para>
 /// <para>
-/// It is a correctness requirement rather than a cosmetic one. DATA_CONTRACT.md &#0167;3.2 makes the
-/// query string the view state and <c>hx-push-url</c> writes it to the address bar, so
-/// <c>/views/dumpheap?type=Http</c> has to be a page a user can paste, bookmark and share — which
-/// is what Phase 4.6's round-trip criterion will require.
+/// Phase 5.3 wired <c>gcroot</c> — as a redirect into <c>/trees/gcroot/{address}</c>, which returns
+/// before <c>WantsFragment</c> is consulted and so cannot stand in for that branch either. With every
+/// other view wired by 3.4, no substitute exists and none is coming: a name invented to keep this
+/// test alive would prove the routing of a view nobody navigates to. <strong>The page-versus-fragment
+/// branch is therefore covered only by <see cref="WiredViewRoutingTests"/> and
+/// <see cref="WiredTreeRoutingTests"/>, both of which need a real dump and skip without one.</strong>
+/// A dumpless run no longer covers it at all. That is a genuine loss of coverage, recorded here
+/// rather than papered over.
 /// </para>
 /// <para>
-/// <strong>What these tests can and cannot reach.</strong> They run against
-/// <see cref="LoopbackServerFixture"/>, whose <see cref="NoDumpContext"/> has no runtime, so any
-/// view that actually calls an analyzer throws — correctly — and never reaches a rendered page. The
-/// page-versus-fragment branch is therefore exercised through a view with no handler, which does
-/// not touch the analyzer and so isolates the routing decision from the analysis. The wired path
-/// carrying real rows through the same branch is covered by
-/// <see cref="WiredViewRoutingTests"/>, which needs a dump and skips without one.
+/// What is left here is everything the routing layer decides without asking an analyzer anything,
+/// which is still worth holding: a name that is not in the catalog is a <c>404</c>, a name that is
+/// gets something other than one, a query string this server will not act on is a bare <c>400</c>
+/// rather than a broken page, and <c>gcroot</c> forwards rather than rendering a second, duplicate
+/// implementation of a tree.
 /// </para>
 /// </remarks>
 [Collection(WebSecurityCollection.Name)]
 public sealed class ViewRoutingTests(LoopbackServerFixture server) {
-	/// <summary>
-	/// A catalog view with no handler yet, so nothing here reaches an analyzer. Every list view is
-	/// wired (task 3.3), and 3.4 is progressively wiring every detail view too, which made this
-	/// constant move twice already (<c>gchandles</c>, then <c>info</c>) as those views landed.
-	/// <c>gcroot</c> is deliberately excluded from 3.4 — it is a tree and belongs to Phase 5.3 — so
-	/// unlike every other remaining name here, it will not need to move again until then.
-	/// </summary>
-	private const string UnwiredView = "gcroot";
-
 	private async Task<(HttpStatusCode Status, string Body)> Send(string path, params (string Name, string Value)[] headers) {
 		using var client = new HttpClient();
 		using var request = new HttpRequestMessage(HttpMethod.Get, server.Url + path);
@@ -51,37 +51,59 @@ public sealed class ViewRoutingTests(LoopbackServerFixture server) {
 		return (response.StatusCode, await response.Content.ReadAsStringAsync());
 	}
 
-	[Fact]
-	public async Task BrowserNavigation_ReturnsAWholePage() {
-		var (status, body) = await Send("/views/" + UnwiredView);
+	/// <summary>Redirects are not followed: the response under test *is* the redirect, and a client
+	/// that chased it would reach the tree route's analyzer and fail for want of a dump.</summary>
+	private async Task<(HttpStatusCode Status, string? Location)> SendWithoutFollowing(string path, params (string Name, string Value)[] headers) {
+		using var handler = new HttpClientHandler { AllowAutoRedirect = false };
+		using var client = new HttpClient(handler);
+		using var request = new HttpRequestMessage(HttpMethod.Get, server.Url + path);
+		foreach (var (name, value) in headers) {
+			request.Headers.Add(name, value);
+		}
 
-		// 501 is honest -- the view is in the catalog and the navigation links to it, but it has no
-		// handler yet. The page around it is what lets a reader leave without pressing Back.
-		Assert.Equal(HttpStatusCode.NotImplemented, status);
-		Assert.Contains("<html", body, StringComparison.Ordinal);
-		Assert.Contains("dndump.css", body, StringComparison.Ordinal);
-		// The navigation specifically: without it, a reader who follows a link cannot follow another.
-		Assert.Contains("dn-nav", body, StringComparison.Ordinal);
+		using var response = await client.SendAsync(request);
+		return (response.StatusCode, response.Headers.Location?.ToString());
+	}
+
+	// gcroot (5.3): a real CLI command with a real ViewCatalog entry, whose HTML surface is a tree.
+	// It forwards instead of growing a second implementation of that tree here -- and a second place
+	// for docs/GCROOT_TRUNCATION.md's "an empty result is not evidence" rule to be got wrong.
+
+	[Fact]
+	public async Task GCRootView_RedirectsToTheTree() {
+		var (status, location) = await SendWithoutFollowing("/views/gcroot/7FF6A1B02000");
+
+		Assert.Equal(HttpStatusCode.Found, status);
+		Assert.Equal("/trees/gcroot/7FF6A1B02000", location);
 	}
 
 	[Fact]
-	public async Task HtmxRequest_ReturnsABareFragment() {
-		var (_, body) = await Send("/views/" + UnwiredView, ("HX-Request", "true"));
+	public async Task GCRootView_WithoutAnAddress_RedirectsToTheBareTree() {
+		// The nav link has no address to offer. The tree route answers 400 saying so, which beats
+		// this route inventing an address or answering 404 for a view that exists.
+		var (status, location) = await SendWithoutFollowing("/views/gcroot");
 
-		Assert.DoesNotContain("<html", body, StringComparison.Ordinal);
-		Assert.DoesNotContain("dn-nav", body, StringComparison.Ordinal);
+		Assert.Equal(HttpStatusCode.Found, status);
+		Assert.Equal("/trees/gcroot", location);
 	}
 
 	[Fact]
-	public async Task HistoryRestoreRequest_ReturnsAWholePage() {
-		// htmx sets both headers when restoring from its own history cache, and on that request it
-		// wants the whole document back rather than a fragment.
-		var (_, body) = await Send(
-			"/views/" + UnwiredView,
-			("HX-Request", "true"),
-			("HX-History-Restore-Request", "true"));
+	public async Task GCRootView_CarriesTheQueryStringThrough() {
+		// maxNodes is the one remedy offered for a truncated search; dropping it at the redirect
+		// would silently give back the budget the caller just asked to lift.
+		var (_, location) = await SendWithoutFollowing("/views/gcroot/7FF6A1B02000?maxNodes=0");
 
-		Assert.Contains("<html", body, StringComparison.Ordinal);
+		Assert.Equal("/trees/gcroot/7FF6A1B02000?maxNodes=0", location);
+	}
+
+	[Fact]
+	public async Task GCRootView_RedirectsForHtmxToo() {
+		// htmx follows a redirect transparently, so the fragment branch is the tree route's to make.
+		// This route must not try to answer the fragment itself.
+		var (status, location) = await SendWithoutFollowing("/views/gcroot/7FF6A1B02000", ("HX-Request", "true"));
+
+		Assert.Equal(HttpStatusCode.Found, status);
+		Assert.Equal("/trees/gcroot/7FF6A1B02000", location);
 	}
 
 	[Fact]
@@ -104,8 +126,9 @@ public sealed class ViewRoutingTests(LoopbackServerFixture server) {
 	[Fact]
 	public async Task NoViewInTheCatalog_Is404() {
 		// The invariant is precisely "the navigation never links to a 404". Statuses other than 404
-		// are all legitimate here: 200 for a wired view, 501 for one still to come, 500 for a view
-		// whose analyzer refuses because this fixture has no dump loaded.
+		// are all legitimate here: 200 for a wired view, 500 for a view whose analyzer refuses
+		// because this fixture has no dump loaded, 400 for gcroot (followed to its tree, which says
+		// it needs an address). 501 was on this list until 5.3 wired the last unwired view.
 		foreach (var view in ViewCatalog.All) {
 			var (status, _) = await Send("/views/" + view.Name);
 
@@ -117,13 +140,15 @@ public sealed class ViewRoutingTests(LoopbackServerFixture server) {
 }
 
 /// <summary>
-/// The same page-versus-fragment branch, but over a view that actually renders rows.
+/// The whole-page-versus-fragment branch, over a view that actually renders rows.
 /// </summary>
 /// <remarks>
 /// Needs a real dump and skips without one, following <c>IntegrationTests</c>: set
-/// <c>DOTNETDUMP_TEST_DUMP</c> to a dump file to run these. What they add over
-/// <see cref="ViewRoutingTests"/> is that the *wired* path — the one a user actually navigates to,
-/// and the one that shipped broken — puts its table inside the shell rather than on its own.
+/// <c>DOTNETDUMP_TEST_DUMP</c> to a dump file to run these. Since Phase 5.3 wired the last view that
+/// reached no analyzer, these two tests and <see cref="WiredTreeRoutingTests"/>' equivalents are the
+/// <em>only</em> coverage of that branch — see <see cref="ViewRoutingTests"/>' own remarks. They
+/// exercise the path a user actually navigates to, and the one that shipped broken: the table goes
+/// inside the shell, not on its own.
 /// </remarks>
 public sealed class WiredViewRoutingTests : IAsyncLifetime {
 	private static string DumpPath =>

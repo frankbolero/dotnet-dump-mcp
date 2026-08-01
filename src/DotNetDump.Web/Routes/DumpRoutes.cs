@@ -156,6 +156,22 @@ public static class DumpRoutes {
 			return Results.NotFound();
 		}
 
+		// gcroot's HTML surface is a tree, not a table (DATA_CONTRACT.md §4.3), so this view has no
+		// fragment of its own and never gets one: a second implementation here would be a second
+		// place for docs/GCROOT_TRUNCATION.md's "an empty result is not evidence" rule to be got
+		// wrong. It keeps its ViewCatalog entry -- it is a real 'dndump gcroot <address>' command,
+		// and ViewCatalogCoverageTests holds the catalog and the CLI to each other in both
+		// directions -- and the nav link that entry produces lands here and is forwarded.
+		//
+		// 302, not 301: which surface renders gcroot is this application's business and may change
+		// again, and a permanent redirect is cached by the browser well past the point where we
+		// could take it back. htmx follows it transparently (the browser follows an XHR redirect
+		// with the request headers intact), so an hx-get lands on the tree route's own fragment
+		// branch exactly as a direct request would.
+		if (string.Equals(descriptor.Name, "gcroot", StringComparison.Ordinal)) {
+			return Results.Redirect(GCRootTreeUrl(address, http.Request.QueryString), permanent: false);
+		}
+
 		if (WantsFragment(http)) {
 			var swap = await BuildFragment(http, info, queue, renderer, descriptor, address, ct);
 			return swap.Html is null ? swap.Failure! : Html(AppendCountOob(swap.Html, swap.CountSummary));
@@ -163,6 +179,17 @@ public static class DumpRoutes {
 
 		return await RenderShell(http, dump, info, queue, renderer, descriptor, address, ct);
 	}
+
+	/// <summary>
+	/// Where <c>/views/gcroot/{address?}</c> forwards to. The address is passed through unparsed and
+	/// re-escaped: validating it is the tree route's job and that route already answers <c>400</c>
+	/// naming the accepted forms, so parsing it here as well would put the same rejection in two
+	/// places and risk them disagreeing. Without an address this lands on <c>/trees/gcroot</c>, whose
+	/// own <c>400</c> says what is missing -- the nav link has no address to offer, and asking which
+	/// object is a better answer than inventing one.
+	/// </summary>
+	private static string GCRootTreeUrl(string? address, QueryString query) =>
+		"/trees/gcroot" + (address is null ? "" : "/" + Uri.EscapeDataString(address)) + query.ToUriComponent();
 
 	private static async Task<Fragment> BuildFragment(
 		HttpContext http, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer, ViewDescriptor descriptor,
