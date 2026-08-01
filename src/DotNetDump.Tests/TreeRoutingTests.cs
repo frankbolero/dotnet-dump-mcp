@@ -147,4 +147,63 @@ public sealed class WiredTreeRoutingTests : IAsyncLifetime {
 		Assert.StartsWith("<li", body.TrimStart(), StringComparison.Ordinal);
 		Assert.Contains("dn-tree__item", body, StringComparison.Ordinal);
 	}
+
+	/// <summary>
+	/// The thread&#8594;frames tree (5.2, DATA_CONTRACT.md &#0167;4.4) -- unlike <c>heap</c>, this tree
+	/// is fully computed up front (<c>ThreadFramesTreeBuilder</c>'s own doc comment), so a single
+	/// request already carries every root and every frame; there is no lazy-expand round trip to test
+	/// the way <see cref="ExpandingANamespaceNode_ReturnsBareListItemsForItsChildren"/> does for
+	/// <c>heap</c>.
+	/// </summary>
+	[SkippableFact]
+	public async Task BrowserNavigation_ToThreadsTree_PutsTheTreeInsideTheShell() {
+		Skip.IfNot(File.Exists(DumpPath), $"No dump fixture. Set {IntegrationTests.DumpPathVariable} to a dump file to run this.");
+
+		using var client = new HttpClient();
+		string body = await client.GetStringAsync($"{_url}/trees/threads");
+
+		Assert.Contains("<html", body, StringComparison.Ordinal);
+		Assert.Contains("dn-nav", body, StringComparison.Ordinal);
+		Assert.Contains("id=\"v-threads\"", body, StringComparison.Ordinal);
+		Assert.Contains("dn-tree", body, StringComparison.Ordinal);
+	}
+
+	[SkippableFact]
+	public async Task HtmxRequest_ToThreadsTree_ReturnsTheTreeAlone() {
+		Skip.IfNot(File.Exists(DumpPath), $"No dump fixture. Set {IntegrationTests.DumpPathVariable} to a dump file to run this.");
+
+		using var client = new HttpClient();
+		using var request = new HttpRequestMessage(HttpMethod.Get, $"{_url}/trees/threads");
+		request.Headers.Add("HX-Request", "true");
+
+		using var response = await client.SendAsync(request);
+		string body = await response.Content.ReadAsStringAsync();
+
+		Assert.DoesNotContain("<html", body, StringComparison.Ordinal);
+		Assert.DoesNotContain("dn-nav", body, StringComparison.Ordinal);
+		Assert.Contains("id=\"v-threads\"", body, StringComparison.Ordinal);
+	}
+
+	/// <summary>
+	/// The whole tree arrives in one response -- proves the "fully computed up front" shape against
+	/// real data, not just <see cref="ThreadFramesTreeBuilderTests"/>'s synthetic fixtures. At least
+	/// one root must render as a real, expandable <c>&lt;details&gt;</c> node with its frames already
+	/// present in the same markup (no <c>hx-get</c> on it at all -- unlike <c>heap</c>'s nodes, which
+	/// always carry one).
+	/// </summary>
+	[SkippableFact]
+	public async Task ThreadsTree_RendersEveryThreadsFramesInTheSameResponse_WithNoFurtherFetch() {
+		Skip.IfNot(File.Exists(DumpPath), $"No dump fixture. Set {IntegrationTests.DumpPathVariable} to a dump file to run this.");
+
+		using var client = new HttpClient();
+		using var request = new HttpRequestMessage(HttpMethod.Get, $"{_url}/trees/threads");
+		request.Headers.Add("HX-Request", "true");
+
+		using var response = await client.SendAsync(request);
+		string body = await response.Content.ReadAsStringAsync();
+
+		Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+		Assert.Contains("dn-tree__item", body, StringComparison.Ordinal);
+		Assert.DoesNotContain("/trees/threads/", body, StringComparison.Ordinal);
+	}
 }

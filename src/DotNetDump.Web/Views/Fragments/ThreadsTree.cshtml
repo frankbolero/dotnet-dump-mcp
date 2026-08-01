@@ -1,0 +1,59 @@
+@*
+    Thread -> frames (5.2, DATA_CONTRACT.md §4.4) -- fully computed up front from
+    ThreadAnalyzer.GetThreads (roots) and ThreadAnalyzer.GetDetailedStacks (frames) in
+    ThreadFramesTreeBuilder.BuildRoots, called once in TreeRoutes.cs. Unlike HeapTree.cshtml this
+    fragment renders both levels directly over _TreeRow.cshtml instead of delegating to
+    _TreeNodes.cshtml -- there is no lazy per-node fetch for that partial to represent, per its own
+    doc comment and TreeRoutes.cs's.
+
+    Idle-worker grouping (identical stacks collapsed into one root, badged with a count) is
+    ThreadFramesTreeBuilder's decision, not this view's -- see that class's own remarks for the
+    grouping key and why exception-carrying threads are excluded from it.
+
+    Locals are not attempted as a third level here -- see ThreadFramesTreeBuilder's remarks for what
+    was checked and why it was dropped rather than built. The tree stays two levels, which
+    DATA_CONTRACT.md §4.4 itself says is a complete feature.
+*@
+@model DotNetDump.Web.Rendering.ThreadsTreeModel
+<div id="v-threads">
+    @if (Model.Threads.Count == 0)
+    {
+        <div class="dn-empty">
+            <div class="dn-empty__title">This dump has no managed threads to show.</div>
+        </div>
+    }
+    else
+    {
+        <ul class="dn-tree" role="group" aria-label="Thread call tree">
+            @foreach (var entry in Model.Threads)
+            {
+                if (entry.Root.HasChildren)
+                {
+                    <li class="dn-tree__item">
+                        <details class="dn-tree__node">
+                            <summary class="dn-tree__row"><partial name="/Views/Shared/_TreeRow.cshtml" model="entry.Root" /></summary>
+                            <ul class="dn-tree">
+                                @foreach (var frame in entry.Frames)
+                                {
+                                    <li class="dn-tree__item">
+                                        <div class="dn-tree__row dn-tree__row--leaf">
+                                            <partial name="/Views/Shared/_TreeRow.cshtml" model="frame" />
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+                        </details>
+                    </li>
+                }
+                else
+                {
+                    <li class="dn-tree__item">
+                        <div class="dn-tree__row dn-tree__row--leaf">
+                            <partial name="/Views/Shared/_TreeRow.cshtml" model="entry.Root" />
+                        </div>
+                    </li>
+                }
+            }
+        </ul>
+    }
+</div>
