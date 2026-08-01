@@ -69,6 +69,31 @@ public class GCRootTreeBuilderTests {
 		Assert.Equal(2, box.Children.Count);
 		Assert.Equal(2, box.Node.ChildCount);
 		Assert.Equal(new ulong[] { 0x50, 0x51 }, box.Children.Select(c => c.Node.Address!.Value).ToArray());
+
+		// Two chains under one branch: the branch count under-reports what was found, which is why
+		// PathCount counts the trie's leaves rather than its roots.
+		Assert.Equal(2, tree.PathCount);
+		Assert.Single(tree.Roots);
+	}
+
+	[Fact]
+	public void DuplicatePathsCountOnceBecauseTheyRenderOnce() {
+		// RootPathFinder really does return the same depth-1 chain once per pass -- its ban list
+		// covers a path's interior nodes, and a root object that is itself the target has none.
+		// Observed on the 9.6 GB fixture: a strongly-handled System.Object[] comes back as four
+		// identical paths. Reporting "4 retention paths" above a single rendered row would read as a
+		// rendering fault; the merge is the answer, so the count follows the merge.
+		var search = Search(0x10, truncated: false, nodesVisited: 0,
+			Path("StrongHandle", Node(0x10, "System.Object[]")),
+			Path("StrongHandle", Node(0x10, "System.Object[]")),
+			Path("StrongHandle", Node(0x10, "System.Object[]")),
+			Path("StrongHandle", Node(0x10, "System.Object[]")));
+
+		var tree = GCRootTreeBuilder.Build(search);
+
+		Assert.Single(tree.Roots);
+		Assert.Equal(1, tree.PathCount);
+		Assert.Equal(GCRootOutcome.Rooted, tree.Outcome);
 	}
 
 	[Fact]

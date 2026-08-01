@@ -1,0 +1,80 @@
+@*
+    gcroot retention paths (5.3, DATA_CONTRACT.md §4.3) -- the chains keeping one object alive,
+    merged into a trie so shared ancestry is drawn once and forks where the paths diverge.
+
+    THE ONE RULE THIS TEMPLATE EXISTS TO ENFORCE (docs/GCROOT_TRUNCATION.md):
+
+      An empty result is not evidence. A search that exhausted its node budget and a search that
+      covered everything reachable and found nothing produce the same empty list, and the original
+      defect was a formatter that could not tell them apart and guessed "unrooted, eligible for
+      collection" for both -- the most misleading answer this tool can give, on precisely the large
+      leak dumps it exists for.
+
+      So this view never asks whether the tree is empty. It switches on GCRootTree.Outcome, which
+      GCRootTreeBuilder computes once from (paths, truncated) together. The words "unrooted" and
+      "eligible for collection" appear in exactly one arm of that switch -- Unrooted, which means
+      Truncated == false AND no paths -- and nowhere else in this file.
+
+    Fully nested up front: one HeapAnalyzer.GetGCRoots call returns the whole tree, so _GcRootNodes
+    recurses into real <ul>/<li>/<details> rather than going through the lazy _TreeNodes.cshtml
+    machinery. Same "no style=" discipline as every other fragment.
+*@
+@using DotNetDump.Core.Trees
+@model DotNetDump.Web.Rendering.GCRootTreeModel
+
+<div id="v-gcroot">
+    @switch (Model.Tree.Outcome)
+    {
+        case GCRootOutcome.Inconclusive:
+            <div class="dn-tree-banner" role="alert">
+                <span>
+                    <strong>Inconclusive — the search did not finish.</strong>
+                    It gave up after visiting @Display.Count(Model.Tree.NodesVisited) objects, having exhausted its
+                    traversal budget. No retention path was found, but that is not a finding: the object may well be
+                    held by something the search never reached. Re-run with an unlimited budget for an answer that
+                    means something (it holds every visited node in memory, roughly 40 bytes each, so it is not free).
+                </span>
+                <a class="dn-btn" href="@Model.ConclusiveHref">Re-run unlimited</a>
+            </div>
+            break;
+
+        case GCRootOutcome.RootedPartial:
+            <div class="dn-tree-banner" role="alert">
+                <span>
+                    <strong>Partial — the search did not finish.</strong>
+                    The @(Model.Tree.PathCount == 1 ? "path" : "paths") below @(Model.Tree.PathCount == 1 ? "is" : "are")
+                    real, but after visiting @Display.Count(Model.Tree.NodesVisited) objects the search exhausted its
+                    budget while looking for further independent paths. There may be more references holding this
+                    object than are shown here.
+                </span>
+                <a class="dn-btn" href="@Model.ConclusiveHref">Re-run unlimited</a>
+            </div>
+            break;
+
+        case GCRootOutcome.Unrooted:
+            @* The only arm licensed to draw this conclusion: the search completed, so absence of a
+               path really is absence of a path. *@
+            <div class="dn-empty">
+                <div class="dn-empty__title">No retention path to @Display.Address(Model.Tree.TargetAddress).</div>
+                <div>
+                    The search completed after visiting @Display.Count(Model.Tree.NodesVisited) objects and found no GC
+                    root that reaches this one, so it is unrooted and eligible for collection — or it was collected
+                    already and the address is stale.
+                </div>
+            </div>
+            break;
+    }
+
+    @if (Model.Tree.Roots.Count > 0)
+    {
+        <ul class="dn-tree" role="group" aria-label="Retention paths">
+            <partial name="/Views/Fragments/_GcRootNodes.cshtml" model="Model.Tree.Roots" />
+        </ul>
+
+        <div class="dn-note">
+            @Display.Count(Model.Tree.PathCount) retention @(Model.Tree.PathCount == 1 ? "path" : "paths")
+            to @Display.Address(Model.Tree.TargetAddress),
+            read root first. @Display.Count(Model.Tree.NodesVisited) objects visited.
+        </div>
+    }
+</div>

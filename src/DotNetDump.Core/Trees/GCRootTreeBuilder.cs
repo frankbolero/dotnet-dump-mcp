@@ -50,6 +50,19 @@ public sealed record GCRootTreeNode(TreeNode Node, IReadOnlyList<GCRootTreeNode>
 /// </summary>
 /// <param name="TargetAddress">The object the search was asked about.</param>
 /// <param name="Roots">Top-level branches -- one per distinct root object across all merged paths.</param>
+/// <param name="PathCount">
+/// Distinct root-to-target chains after the merge -- the number of leaves in the trie, not
+/// <c>GCRootSearchInfo.Paths.Count</c> and not <see cref="Roots"/>'s count.
+/// <para>
+/// It differs from both, in both directions, and reporting either raw number would misdescribe what
+/// is on screen. Two paths from the same root object merge into one branch, so the branch count
+/// under-reports. And <c>RootPathFinder</c> can return the *same* chain more than once -- its
+/// per-pass ban list covers a path's interior nodes, of which a depth-1 path (a root object that is
+/// itself the target) has none, so such a path is re-discovered by every pass and arrives four times
+/// under the default <c>maxPaths</c>. Counting leaves reports what a reader can actually see, and
+/// duplicates carry no information the merge has not already removed.
+/// </para>
+/// </param>
 /// <param name="Outcome">What the search established. Render the conclusion from this, never from
 /// <see cref="Roots"/> being empty.</param>
 /// <param name="NodesVisited">Nodes visited across every BFS pass, for the truncation report.</param>
@@ -60,6 +73,7 @@ public sealed record GCRootTreeNode(TreeNode Node, IReadOnlyList<GCRootTreeNode>
 public sealed record GCRootTree(
 	ulong TargetAddress,
 	IReadOnlyList<GCRootTreeNode> Roots,
+	int PathCount,
 	GCRootOutcome Outcome,
 	long NodesVisited,
 	bool Truncated);
@@ -109,9 +123,21 @@ public static class GCRootTreeBuilder {
 		return new GCRootTree(
 			search.TargetAddress,
 			roots,
+			CountChains(roots),
 			Classify(roots.Count > 0, reportedPaths: search.Paths.Count, usablePaths, search.Truncated),
 			search.NodesVisited,
 			search.Truncated);
+	}
+
+	/// <summary>Leaves of the merged trie: one per distinct chain a reader can trace from a root
+	/// down to the target.</summary>
+	private static int CountChains(IReadOnlyList<GCRootTreeNode> nodes) {
+		int total = 0;
+		foreach (var node in nodes) {
+			total += node.Children.Count == 0 ? 1 : CountChains(node.Children);
+		}
+
+		return total;
 	}
 
 	/// <summary>
