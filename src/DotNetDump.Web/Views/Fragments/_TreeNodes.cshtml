@@ -1,0 +1,50 @@
+@*
+    Shared <li> rendering for every lazy tree (Phase 5): a batch of sibling TreeNodes, each becoming
+    one of three shapes --
+
+      1. HasChildren: a <details> whose <summary> is the row and whose (empty) child <ul> carries
+         hx-get="/trees/{tree}/{id}" hx-trigger="toggle once" -- fetched the first time it is opened,
+         never again, and never re-fetched on a later collapse/re-expand (SERVER.md's "single-object
+         read ... never a walk").
+      2. Kind == More: the fan-out cap's synthetic row. Its own hx-get replaces itself
+         (hx-target="closest li" hx-swap="outerHTML") with the next page of *siblings*, not children
+         -- the same self-replacing shape Rendering/InfiniteScroll.cs's sentinel uses for a table.
+      3. Anything else (Type, Field, Frame, Cycle, ...): a plain leaf row, no disclosure.
+
+    This partial answers both a full page's initial <ul> (wrapped by the tree's own top-level
+    fragment, e.g. HeapTree.cshtml) and a lazy expand/more request (returned bare, which is exactly
+    what hx-swap="innerHTML" into a <ul> or hx-swap="outerHTML" onto an <li> both need).
+
+    A tree that is computed whole up front (gcroot, thread/frames -- DATA_CONTRACT.md §4.3/§4.4) has
+    nothing to fetch later and does not use this partial for its nested levels; it renders its own
+    structure directly over _TreeRow.cshtml instead. See TreeRoutes.cs's own doc comment.
+*@
+@model DotNetDump.Web.Rendering.TreeNodesModel
+@foreach (var node in Model.Nodes)
+{
+    if (node.Kind == DotNetDump.Core.Models.TreeNodeKind.More)
+    {
+        <li class="dn-tree__item dn-tree__more">
+            <div class="dn-tree__row" hx-get="/trees/@Model.Tree/@Uri.EscapeDataString(node.Id)" hx-target="closest li" hx-swap="outerHTML">
+                <partial name="/Views/Shared/_TreeRow.cshtml" model="node" />
+            </div>
+        </li>
+    }
+    else if (node.HasChildren)
+    {
+        <li class="dn-tree__item">
+            <details class="dn-tree__node" hx-get="/trees/@Model.Tree/@Uri.EscapeDataString(node.Id)" hx-trigger="toggle once" hx-target="find > ul" hx-swap="innerHTML">
+                <summary class="dn-tree__row"><partial name="/Views/Shared/_TreeRow.cshtml" model="node" /></summary>
+                <ul class="dn-tree"></ul>
+            </details>
+        </li>
+    }
+    else
+    {
+        <li class="dn-tree__item">
+            <div class="dn-tree__row dn-tree__row--leaf@(node.Kind == DotNetDump.Core.Models.TreeNodeKind.Cycle ? " dn-tree__cycle" : "")">
+                <partial name="/Views/Shared/_TreeRow.cshtml" model="node" />
+            </div>
+        </li>
+    }
+}

@@ -1,0 +1,24 @@
+@*
+    Shared row chrome for one TreeNode (Phase 5, DATA_CONTRACT.md §4.1) -- the content of every
+    tree's <summary> (a node with children) or plain <div class="dn-tree__row dn-tree__row--leaf">
+    (a terminal node: Type/Field/Frame with no further expansion, or a synthetic More/Cycle row).
+
+    This partial only renders content, never the <details>/<summary>/<li> wrapper around it -- each
+    tree fragment (HeapTree.cshtml, GcRootTree.cshtml, ThreadsTree.cshtml, ObjectTree.cshtml) owns
+    that, because whether a node's children are already known (rendered inline) or need an
+    hx-get="/trees/{tree}/{id}" on first expand (hx-trigger="toggle once") is a property of which
+    tree it is, not of the row.
+
+    No `style=` attribute, per DESIGN_RESYNC.md -- every value here is a class in dndump.css.
+*@
+@model DotNetDump.Core.Models.TreeNode
+<span class="dn-tree__toggle@(Model.HasChildren ? "" : " dn-tree__toggle--none")" aria-hidden="true">▸</span>
+<span class="dn-tree__label@(Model.Address.HasValue ? " dn-addr" : "")">@Model.Label</span>
+@if (Model.Detail is not null)
+{
+    <span class="dn-tree__detail">@Model.Detail</span>
+}
+@foreach (var badge in Model.Badges)
+{
+    <span class="dn-badge dn-badge--@badge.Tone.ToString().ToLowerInvariant()">@badge.Label</span>
+}

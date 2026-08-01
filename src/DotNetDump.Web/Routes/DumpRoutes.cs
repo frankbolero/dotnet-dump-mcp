@@ -111,7 +111,7 @@ public static class DumpRoutes {
 			?? await renderer.RenderAsync(http, "/Views/Fragments/NotImplemented.cshtml", descriptor);
 
 		string html = await renderer.RenderAsync(http, "/Views/Shell/Index.cshtml",
-			new ShellModel(dump.Path, await infoTask, descriptor, ViewCatalog.All, new HtmlString(body), fragment.CountSummary));
+			ShellModel.ForView(dump.Path, await infoTask, descriptor, ViewCatalog.All, TreeCatalog.All, new HtmlString(body), fragment.CountSummary));
 
 		// The status stays 501 even though a full page comes back. The page is navigation plus an
 		// honest explanation, not the view that was asked for.
@@ -712,7 +712,7 @@ public static class DumpRoutes {
 		string body = await BuildName2EEFragment(http, queue, renderer, descriptor, module, type, ct);
 
 		string html = await renderer.RenderAsync(http, "/Views/Shell/Index.cshtml",
-			new ShellModel(dump.Path, await infoTask, descriptor, ViewCatalog.All, new HtmlString(body), CountSummary: null));
+			ShellModel.ForView(dump.Path, await infoTask, descriptor, ViewCatalog.All, TreeCatalog.All, new HtmlString(body), countSummary: null));
 
 		return Html(html);
 	}

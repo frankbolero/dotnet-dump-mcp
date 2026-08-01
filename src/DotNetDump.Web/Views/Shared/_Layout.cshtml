@@ -19,7 +19,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>@Model.Current.Title — dndump</title>
+    <title>@Model.Title — dndump</title>
     <link rel="stylesheet" href="@Assets.StylesheetPath" />
     <script src="@Assets.HtmxPath" integrity="@Assets.HtmxIntegrity" crossorigin="anonymous" defer></script>
     <script>
@@ -57,9 +57,21 @@
                     {
                         <a class="dn-nav__item"
                            href="/views/@view.Name"
-                           aria-current="@(view.Name == Model.Current.Name ? "page" : null)">
+                           aria-current="@(view.Name == Model.CurrentView?.Name ? "page" : null)">
                             <span class="dn-nav__dot" aria-hidden="true"></span>
                             <span class="dn-nav__hide-collapsed">@view.Title</span>
+                        </a>
+                    }
+                    @* Phase 5: the trees filed under this same DESIGN_BRIEF.md §3.1 group -- e.g.
+                       "Heap composition" sits under Heap, next to dumpheap/listobj/etc, because it
+                       is a rendering of the same data, not a separate concern. *@
+                    @foreach (var tree in Model.Trees.Where(t => t.Group == group.Key))
+                    {
+                        <a class="dn-nav__item"
+                           href="/trees/@tree.Name"
+                           aria-current="@(tree.Name == Model.CurrentTreeName ? "page" : null)">
+                            <span class="dn-nav__dot" aria-hidden="true"></span>
+                            <span class="dn-nav__hide-collapsed">@tree.Title</span>
                         </a>
                     }
                 }
@@ -85,9 +97,9 @@
 
             <div class="dn-view-header">
                 <div>
-                    <h1 class="dn-view-title">@Model.Current.Title</h1>
+                    <h1 class="dn-view-title">@Model.Title</h1>
                     <div class="dn-view-desc">
-                        SOS <code class="dn-code">@Model.Current.Command</code> — @Model.Current.Description
+                        SOS <code class="dn-code">@Model.Command</code> — @Model.Description
                     </div>
                 </div>
                 <div id="view-count" class="dn-view-count">@Model.CountSummary</div>

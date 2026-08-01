@@ -1,0 +1,25 @@
+@*
+    Namespace/assembly rollup (5.1, DATA_CONTRACT.md §4.2) -- the reference tree fragment every
+    other Phase 5 task's own top-level fragment copies the shape of. Pure grouping over the same
+    cached HeapAnalyzer.GetHeapStatistics entry dumpheap already populates: no dump access of its
+    own, so this is instant on a warm cache.
+
+    Every level starts closed and expands lazily on click, per _TreeNodes.cshtml's own doc comment --
+    including the root's own top-level namespaces, so the very first request stays a single cheap
+    grouping pass rather than a walk of the whole rolled-up tree.
+*@
+@model DotNetDump.Web.Rendering.TreeNodesModel
+<div id="v-heap">
+    @if (Model.Nodes.Count == 0)
+    {
+        <div class="dn-empty">
+            <div class="dn-empty__title">This dump has no heap statistics to show.</div>
+        </div>
+    }
+    else
+    {
+        <ul class="dn-tree" role="group" aria-label="Heap composition">
+            <partial name="/Views/Fragments/_TreeNodes.cshtml" model="Model" />
+        </ul>
+    }
+</div>

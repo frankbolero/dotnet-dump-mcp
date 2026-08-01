@@ -801,3 +801,195 @@ a {
 .dn-th__sort:hover {
 	color: var(--dn-text);
 }
+
+/* ---------------------------------------------------------------------------
+ * Trees (Phase 5, DATA_CONTRACT.md §4). One shared shape for all four:
+ * namespace rollup, gcroot retention paths, thread -> frames, object references.
+ *
+ * <details>/<summary> carries expand/collapse natively -- keyboard-operable (Tab
+ * + Enter/Space) and focusable with no script, matching this project's
+ * near-zero-JS stance (the theme toggle is the only inline <script> that exists,
+ * and only because a flash-before-paint requirement leaves no CSS-only option).
+ * A tree that needs a server round trip to learn its children (namespace
+ * rollup's "More" page, the object navigator's per-field reads) wires
+ * hx-trigger="toggle once" on the <details> so the fetch fires the first time it
+ * opens and never again; a tree computed whole up front (gcroot, thread/frames)
+ * renders its children inline and gets the same collapse affordance for free.
+ * ------------------------------------------------------------------------- */
+
+.dn-tree {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+/* Indentation comes from real nesting, not a per-level class: each expanded
+   node's children live in a <ul class="dn-tree"> inside its own <li>, so a
+   descendant .dn-tree naturally sits one indent step in from its parent -- no
+   inline style and no depth-indexed class needed even at the 64-level object
+   navigator cap. */
+.dn-tree .dn-tree {
+	padding-left: 18px;
+	border-left: 1px solid var(--dn-border);
+	margin-left: 5px;
+}
+
+.dn-tree__item {
+	list-style: none;
+}
+
+.dn-tree__node {
+	display: block;
+}
+
+.dn-tree__node > summary {
+	cursor: pointer;
+	list-style: none;
+}
+
+.dn-tree__node > summary::-webkit-details-marker {
+	display: none;
+}
+
+.dn-tree__node > summary::marker {
+	content: '';
+}
+
+.dn-tree__row {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 3px 6px;
+	border-radius: 4px;
+}
+
+.dn-tree__node > summary:hover .dn-tree__row,
+.dn-tree__row--leaf:hover {
+	background: var(--dn-surface-alt);
+}
+
+.dn-tree__row--leaf {
+	padding-left: 20px;
+}
+
+/* The disclosure glyph. Its own element, not ::marker content, so a leaf row
+   (no <details>) can render the same reserved width with .dn-tree__toggle--none
+   and keep every row's label starting at the same column. */
+.dn-tree__toggle {
+	flex: 0 0 auto;
+	width: 12px;
+	color: var(--dn-text-faint);
+	font-size: 10px;
+	text-align: center;
+}
+
+.dn-tree__node[open] > summary .dn-tree__toggle {
+	transform: rotate(90deg);
+	display: inline-block;
+}
+
+.dn-tree__toggle--none {
+	visibility: hidden;
+}
+
+.dn-tree__label {
+	font-family: var(--dn-font-mono);
+	color: var(--dn-text);
+}
+
+.dn-tree__detail {
+	color: var(--dn-text-muted);
+	font-size: 12px;
+}
+
+/* The synthetic "N more" row (namespace rollup's fan-out cap). Its own click
+   target -- see Rendering/InfiniteScroll.cs's sentinel for the same
+   self-replacing hx-swap="outerHTML" pattern applied to a tree row instead of a
+   table row. */
+.dn-tree__more > .dn-tree__row {
+	color: var(--dn-accent-text);
+	cursor: pointer;
+}
+
+.dn-tree__more > .dn-tree__row:hover {
+	background: var(--dn-accent-soft);
+}
+
+/* A cycle stop (object navigator) or a truncated branch: never styled as an
+   error, always as an explanation. */
+.dn-tree__cycle > .dn-tree__row {
+	color: var(--dn-text-faint);
+	font-style: italic;
+}
+
+.dn-badge {
+	display: inline-flex;
+	align-items: center;
+	border-radius: 100px;
+	padding: 1px 8px;
+	font-size: 10.5px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.dn-badge--neutral {
+	background: var(--dn-surface-alt);
+	color: var(--dn-text-muted);
+}
+
+.dn-badge--info {
+	background: var(--dn-accent-soft);
+	color: var(--dn-accent-text);
+}
+
+.dn-badge--warn {
+	background: var(--dn-warn-soft);
+	color: var(--dn-warn-text);
+}
+
+.dn-badge--danger {
+	background: var(--dn-danger-soft);
+	color: var(--dn-danger);
+}
+
+/* Object navigator breadcrumb (DATA_CONTRACT.md §4.5): the node id already
+   encodes the path, so this is a plain link trail, not client-side state. */
+.dn-breadcrumb {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	padding-bottom: 12px;
+	font-size: 12px;
+}
+
+.dn-breadcrumb__link {
+	color: var(--dn-accent-text);
+}
+
+.dn-breadcrumb__link:hover {
+	text-decoration: underline;
+}
+
+.dn-breadcrumb__sep {
+	color: var(--dn-text-faint);
+}
+
+.dn-breadcrumb__current {
+	color: var(--dn-text-muted);
+}
+
+/* Truncation banner (5.3, GCROOT_TRUNCATION.md): a budget-exhausted search is
+   inconclusive, never "unrooted" -- Danger tone is deliberate, not decorative. */
+.dn-tree-banner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 14px;
+	margin-bottom: 12px;
+	border-radius: 6px;
+	background: var(--dn-danger-soft);
+	color: var(--dn-danger);
+	font-size: 12.5px;
+}

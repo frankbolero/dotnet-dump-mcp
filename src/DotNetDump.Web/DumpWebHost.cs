@@ -143,6 +143,7 @@ public static class DumpWebHost {
 		});
 
 		app.MapDumpRoutes();
+		app.MapTreeRoutes();
 
 		// The queue owns the dump context; disposing it here is what closes the dump, and it must
 		// happen after the server has stopped accepting requests.
