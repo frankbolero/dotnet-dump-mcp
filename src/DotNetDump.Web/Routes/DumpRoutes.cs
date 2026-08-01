@@ -682,6 +682,29 @@ public static class DumpRoutes {
 					return Results.Content(JsonFormatter.FormatDetailedStacks(stacks), "application/json; charset=utf-8");
 				}
 
+			case "gcroot": {
+					// The HTML surface for gcroot is a tree, so /views/gcroot redirects to
+					// /trees/gcroot (see RenderView) -- but the JSON surface stays here with every
+					// other view's, because SERVER.md §2's point is that an API caller reaches the
+					// analyzer with the vocabulary it already knows, and 'gcroot' is that vocabulary.
+					if (!TryRequireAddress(address, descriptor, out ulong targetAddress, out var badAddress)) {
+						return badAddress;
+					}
+
+					if (!GCRootBudget.TryRead(http.Request.Query, out int? maxNodes, out string budgetError)) {
+						return Results.Text(budgetError, "text/plain; charset=utf-8", statusCode: StatusCodes.Status400BadRequest);
+					}
+
+					var search = await queue.Enqueue(
+						(session, _) => session.Heap.GetGCRoots(targetAddress, request.Parameters, maxPaths: GCRootBudget.DefaultMaxPaths, maxNodesVisited: maxNodes),
+						"resolving roots", ct);
+
+					// FormatGCRootPaths already carries 'truncated' and 'nodesVisited' as siblings of
+					// 'data' -- DATA_CONTRACT.md §3.3's state.truncated, and the reason an empty
+					// 'data' is not evidence of anything on its own (docs/GCROOT_TRUNCATION.md).
+					return Results.Content(JsonFormatter.FormatGCRootPaths(search), "application/json; charset=utf-8");
+				}
+
 			default:
 				return NotWiredYet(descriptor);
 		}
