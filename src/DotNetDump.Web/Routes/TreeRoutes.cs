@@ -121,7 +121,24 @@ public static class TreeRoutes {
 						model);
 				}
 
-			// case "threads": ...       (5.2)
+			case "threads": {
+					// DATA_CONTRACT.md §4.4: "fully computed up front" -- two independent Enqueue
+					// calls, no per-node lazy fetch. Ascending order and every thread in one page
+					// (Limit = int.MaxValue) so ThreadFramesTreeBuilder sees the whole thread set
+					// rather than one page of it; the cache key excludes both (§2.1), so this costs
+					// nothing extra on a warm cache.
+					var allThreads = new QueryParameters { Limit = int.MaxValue, SortDirection = SortDirection.Asc };
+					var threadsResult = await queue.Enqueue(
+						(session, _) => session.Threads.GetThreads(allThreads),
+						"enumerating threads", ct);
+					var stacksResult = await queue.Enqueue(
+						(session, _) => session.Threads.GetDetailedStacks(allThreads),
+						"walking thread stacks", ct);
+					var entries = ThreadFramesTreeBuilder.BuildRoots(threadsResult.Items, stacksResult.Items);
+					var model = new ThreadsTreeModel(entries);
+					return await renderer.RenderAsync(http, "/Views/Fragments/ThreadsTree.cshtml", model);
+				}
+
 			// case "object": ...        (5.4)
 			// case "gcroot": ...        (5.3)
 

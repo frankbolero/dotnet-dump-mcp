@@ -1,4 +1,5 @@
 using DotNetDump.Core.Models;
+using DotNetDump.Core.Trees;
 
 namespace DotNetDump.Web.Rendering;
 
@@ -12,3 +13,12 @@ namespace DotNetDump.Web.Rendering;
 /// <param name="Tree">The <c>{tree}</c> route segment, baked into each lazy child's own
 /// <c>hx-get="/trees/{Tree}/{id}"</c>.</param>
 public sealed record TreeNodesModel(string Tree, IReadOnlyList<TreeNode> Nodes);
+
+/// <summary>
+/// The whole thread&#8594;frames tree (5.2, DATA_CONTRACT.md &#0167;4.4), already built in full by
+/// <see cref="ThreadFramesTreeBuilder.BuildRoots"/> before this model is constructed. Unlike
+/// <see cref="TreeNodesModel"/> there is no lazy per-node fetch for this model to represent --
+/// <c>ThreadsTree.cshtml</c> renders every entry's frames inline, in the same response, directly over
+/// <c>_TreeRow.cshtml</c>.
+/// </summary>
+public sealed record ThreadsTreeModel(IReadOnlyList<ThreadTreeEntry> Threads);

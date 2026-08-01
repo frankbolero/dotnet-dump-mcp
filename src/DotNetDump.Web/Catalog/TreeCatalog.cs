@@ -24,7 +24,7 @@ public static class TreeCatalog {
 	private static readonly TreeDescriptor[] Descriptors = [
 		new("heap", "Heap composition", ViewGroup.Heap, "dumpheap -stat (rollup)",
 			"heap statistics grouped by namespace, so where the memory actually lives is visible at a glance."),
-		new("threads", "Call tree", ViewGroup.Threads, "clrthreads + clrstack (grouped)",
+		new("threads", "Call tree", ViewGroup.Threads, "clrthreads + dumpstack (grouped)",
 			"every managed thread with its stack frames nested underneath, identical stacks grouped together."),
 	];
 
