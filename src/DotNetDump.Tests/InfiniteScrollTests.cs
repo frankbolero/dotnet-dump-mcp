@@ -37,9 +37,14 @@ public sealed class InfiniteScrollTests(FilterPreservationHostFixture fixture) {
 		return (response.StatusCode, await response.Content.ReadAsStringAsync());
 	}
 
-	/// <summary>Every MethodTable address cell's text, in document order -- one per row.</summary>
+	/// <summary>
+	/// Every MethodTable address cell's text, in document order -- one per row. Matches both the
+	/// plain <c>&lt;span&gt;</c> an address with nothing to link to falls back to and the
+	/// <c>&lt;a&gt;</c> <c>Display.AddrLink</c> renders for a non-zero one -- dumpheap's MethodTable
+	/// is never zero, but the pattern should not silently start matching nothing if that ever changed.
+	/// </summary>
 	private static List<string> MethodTableAddresses(string html) =>
-		Regex.Matches(html, "dn-td--mono\"><span class=\"dn-addr\">([^<]+)</span>")
+		Regex.Matches(html, "dn-td--mono\"><(?:span|a) class=\"dn-addr\"[^>]*>([^<]+)<")
 			.Select(m => m.Groups[1].Value)
 			.ToList();
 

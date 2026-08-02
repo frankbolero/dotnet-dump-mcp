@@ -1,5 +1,7 @@
 using System.Globalization;
 
+using Microsoft.AspNetCore.Html;
+
 namespace DotNetDump.Web.Rendering;
 
 /// <summary>
@@ -83,6 +85,22 @@ public static class Display {
 	/// other.
 	/// </summary>
 	public static string Address(ulong value) => value.ToString("X16", CultureInfo.InvariantCulture);
+
+	/// <summary>
+	/// An address rendered with the <c>.dn-addr</c> affordance every address in this app already
+	/// carries (dashed underline, "copyable and navigable" per <c>dndump.css</c>) -- as a real link to
+	/// <paramref name="view"/> (one of <c>ViewCatalog</c>'s address-taking detail views) when
+	/// <paramref name="value"/> is non-zero, or as plain text when it is. <c>0</c> means "no reference"
+	/// everywhere this app uses it (an unset field, a handle with nothing pinned, a null dependent
+	/// target) -- there is nothing at that address to navigate to, so it stays inert rather than
+	/// linking to a detail page that can only 404 or misreport.
+	/// </summary>
+	public static IHtmlContent AddrLink(string view, ulong value) {
+		string text = Address(value);
+		return value == 0
+			? new HtmlString($"<span class=\"dn-addr\">{text}</span>")
+			: new HtmlString($"<a class=\"dn-addr\" href=\"/views/{view}/{text}\">{text}</a>");
+	}
 
 	/// <summary>
 	/// Uppercase hex with no <c>0x</c> prefix and no padding — the convention

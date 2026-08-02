@@ -20,7 +20,7 @@
         <div class="dn-card__head">
             <div class="dn-card__row"><span class="dn-card__label">Module</span><span class="dn-mono--strong">@Model.Data.ModuleName</span></div>
             <div class="dn-card__row"><span class="dn-card__label">Type</span><span class="dn-mono--strong">@Model.Data.TypeName</span></div>
-            <div class="dn-card__row"><span class="dn-card__label">MethodTable</span><span class="dn-addr">@Display.Address(Model.Data.MethodTable)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">MethodTable</span>@Display.AddrLink("dumpmt", Model.Data.MethodTable)</div>
             @if (!string.IsNullOrEmpty(Model.Data.MethodName))
             {
                 <div class="dn-card__row"><span class="dn-card__label">Method</span><span class="dn-mono">@Model.Data.MethodName</span></div>
@@ -41,7 +41,7 @@
                     @foreach (var method in Model.Data.Methods)
                     {
                         <tr class="dn-tr">
-                            <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(method.MethodDesc)</span></td>
+                            <td class="dn-td dn-td--mono">@Display.AddrLink("dumpmd", method.MethodDesc)</td>
                             <td class="dn-td">@method.Signature</td>
                             <td class="dn-td">@(method.IsJitted ? "yes" : "no")</td>
                         </tr>

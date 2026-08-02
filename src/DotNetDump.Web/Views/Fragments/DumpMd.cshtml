@@ -12,7 +12,7 @@
     <div class="dn-card">
         <div class="dn-card__head">
             <div class="dn-card__row"><span class="dn-card__label">MethodDesc</span><span class="dn-addr">@Display.Address(Model.Data.MethodDesc)</span></div>
-            <div class="dn-card__row"><span class="dn-card__label">MethodTable</span><span class="dn-addr">@Display.Address(Model.Data.MethodTable)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">MethodTable</span>@Display.AddrLink("dumpmt", Model.Data.MethodTable)</div>
             <div class="dn-card__row"><span class="dn-card__label">Method</span><span class="dn-mono--strong">@Model.Data.MethodName</span></div>
             @if (!string.IsNullOrEmpty(Model.Data.TypeName))
             {
@@ -27,7 +27,7 @@
                 <div class="dn-card__row"><span class="dn-card__label">Signature</span><span class="dn-mono">@Model.Data.Signature</span></div>
             }
             <div class="dn-card__row"><span class="dn-card__label">Metadata token</span><span class="dn-mono">@Display.MetadataToken(Model.Data.MetadataToken)</span></div>
-            <div class="dn-card__row"><span class="dn-card__label">Native code</span><span class="dn-addr">@Display.Address(Model.Data.NativeCode)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Native code</span>@Display.AddrLink("ip2md", Model.Data.NativeCode)</div>
             <div class="dn-card__row"><span class="dn-card__label">Is Jitted</span><span class="dn-mono">@(Model.Data.IsJitted ? "yes" : "no")</span></div>
             <div class="dn-card__row"><span class="dn-card__label">Is Generic</span><span class="dn-mono">@(Model.Data.IsGeneric ? "yes" : "no")</span></div>
         </div>

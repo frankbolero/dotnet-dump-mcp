@@ -6,7 +6,7 @@
 @foreach (var item in Model.Result.Items)
 {
     <tr class="dn-tr">
-        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.ImageBase)</span></td>
+        <td class="dn-td dn-td--mono">@Display.AddrLink("dumpmodule", item.ImageBase)</td>
         <td class="dn-td dn-td--num" title="@Display.Bytes((long)item.Size)">@Display.Size((long)item.Size)</td>
         <td class="dn-td">@(item.IsUserCode ? "user code" : "system")</td>
         <td class="dn-td dn-td--text">@item.Name</td>

@@ -34,7 +34,7 @@
 {
     var type = MiddleTruncated.From(item.TypeName);
     <tr class="dn-tr">
-        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.MethodTable)</span></td>
+        <td class="dn-td dn-td--mono">@Display.AddrLink("dumpmt", item.MethodTable)</td>
         <td class="dn-td dn-td--num">@Display.Count(item.Count)</td>
         <td class="dn-td dn-td--num" title="@Display.Bytes(item.TotalSize)">@Display.Size(item.TotalSize)</td>
         <td class="dn-td dn-td--type" title="@type.Full">

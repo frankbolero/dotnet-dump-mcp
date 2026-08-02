@@ -1,0 +1,22 @@
+@*
+    GcRootTree's sibling for when HeapAnalyzer.GetGCRoots throws outright, rather than completing
+    with one of GCRootTree.Outcome's four states -- the same "an unreadable referent is a node, not a
+    500" principle ObjectReferenceTreeBuilder.Unreadable applies to the object tree, applied here at
+    whole-search granularity since gcroot has no per-node fetch to isolate the failure to (5.3, unlike
+    5.4, computes the whole tree from one analyzer call).
+
+    Reuses .dn-empty's layout -- this is functionally the same "nothing to show, and here is why"
+    shape GcRootTree.cshtml's own Unrooted arm uses -- plus a danger badge so it reads as a failure
+    rather than a legitimate empty result.
+*@
+@model DotNetDump.Web.Rendering.GCRootErrorModel
+
+<div id="v-gcroot">
+    <div class="dn-empty">
+        <div class="dn-empty__title">
+            <span class="dn-badge dn-badge--danger">could not resolve</span>
+            Retention path for @Display.Address(Model.TargetAddress) could not be computed.
+        </div>
+        <div>@Model.Reason</div>
+    </div>
+</div>

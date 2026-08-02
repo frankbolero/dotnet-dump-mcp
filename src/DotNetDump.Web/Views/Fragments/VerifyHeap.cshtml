@@ -25,7 +25,7 @@
             @foreach (var item in Model.Result.Items)
             {
                 <tr class="dn-tr">
-                    <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Object)</span></td>
+                    <td class="dn-td dn-td--mono">@Display.AddrLink("dumpobj", item.Object)</td>
                     <td class="dn-td">@item.Kind</td>
                     <td class="dn-td dn-td--mono">@item.Offset.ToString("X")</td>
                     <td class="dn-td">@Display.OrNone(item.TypeName)</td>

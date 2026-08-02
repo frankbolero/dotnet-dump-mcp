@@ -18,7 +18,7 @@
 <div id="v-@Model.View.Name">
     <div class="dn-card">
         <div class="dn-card__head">
-            <div class="dn-card__row"><span class="dn-card__label">Address</span><span class="dn-addr">@Display.Address(Model.Data.Address)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Address</span>@Display.AddrLink("dumpobj", Model.Data.Address)</div>
         </div>
 
         @if (Model.Data.Corruptions.Count == 0)

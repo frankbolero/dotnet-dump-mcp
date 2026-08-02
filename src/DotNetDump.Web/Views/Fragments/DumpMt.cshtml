@@ -11,7 +11,7 @@
 <div id="v-@Model.View.Name">
     <div class="dn-card">
         <div class="dn-card__head">
-            <div class="dn-card__row"><span class="dn-card__label">MethodTable</span><span class="dn-addr">@Display.Address(Model.Data.MethodTable)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">MethodTable</span>@Display.AddrLink("dumpclass", Model.Data.MethodTable)</div>
             <div class="dn-card__row"><span class="dn-card__label">Type</span><span class="dn-mono--strong">@Model.Data.TypeName</span></div>
             @if (!string.IsNullOrEmpty(Model.Data.ModuleName))
             {

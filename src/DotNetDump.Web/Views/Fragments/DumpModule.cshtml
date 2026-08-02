@@ -18,7 +18,7 @@
             }
             <div class="dn-card__row"><span class="dn-card__label">ImageBase</span><span class="dn-addr">@Display.Address(Model.Data.ImageBase)</span></div>
             <div class="dn-card__row"><span class="dn-card__label">MetadataAddress</span><span class="dn-addr">@Display.Address(Model.Data.MetadataAddress)</span></div>
-            <div class="dn-card__row"><span class="dn-card__label">Assembly Address</span><span class="dn-addr">@Display.Address(Model.Data.AssemblyAddress)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">Assembly Address</span>@Display.AddrLink("dumpassembly", Model.Data.AssemblyAddress)</div>
             <div class="dn-card__row"><span class="dn-card__label">Size</span><span class="dn-mono" title="@Display.Bytes((long)Model.Data.Size)">@Display.Size((long)Model.Data.Size)</span></div>
             <div class="dn-card__row"><span class="dn-card__label">MetadataLength</span><span class="dn-mono">@Display.Count(Model.Data.MetadataLength)</span></div>
             <div class="dn-card__row"><span class="dn-card__label">TypeCount</span><span class="dn-mono">@Display.Count(Model.Data.TypeCount)</span></div>

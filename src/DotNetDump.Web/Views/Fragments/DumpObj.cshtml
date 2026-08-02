@@ -25,7 +25,7 @@
             <div class="dn-card__row"><span class="dn-card__label">Address</span><span class="dn-addr">@Display.Address(Model.Data.Address)</span></div>
             <div class="dn-card__row"><span class="dn-card__label">Type</span><span class="dn-mono--strong">@Model.Data.TypeName</span></div>
             <div class="dn-card__row"><span class="dn-card__label">Size</span><span class="dn-mono" title="@Display.Bytes((long)Model.Data.Size)">@Display.Size((long)Model.Data.Size)</span></div>
-            <div class="dn-card__row"><span class="dn-card__label">MethodTable</span><span class="dn-addr">@Display.Address(Model.Data.MethodTable)</span></div>
+            <div class="dn-card__row"><span class="dn-card__label">MethodTable</span>@Display.AddrLink("dumpmt", Model.Data.MethodTable)</div>
             @if (!string.IsNullOrEmpty(Model.Data.Value))
             {
                 <div class="dn-card__row"><span class="dn-card__label">Value</span><span class="dn-mono">@Model.Data.Value</span></div>
@@ -39,6 +39,15 @@
             <div class="dn-card__row">
                 <span class="dn-card__label">References</span>
                 <a href="/trees/object/@Display.Address(Model.Data.Address)">View references →</a>
+            </div>
+            @*
+                gcroot's own entry point, missing until now: it needs an address the same way the
+                object tree does, but unlike that tree it never got a link from here, so the only way
+                to reach /trees/gcroot/{address} was to already have one to type in by hand.
+            *@
+            <div class="dn-card__row">
+                <span class="dn-card__label">Retention</span>
+                <a href="/trees/gcroot/@Display.Address(Model.Data.Address)">View retention path →</a>
             </div>
         </div>
         <table class="dn-table">
@@ -63,7 +72,7 @@
                         <td class="dn-td dn-td--mono">
                             @if (field.IsReference && field.Address != 0)
                             {
-                                <span class="dn-addr">@Display.Address(field.Address)</span>
+                                @Display.AddrLink("dumpobj", field.Address)
                             }
                             else
                             {

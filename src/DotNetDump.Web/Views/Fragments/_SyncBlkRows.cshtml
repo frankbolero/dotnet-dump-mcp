@@ -11,7 +11,7 @@
         : (item.HoldingThreadAddress != 0 ? "@" + Display.Address(item.HoldingThreadAddress) : "none");
     string kind = item.IsThinLock ? "thin" : "syncblk";
     <tr class="dn-tr">
-        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.ObjectAddress)</span></td>
+        <td class="dn-td dn-td--mono">@Display.AddrLink("dumpobj", item.ObjectAddress)</td>
         <td class="dn-td dn-td--type" title="@type.Full">
             <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
         </td>

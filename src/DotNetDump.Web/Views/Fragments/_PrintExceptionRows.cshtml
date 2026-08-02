@@ -10,7 +10,7 @@
         var type = MiddleTruncated.From(item.Exception.TypeName);
         <tr class="dn-tr">
             <td class="dn-td">@Display.ThreadOrHeap(item.ManagedThreadId, item.OSThreadId)</td>
-            <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Exception.Address)</span></td>
+            <td class="dn-td dn-td--mono">@Display.AddrLink("dumpobj", item.Exception.Address)</td>
             <td class="dn-td dn-td--type" title="@type.Full">
                 <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>
             </td>

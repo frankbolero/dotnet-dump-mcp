@@ -10,7 +10,7 @@
     string dependent = item.DependentTarget != 0 ? Display.Address(item.DependentTarget) : "-";
     <tr class="dn-tr">
         <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Address)</span></td>
-        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Object)</span></td>
+        <td class="dn-td dn-td--mono">@Display.AddrLink("dumpobj", item.Object)</td>
         <td class="dn-td">@Display.OrNone(item.Kind)</td>
         <td class="dn-td">@(item.IsStrong ? "yes" : "no")</td>
         <td class="dn-td dn-td--num">@refCount</td>

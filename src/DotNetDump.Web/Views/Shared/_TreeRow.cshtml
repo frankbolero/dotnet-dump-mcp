@@ -13,7 +13,17 @@
 *@
 @model DotNetDump.Core.Models.TreeNode
 <span class="dn-tree__toggle@(Model.HasChildren ? "" : " dn-tree__toggle--none")" aria-hidden="true">▸</span>
-<span class="dn-tree__label@(Model.Address.HasValue ? " dn-addr" : "")">@Model.Label</span>
+@* Object/Field/Cycle addresses are real heap objects (dumpobj can read them); a Root's address is
+   the root location itself -- a static field, a stack slot, a GC handle -- not one, so it stays
+   plain the same way a GC handle's own address does in _GCHandlesRows.cshtml. *@
+@if (Model.Address.HasValue && Model.Kind != DotNetDump.Core.Models.TreeNodeKind.Root)
+{
+    <a class="dn-tree__label dn-addr" href="/views/dumpobj/@Display.Address(Model.Address.Value)">@Model.Label</a>
+}
+else
+{
+    <span class="dn-tree__label@(Model.Address.HasValue ? " dn-addr" : "")">@Model.Label</span>
+}
 @if (Model.Detail is not null)
 {
     <span class="dn-tree__detail">@Model.Detail</span>

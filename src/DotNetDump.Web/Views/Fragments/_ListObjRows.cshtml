@@ -7,8 +7,8 @@
 {
     var type = MiddleTruncated.From(item.TypeName);
     <tr class="dn-tr">
-        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.Address)</span></td>
-        <td class="dn-td dn-td--mono"><span class="dn-addr">@Display.Address(item.MethodTable)</span></td>
+        <td class="dn-td dn-td--mono">@Display.AddrLink("dumpobj", item.Address)</td>
+        <td class="dn-td dn-td--mono">@Display.AddrLink("dumpmt", item.MethodTable)</td>
         <td class="dn-td dn-td--num" title="@Display.Bytes((long)item.Size)">@Display.Size((long)item.Size)</td>
         <td class="dn-td dn-td--type" title="@type.Full">
             <span class="dn-trunc"><span class="dn-trunc__head">@type.Head</span><span class="dn-trunc__tail">@type.Tail</span></span>

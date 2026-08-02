@@ -171,9 +171,23 @@ public static class TreeRoutes {
 					AddressParser.TryParse(seed, out ulong target);
 					GCRootBudget.TryRead(http.Request.Query, out int? maxNodes, out _);
 
-					var search = await queue.Enqueue(
-						(session, _) => session.Heap.GetGCRoots(target, new QueryParameters(), maxPaths: GCRootBudget.DefaultMaxPaths, maxNodesVisited: maxNodes),
-						"resolving roots", ct);
+					// GetGCRoots reads every candidate object along every path it explores
+					// (heap.GetObject(...).EnumerateReferenceAddresses, obj.Type?.Name, obj.Size) --
+					// the same kind of per-object ClrMD read that 5.4's own remarks call out as
+					// routinely failing on a real dump (a corrupt object, a shape the analyzer does
+					// not handle). Unlike the object tree, gcroot has no per-node fetch to isolate
+					// that failure to -- one analyzer call returns the whole search -- so a throw here
+					// means the whole search, not one node, and gets its own fragment rather than a
+					// TreeNode standing in for a chain that was never built.
+					GCRootSearchInfo search;
+					try {
+						search = await queue.Enqueue(
+							(session, _) => session.Heap.GetGCRoots(target, new QueryParameters(), maxPaths: GCRootBudget.DefaultMaxPaths, maxNodesVisited: maxNodes),
+							"resolving roots", ct);
+					} catch (Exception ex) when (ex is not OperationCanceledException) {
+						var errorModel = new GCRootErrorModel(target, ex.Message);
+						return await renderer.RenderAsync(http, "/Views/Fragments/GcRootError.cshtml", errorModel);
+					}
 
 					var model = new GCRootTreeModel(
 						GCRootTreeBuilder.Build(search),
