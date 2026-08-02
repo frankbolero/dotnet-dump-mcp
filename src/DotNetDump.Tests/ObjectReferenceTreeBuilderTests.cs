@@ -286,6 +286,17 @@ public class ObjectReferenceTreeBuilderTests {
 		Assert.Equal(new ulong[] { 0x20 }, reads);
 	}
 
+	[Fact]
+	public void AnUnreadableObjectBecomesANodeThatSaysSoRatherThanAnEmptyExpansion() {
+		// "No references" and "could not read it" are different claims about the dump, and only one of
+		// them is earned. An empty child list would make the second look like the first.
+		var node = Assert.Single(ObjectReferenceTreeBuilder.Unreadable("10-20", "Object at 20 is null or invalid."));
+
+		Assert.False(node.HasChildren);
+		Assert.Contains("null or invalid", node.Detail);
+		Assert.Contains(node.Badges, b => b.Tone == TreeBadgeTone.Danger);
+	}
+
 	// ---- Node ids ----------------------------------------------------------------------------
 
 	[Fact]

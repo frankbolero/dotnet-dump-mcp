@@ -1,0 +1,46 @@
+@*
+    Object reference navigator (5.4, DATA_CONTRACT.md §4.5) -- the same shape as HeapTree.cshtml,
+    seeded by an address instead of by the root, because both are genuinely lazy: one hx-get per node
+    the user actually opens. The difference is what an expansion costs. The namespace rollup expands
+    out of a cached heap walk; this one is a single-object read, so it is the one tree that stays fast
+    on a cold cache.
+
+    Above the tree is the breadcrumb, which is this tree's entire history mechanism. A node id already
+    encodes the whole chain of addresses from the root, so an ancestor's link is just that chain
+    truncated -- ordinary <a href>s, giving the address bar and the back button for free, with no
+    client-side state machine to keep in step with the DOM.
+
+    Cycle and depth-cap rows come through _TreeNodes.cshtml like any other leaf: the builder decides
+    which references are safe to follow, and the markup only has to not offer a disclosure where it
+    said there is none.
+*@
+@model DotNetDump.Web.Rendering.ObjectTreeModel
+<div id="v-object">
+    <nav class="dn-breadcrumb" aria-label="Reference path">
+        @foreach (var crumb in Model.Crumbs)
+        {
+            if (crumb.IsCurrent)
+            {
+                <span class="dn-breadcrumb__current dn-addr" aria-current="page">@crumb.Label</span>
+            }
+            else
+            {
+                <a class="dn-breadcrumb__link dn-addr" href="@crumb.Href">@crumb.Label</a>
+                <span class="dn-breadcrumb__sep" aria-hidden="true">/</span>
+            }
+        }
+    </nav>
+
+    @if (Model.Nodes.Nodes.Count == 0)
+    {
+        <div class="dn-empty">
+            <div class="dn-empty__title">This object holds no references to other objects.</div>
+        </div>
+    }
+    else
+    {
+        <ul class="dn-tree" role="group" aria-label="Object references">
+            <partial name="/Views/Fragments/_TreeNodes.cshtml" model="Model.Nodes" />
+        </ul>
+    }
+</div>

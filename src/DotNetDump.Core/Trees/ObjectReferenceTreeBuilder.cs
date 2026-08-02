@@ -151,6 +151,27 @@ public static class ObjectReferenceTreeBuilder {
 		};
 	}
 
+	/// <summary>
+	/// The single child standing in for an object that could not be read at all. An expansion is one
+	/// object read, and a read can fail on a real dump for reasons that say nothing about the graph --
+	/// a corrupt object, or a shape the analyzer does not handle (as of writing,
+	/// <c>HeapAnalyzer.GetObjectDetails</c> throws on a primitive-element array, which is a very
+	/// common field type). Rendering the failure as a node keeps the rest of the tree usable and keeps
+	/// it honest: an empty child list would read as "this object references nothing", which is a
+	/// different and unearned claim. Same principle as <see cref="RootPathFinder"/> declining to abort
+	/// a whole search over one unreadable object.
+	/// </summary>
+	public static IReadOnlyList<TreeNode> Unreadable(string nodeId, string reason) => [
+		new TreeNode {
+			Id = nodeId,
+			Label = "<unreadable>",
+			Detail = reason,
+			Kind = TreeNodeKind.Field,
+			HasChildren = false,
+			Badges = [new TreeBadge("could not read", TreeBadgeTone.Danger)],
+		}
+	];
+
 	/// <summary>Splits a node id into its chain of addresses, root first. Accepts every form
 	/// <see cref="AddressParser"/> does for each segment, so a hand-typed
 	/// <c>/trees/object/0x13A611F10</c> works as well as one this builder emitted.</summary>
