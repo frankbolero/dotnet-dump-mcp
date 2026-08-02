@@ -5,7 +5,10 @@ recorded below. Phase 2 complete, measured, tested, and signed off. Phase 3's fi
 are all complete and its restated exit criterion mechanically verified, awaiting sign-off. Phase 4's
 six tasks (filter bar, chips, sortable headers, infinite scroll, OOB row count, URL round-trip) are
 all complete and verified against a real dump; its exit criterion's 10.2M-object scale claim
-specifically is not yet measured (see Phase 4's own notes). Phases 5–7 outstanding.
+specifically is not yet measured (see Phase 4's own notes). Phase 5's four trees are all complete,
+merged, and verified against the real dump — see Phase 5's own notes on what "keyboard navigable"
+means for a native `<details>`-based tree and what has and has not been checked. Phases 6–7
+outstanding.
 
 Eight phases. Phases 0, 1 and 2 run in parallel; the rest are sequential. Each phase has an exit
 criterion that is a demonstrable fact, not a feeling, and the phases that could invalidate later work
@@ -462,20 +465,94 @@ Test it explicitly for every view. **Realized twice during this phase**, both ca
 bake in `sort`/`order` explicitly rather than relying on `hx-include` (a genuine instance of this
 exact risk, aimed at a parameter the original wording didn't name).
 
-## Phase 5 — Trees
+## Phase 5 — Trees ✅ complete
 
 Depends on 4. Ordered cheapest to most expensive; each is independently shippable.
 
-| Order | Tree | Notes |
-| ---: | :--- | :--- |
-| 5.1 | **Namespace rollup** — [`DATA_CONTRACT.md` §4.2](DATA_CONTRACT.md) | Pure grouping over cached heap stats, no dump access. Split on `.` only outside `<>`. Fan-out cap with a `More` node. |
-| 5.2 | **Thread → frames** — §4.4 | Two levels from existing analyzer output. Group identical idle worker stacks. Locals are a stretch goal: measure whether ClrMD exposes them usefully on a real dump, and drop them without ceremony if not. |
-| 5.3 | **gcroot retention paths** — §4.3 | Merge `GCRootSearchInfo.Paths` into a trie on address. **Truncation banner is part of this task, not a follow-up** — see [`../GCROOT_TRUNCATION.md`](../GCROOT_TRUNCATION.md). |
-| 5.4 | **Object reference navigator** — §4.5 | Lazy per-node `GetObjectDetails`. Cycle detection via visited-set in the node id, 64-level depth cap, breadcrumb history from the URL. |
+| Order | Tree | Status | Notes |
+| ---: | :--- | :--- | :--- |
+| 5.1 | **Namespace rollup** — [`DATA_CONTRACT.md` §4.2](DATA_CONTRACT.md) | ✅ | Pure grouping over cached heap stats, no dump access. Split on `.` only outside `<>`. Fan-out cap with a `More` node that self-replaces (`Rendering/InfiniteScroll.cs`'s sentinel pattern, applied to a tree row instead of a table row). Built by the lead as the reference implementation, the same role 3.1's data table played for Phase 3 — the shared groundwork below and this task landed in one commit. |
+| 5.2 | **Thread → frames** — §4.4 | ✅ | Two levels, fully computed up front (not lazy — see below). Idle-worker grouping by exact `{ModuleName}!{MethodName}` frame-sequence signature; a bucket of one stays its own node, a thread carrying an in-flight exception is never grouped. **Locals dropped, not deferred**: the ClrMD version this project references (4.0.732401) has no locals-by-name accessor at all, only IL metadata plumbing and an unnamed per-frame stack-root enumeration — a structural gap, not a per-dump measurement question. |
+| 5.3 | **gcroot retention paths** — §4.3 | ✅ | Merges `GCRootSearchInfo.Paths` into a trie on address, fully computed up front. Truncation is a first-class `GCRootOutcome` (`Rooted` / `RootedPartial` / `Unrooted` / `Inconclusive`) computed once in `GCRootTreeBuilder` rather than inferred from an empty list per-renderer — the words "unrooted" and "eligible for collection" appear in exactly one arm of `GcRootTree.cshtml`'s switch. `GET /api/gcroot/{address}` wired too (`JsonFormatter.FormatGCRootPaths`, already existed). A `?maxNodes=` override (`GCRootBudget`, shared between the HTML and JSON routes) backs the truncation banner's "re-run unlimited" link. `/views/gcroot/{address}` now redirects (302) into the tree rather than duplicating it. |
+| 5.4 | **Object reference navigator** — §4.5 | ✅ | Lazy per-node `GetObjectDetails`, one cheap single-object read per expansion — the one tree that stays fast on a cold cache. Cycle-safe by construction: `TreeNode.Id` is the whole chain of visited addresses from the tree's root, hex-joined by `-`, so a revisit is detected from the id alone with no server-side session state. 64-level depth cap. An **unreadable referent** — a real ClrMD failure mode this codebase hits (e.g. a primitive-element array `GetObjectDetails` throws on), not only a hypothetical — renders as a node saying so rather than failing the whole request. Breadcrumb reconstructs history from the node id's own address chain; `dumpobj` gained the tree's only entry point ("View references →"), since no top-level nav link can offer an address nobody has yet. |
 
-**Exit criterion.** All four render, expand lazily, and are keyboard navigable. A deliberately cyclic
-object graph terminates in the navigator instead of expanding forever. An intentionally
-budget-truncated `gcroot` shows the warning banner and never the words "eligible for collection".
+### Shared groundwork (lead, landed with 5.1)
+
+Mirrors 3.1/3.2's role for Phase 3: the pattern every fan-out task builds against, decided once
+rather than four times. `TreeNode`/`TreeNodeKind`/`TreeBadge` in Core
+(`DotNetDump.Core/Models/TreeNode.cs`, [`DATA_CONTRACT.md` §4.1](DATA_CONTRACT.md)); a new
+`GET /trees/{tree}/{seed?}` route family (`Routes/TreeRoutes.cs`) mirroring `DumpRoutes.cs`'s
+page-vs-fragment split rather than growing `ViewCatalog`/`DumpRoutes.cs` with a third `ViewKind`
+that doesn't fit a tree's shape; `TreeCatalog` for the two nav-reachable trees (`heap`, `threads`);
+and shared rendering (`_TreeRow.cshtml`, the lazy-only `_TreeNodes.cshtml`/`TreeNodesModel`, and the
+tree CSS in `dndump.css`) that 5.1 and 5.4 (the two genuinely lazy trees) consume directly, while 5.2
+and 5.3 (both "fully computed up front" per the contract) render their own nested structure straight
+over `_TreeRow.cshtml` instead. `ShellModel` was generalized to carry flat `Title`/`Command`/
+`Description` plus an optional current-tree name, so a tree page uses the same shell as a view page
+without needing a `ViewDescriptor`.
+
+**Expand/collapse is native `<details>`/`<summary>`, not custom JS or ARIA `role="tree"`.** A
+deliberate deviation from the Claude Design mockup's `role="tree"`/`aria-level` markup, consistent
+with the near-zero-JS stance the rest of this codebase already keeps (the theme toggle is still the
+only inline `<script>`, and only because a flash-before-paint requirement leaves no CSS-only
+option). `<details>` gives free, real keyboard operability — Tab focuses it, Enter/Space toggles —
+at the cost of the full ARIA-tree pattern's arrow-key navigation between siblings, which would need
+a roving-tabindex script this project has otherwise avoided everywhere. Not recorded in
+`DESIGN_RESYNC.md` because there is no synced tree component page to resync against yet — Trees.dc.html
+exists in `design-sync/` but 3.5 explicitly deferred consuming it to this phase.
+
+### gcroot's route, decided during the shared-groundwork commit and completed in 5.3
+
+`gcroot` stays in `ViewCatalog` (`ViewCatalogCoverageTests` needs it — it is a real
+`dndump gcroot <address>` command) but is a tree, not a `ViewKind.Detail` record
+(DATA_CONTRACT.md §4.3), so its real implementation lives at `/trees/gcroot/{address}` and
+`/views/gcroot/{address}` redirects into it. This left `ViewRoutingTests`'s `UnwiredView` constant
+(`"gcroot"`, unwired by design since Phase 3.4) without a substitute — every other catalog view was
+already wired — so 5.3 repurposed that test class rather than inventing a fake unwired view, and
+documented the resulting gap explicitly in its own remarks: **a dumpless test run no longer exercises
+the whole-page-vs-fragment routing branch at all**; that branch's only coverage is now
+`WiredViewRoutingTests` and `WiredTreeRoutingTests`, both of which need `DOTNETDUMP_TEST_DUMP` and
+skip without it. Recorded here rather than left to be rediscovered.
+
+### Delegation and merges
+
+5.1 was built by the lead as the reference implementation. 5.2 (Sonnet), 5.3 (Opus) and 5.4 (Opus)
+were delegated to worktree subagents per the plan's assignment table, briefed against 5.1's pattern.
+5.3 and 5.4 were interrupted mid-run by the account's monthly spend limit — 5.3 had already committed
+four complete, atomic commits and was one verification step from done; 5.4 had committed its
+cycle-detection core (`ObjectReferenceTreeBuilder` + synthetic-fixture tests) with the web-wiring
+layer still uncommitted. The lead reviewed both in full, finished 5.4's wiring directly (plus fixed
+one doc-comment placement glitch found in review), and ran the build/format/test verification neither
+agent finished. All three merges hit the same **additive conflict** shape 3.3 first established as
+expected and low-risk — each task added one `case` to `TreeRoutes.cs`'s switch (and, for 5.3/5.4,
+overlapping test-file regions and one identically-named `TreeFormat.Address` helper both agents wrote
+independently) — resolved every time by keeping both sides.
+
+**Verified.** Full suite 830/0/0 on `net8.0`/`net9.0`/`net10.0` with the 9.6 GB fixture dump,
+`dotnet format --verify-no-changes` clean. Manual `curl` smoke tests against a live `dndump serve`
+confirmed the namespace rollup's root load, lazy expand and more-node paging by hand; the remaining
+three trees' dump-gated automated tests (which passed) cover the same properties for each — including
+`GCRootTree_WhenTheSearchIsTruncated_SaysInconclusiveAndNeverEligibleForCollection`, run against the
+same real ~10.2M-object heap the Phase 4 exit criterion cites, with a deliberately tiny budget to
+force truncation.
+
+**Exit criterion.** All four render, expand (lazily for `heap`/`object`; whole, with native collapse,
+for `threads`/`gcroot` — see "Shared groundwork" above for why those two don't round-trip per node).
+A deliberately cyclic object graph terminates in the navigator instead of expanding forever. An
+intentionally budget-truncated `gcroot` shows the warning banner and never the words "eligible for
+collection".
+
+⚠️ **"Keyboard navigable" is met by construction, not by a browser check.** `<details>`/`<summary>`
+are natively focusable and toggle on Enter/Space — true of every disclosure this phase renders,
+mechanically, because nothing here overrides that behavior — but no browser-automation tooling exists
+in this project (the same limitation 4.6 named for the back button), so no one has actually pressed
+Tab and Enter against a running `dndump serve` and watched a tree expand. **Cycle termination** and
+**the truncation wording rule** are not similarly caveated: both are asserted by dedicated unit tests
+against hand-built synthetic fixtures (`ObjectReferenceTreeBuilderTests`: two-object cycles,
+self-reference, long cycles, diamonds and shared-leaf siblings correctly *not* flagged, the depth cap;
+`GCRootTreeBuilderTests`: all four `GCRootOutcome` states), the same evidentiary standard
+`RootPathFinderTests` set for the layer below them — and the gcroot truncation wording is additionally
+confirmed against the real 10.2M-object dump, not only a fixture.
 
 ## Phase 6 — Perceived speed
 
@@ -572,7 +649,7 @@ Applies to every delegated task without exception.
 | 4.4 Infinite scroll | **Sonnet** | Sentinel protocol is fully specified. |
 | 4.5 Out-of-band updates | **Sonnet** | |
 | 4.6 URL state round-trip | **Sonnet** | Round-trip property is its own oracle. |
-| 5.1 Namespace rollup | **Sonnet** | Pure grouping over cached data. The "split on `.` only outside `<>`" rule is fiddly and deserves a dedicated test set. |
+| 5.1 Namespace rollup | ~~Sonnet~~ **Lead** | Reassigned in execution: Phase 5 is the first phase to consume the `Trees` design component, so the lead built 5.1 as the reference implementation the other three copy the shape of, the same role 3.1 played for the data table. Pure grouping over cached data; the "split on `.` only outside `<>`" rule is fiddly and got a dedicated test set regardless. |
 | 5.2 Thread → frames | **Sonnet** | Note the explicit permission to drop locals — an agent will otherwise burn effort proving ClrMD can do something it cannot. |
 | 5.3 gcroot retention paths | **Opus** | Truncation semantics carry the plan's most consequential correctness requirement, and the tempting shortcut is to ship the tree and defer the banner. |
 | 5.4 Object reference navigator | **Opus** | Cycle detection, visited-set node identity and the depth cap against a routinely-cyclic graph. A **High** risk row. |
