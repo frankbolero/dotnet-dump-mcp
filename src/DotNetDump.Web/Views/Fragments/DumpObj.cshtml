@@ -30,6 +30,16 @@
             {
                 <div class="dn-card__row"><span class="dn-card__label">Value</span><span class="dn-mono">@Model.Data.Value</span></div>
             }
+            @*
+                The object tree's only entry point (DATA_CONTRACT.md §4.5, TreeCatalog.cs): it needs an
+                address nobody has until they are already looking at an object, so it is linked from
+                here rather than from top-level navigation. A plain link, not an hx-get -- following it
+                is a navigation, and the address bar is this tree's history.
+            *@
+            <div class="dn-card__row">
+                <span class="dn-card__label">References</span>
+                <a href="/trees/object/@Display.Address(Model.Data.Address)">View references →</a>
+            </div>
         </div>
         <table class="dn-table">
             <thead>

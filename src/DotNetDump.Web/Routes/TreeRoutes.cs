@@ -69,12 +69,20 @@ public static class TreeRoutes {
 		// therefore never receives a seed that is not an address. Validated here rather than inside
 		// BuildTreeFragment because a missing or malformed address is a 400 and that switch's shared
 		// signature only distinguishes "rendered" from "no such tree" (404) -- same rule, same message
-		// shape, as DumpRoutes.TryRequireAddress.
+		// shape, as DumpRoutes.TryRequireAddress. object's own seed requirement is validated inside
+		// BuildTreeFragment instead (TreeSeedException, caught below) since its check is one line and
+		// does not need a request-query lookup the way gcroot's budget override does.
 		if (IsGCRoot(tree) && !TryValidateGCRootRequest(http, seed, out var badGCRootRequest)) {
 			return badGCRootRequest;
 		}
 
-		string? fragment = await BuildTreeFragment(http, queue, renderer, tree, seed, ct);
+		string? fragment;
+		try {
+			fragment = await BuildTreeFragment(http, queue, renderer, tree, seed, ct);
+		} catch (TreeSeedException ex) {
+			return Results.Text(ex.Message, "text/plain; charset=utf-8", statusCode: StatusCodes.Status400BadRequest);
+		}
+
 		if (fragment is null) {
 			return Results.Text(
 				$"'{tree}' is not a known tree. Known trees: heap, threads, object, gcroot.",
@@ -177,7 +185,49 @@ public static class TreeRoutes {
 					return await renderer.RenderAsync(http, "/Views/Fragments/GcRootTree.cshtml", model);
 				}
 
-			// case "object": ...        (5.4)
+			case "object": {
+					// Unlike heap/threads, this tree has no root of its own: it is rooted at whatever
+					// object the user was looking at, so a missing or malformed seed is a client error
+					// rather than "give me the top level". Same rule, same wording shape, as
+					// DumpRoutes.cs's TryRequireAddress for the address-taking detail views.
+					if (!ObjectReferenceTreeBuilder.TryParsePath(seed, out var path)) {
+						throw new TreeSeedException(
+							$"'object' requires an address, e.g. /trees/object/7FF6A1B02000 (hex, optionally 0x-prefixed). "
+							+ "A deeper node's id is that same form, one address per level, joined by '-'.");
+					}
+
+					// One single-object read per expansion, and the builder needs exactly the last
+					// object on the path -- so it is fetched here, through the queue, and handed to the
+					// builder as a closure. The builder takes a lookup rather than a HeapAnalyzer so its
+					// cycle and depth-cap tests can supply a synthetic graph instead of a dump.
+					ulong target = path[^1];
+
+					// One unreadable object is a node, not a 500. Every reference field renders a
+					// disclosure -- the referent has not been read yet, so whether it *can* be read is
+					// not known until the user opens it -- and on a real dump some of them cannot be:
+					// a corrupt object, or a shape the analyzer does not handle. Failing the whole
+					// request would make an ordinary click look like a broken server.
+					IReadOnlyList<TreeNode> nodes;
+					try {
+						var details = await queue.Enqueue(
+							(session, _) => session.Heap.GetObjectDetails(target), "reading object", ct);
+						nodes = ObjectReferenceTreeBuilder.GetChildren(seed, _ => details.Fields);
+					} catch (Exception ex) when (ex is not OperationCanceledException) {
+						nodes = ObjectReferenceTreeBuilder.Unreadable(seed!, ex.Message);
+					}
+
+					var model = new TreeNodesModel("object", nodes);
+
+					// A lazy expand wants the bare <li>s; a first load, a breadcrumb click, or a history
+					// restore wants the breadcrumb and the <ul> around them. heap tells those apart by
+					// seed presence, which this tree cannot -- its seed is always present -- so it uses
+					// the request itself: every htmx request here comes from a node's own hx-get, since
+					// the breadcrumb and the dumpobj entry point are plain links, by design (§4.5's
+					// history model is the address bar).
+					return WantsFragment(http)
+						? await renderer.RenderAsync(http, "/Views/Fragments/_TreeNodes.cshtml", model)
+						: await renderer.RenderAsync(http, "/Views/Fragments/ObjectTree.cshtml", new ObjectTreeModel(path, model));
+				}
 
 			default:
 				return null;
@@ -207,4 +257,14 @@ public static class TreeRoutes {
 	}
 
 	private static IResult Html(string markup) => Results.Content(markup, "text/html; charset=utf-8");
+
+	/// <summary>
+	/// A seed that a tree needs but cannot use -- missing, or not the shape that tree's ids take. It
+	/// is a client error, exactly like an unsupported filter field on a view
+	/// (<see cref="DumpRoutes"/>'s own <c>TryRequireAddress</c>), and distinct from an unknown tree
+	/// *name*, which is a 404. A builder throws it rather than returning a sentinel so the four cases
+	/// in <see cref="BuildTreeFragment"/> keep the one return type they share: a rendered fragment, or
+	/// <see langword="null"/> for "not my tree".
+	/// </summary>
+	private sealed class TreeSeedException(string message) : Exception(message);
 }

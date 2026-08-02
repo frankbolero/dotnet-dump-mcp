@@ -30,8 +30,9 @@ internal static class TreeFormat {
 		return value.ToString("0.0", CultureInfo.InvariantCulture) + " " + ByteUnits[unit];
 	}
 
-	/// <summary>Zero-padded 16-digit hex, matching <c>DotNetDump.Web.Rendering.Display.Address</c> so
-	/// an address reads identically whether it reaches the page through a table cell or through a
-	/// <see cref="Models.TreeNode.Detail"/> string built here.</summary>
+	/// <summary>Zero-padded 16-digit uppercase hex, matching <c>DotNetDump.Web.Rendering.Display</c>'s
+	/// own <c>Address</c> so an address reads identically whether it appears in a table cell or in a
+	/// tree node's <see cref="Models.TreeNode.Detail"/>. Distinct from an opaque node
+	/// <see cref="Models.TreeNode.Id"/>, which is not display text and is not padded.</summary>
 	public static string Address(ulong value) => value.ToString("X16", CultureInfo.InvariantCulture);
 }
