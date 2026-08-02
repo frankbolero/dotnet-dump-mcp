@@ -1,6 +1,8 @@
 using DotNetDump.Core.Models;
 using DotNetDump.Core.Trees;
+using DotNetDump.Core.Utilities;
 using DotNetDump.Web.Analysis;
+using DotNetDump.Web.Binding;
 using DotNetDump.Web.Catalog;
 using DotNetDump.Web.Rendering;
 
@@ -39,11 +41,8 @@ namespace DotNetDump.Web.Routes;
 /// not have until viewing an object, so it is linked to contextually from <c>dumpobj</c>'s own page
 /// instead of appearing in <see cref="TreeCatalog"/>. <c>gcroot</c> also needs an address and keeps
 /// its pre-existing <see cref="ViewCatalog"/> entry for <c>ViewCatalogCoverageTests</c> parity (it is
-/// a real CLI command) -- <b>not yet wired here</b>. Phase 5.3 owns making
-/// <c>/views/gcroot/{address}</c> redirect into <c>/trees/gcroot/{address}</c> rather than this route
-/// family growing a second, duplicate implementation, and owns updating
-/// <c>ViewRoutingTests.UnwiredView</c> (currently <c>"gcroot"</c>, by design, per that constant's own
-/// doc comment) once the redirect lands and the name stops being an honest probe of "unwired".
+/// a real CLI command); <c>/views/gcroot/{address}</c> redirects into <c>/trees/gcroot/{address}</c>
+/// rather than duplicating the tree there.
 /// </para>
 /// </remarks>
 public static class TreeRoutes {
@@ -65,6 +64,16 @@ public static class TreeRoutes {
 		HttpContext http, LoadedDump dump, DumpInfoService info, IAnalysisQueue queue, IFragmentRenderer renderer,
 		string tree, string? seed, CancellationToken ct) {
 
+		// gcroot is the one tree whose seed is required and is always an address: it is computed whole
+		// up front (DATA_CONTRACT.md §4.3), so it never issues a TreeNode.Id for a later expansion and
+		// therefore never receives a seed that is not an address. Validated here rather than inside
+		// BuildTreeFragment because a missing or malformed address is a 400 and that switch's shared
+		// signature only distinguishes "rendered" from "no such tree" (404) -- same rule, same message
+		// shape, as DumpRoutes.TryRequireAddress.
+		if (IsGCRoot(tree) && !TryValidateGCRootRequest(http, seed, out var badGCRootRequest)) {
+			return badGCRootRequest;
+		}
+
 		string? fragment = await BuildTreeFragment(http, queue, renderer, tree, seed, ct);
 		if (fragment is null) {
 			return Results.Text(
@@ -77,14 +86,23 @@ public static class TreeRoutes {
 		}
 
 		var descriptor = TreeCatalog.Find(tree);
+
+		// A tree with no TreeCatalog entry borrows the header text and the nav highlight of the
+		// ViewCatalog entry of the same name, when there is one. Today that is exactly gcroot: it
+		// needs an address so it is not nav-reachable and has no TreeDescriptor, but it keeps its
+		// ViewCatalog entry (a real CLI command), and /views/gcroot/{address} now redirects here --
+		// so this *is* the page that nav entry leads to, and it should say so rather than heading
+		// itself with the bare route segment.
+		var view = descriptor is null ? ViewCatalog.Find(tree) : null;
+
 		var infoResult = await info.GetAsync();
 		string html = await renderer.RenderAsync(http, "/Views/Shell/Index.cshtml",
 			new ShellModel(
 				dump.Path, infoResult,
-				Title: descriptor?.Title ?? tree,
-				Command: descriptor?.Command ?? tree,
-				Description: descriptor?.Description ?? "",
-				CurrentView: null,
+				Title: descriptor?.Title ?? view?.Title ?? tree,
+				Command: descriptor?.Command ?? view?.Command ?? tree,
+				Description: descriptor?.Description ?? view?.Description ?? "",
+				CurrentView: view,
 				CurrentTreeName: tree,
 				Views: ViewCatalog.All,
 				Trees: TreeCatalog.All,
@@ -139,12 +157,53 @@ public static class TreeRoutes {
 					return await renderer.RenderAsync(http, "/Views/Fragments/ThreadsTree.cshtml", model);
 				}
 
+			case "gcroot": {
+					// Both parses are guaranteed to succeed: RenderTree ran the identical validation
+					// and answered 400 before this method was called.
+					AddressParser.TryParse(seed, out ulong target);
+					GCRootBudget.TryRead(http.Request.Query, out int? maxNodes, out _);
+
+					var search = await queue.Enqueue(
+						(session, _) => session.Heap.GetGCRoots(target, new QueryParameters(), maxPaths: GCRootBudget.DefaultMaxPaths, maxNodesVisited: maxNodes),
+						"resolving roots", ct);
+
+					var model = new GCRootTreeModel(
+						GCRootTreeBuilder.Build(search),
+						ConclusiveHref: $"/trees/gcroot/{target:X}?{GCRootBudget.Parameter}=0");
+
+					// Fully nested up front, not through _TreeNodes.cshtml: one analyzer call returned
+					// the whole tree, so there is no lazy level for that partial's hx-get to fetch
+					// (DATA_CONTRACT.md §4.3, and _TreeNodes.cshtml's own doc comment).
+					return await renderer.RenderAsync(http, "/Views/Fragments/GcRootTree.cshtml", model);
+				}
+
 			// case "object": ...        (5.4)
-			// case "gcroot": ...        (5.3)
 
 			default:
 				return null;
 		}
+	}
+
+	private static bool IsGCRoot(string tree) => string.Equals(tree, "gcroot", StringComparison.Ordinal);
+
+	/// <summary>The <c>400</c>s for <c>/trees/gcroot</c>: a required address it did not get, and a
+	/// budget override it cannot act on.</summary>
+	private static bool TryValidateGCRootRequest(HttpContext http, string? seed, out IResult badRequest) {
+		if (!AddressParser.TryParse(seed, out _)) {
+			badRequest = Results.Text(
+				"'gcroot' requires an address, e.g. /trees/gcroot/7FF6A1B02000 (hex, optionally 0x-prefixed). "
+				+ "It answers 'what is keeping this object alive?', so there is nothing to show without one.",
+				"text/plain; charset=utf-8", statusCode: StatusCodes.Status400BadRequest);
+			return false;
+		}
+
+		if (!GCRootBudget.TryRead(http.Request.Query, out _, out string error)) {
+			badRequest = Results.Text(error, "text/plain; charset=utf-8", statusCode: StatusCodes.Status400BadRequest);
+			return false;
+		}
+
+		badRequest = Results.Empty;
+		return true;
 	}
 
 	private static IResult Html(string markup) => Results.Content(markup, "text/html; charset=utf-8");

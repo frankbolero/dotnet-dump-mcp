@@ -15,13 +15,13 @@ namespace DotNetDump.Tests;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Unlike the generic route, <c>name2ee</c> has no "unwired view" bypass to isolate the routing
-/// decision from the analyzer the way <see cref="ViewRoutingTests"/> does with <c>gcroot</c> --
-/// every request here calls <see cref="ModuleAnalyzer.Name2EE"/> for real, so there is no way to
-/// exercise the whole-page-vs-fragment branch against <see cref="NoDumpContext"/> the way that
-/// class does: the analyzer throws before either branch produces a response. This class instead
-/// follows <see cref="WiredViewRoutingTests"/>'s pattern and needs a real dump, skipping without
-/// one -- set <see cref="IntegrationTests.DumpPathVariable"/> to run it.
+/// Every request here calls <see cref="ModuleAnalyzer.Name2EE"/> for real, so the
+/// whole-page-vs-fragment branch cannot be exercised against <see cref="NoDumpContext"/>: the
+/// analyzer throws before either branch produces a response. This class therefore follows
+/// <see cref="WiredViewRoutingTests"/>'s pattern and needs a real dump, skipping without one -- set
+/// <see cref="IntegrationTests.DumpPathVariable"/> to run it. (<see cref="ViewRoutingTests"/> once
+/// dodged this through a view with no handler; Phase 5.3 wired the last of those, and that class's
+/// own remarks record what the branch lost as a result.)
 /// </para>
 /// <para>
 /// What it adds over the generic routing tests: proof that a request with two trailing segments

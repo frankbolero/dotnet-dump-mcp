@@ -1,0 +1,36 @@
+@*
+    One level of the gcroot retention trie, rendered whole (5.3, DATA_CONTRACT.md §4.3).
+
+    Unlike _TreeNodes.cshtml this partial recurses into itself instead of leaving an empty <ul> with
+    an hx-get on it: this tree arrives complete from a single HeapAnalyzer.GetGCRoots call, so there
+    is nothing to fetch later and a lazy level would only add round trips to data already in hand.
+    Collapse is still free and needs no JavaScript -- <details> does it natively.
+
+    <details open>, not closed: a retention chain is the answer to the question the user asked, not a
+    directory to browse. The chains are short (a handful of hops) and there are at most maxPaths of
+    them, so opening everything cannot flood the page the way the namespace rollup's fan-out would.
+
+    Full partial paths, never the "_GcRootNodes" short form: short names resolve only inside
+    Views/Shared/, and this partial lives in Views/Fragments/.
+*@
+@model IReadOnlyList<DotNetDump.Core.Trees.GCRootTreeNode>
+@foreach (var branch in Model)
+{
+    <li class="dn-tree__item">
+        @if (branch.Children.Count > 0)
+        {
+            <details class="dn-tree__node" open>
+                <summary class="dn-tree__row"><partial name="/Views/Shared/_TreeRow.cshtml" model="branch.Node" /></summary>
+                <ul class="dn-tree">
+                    <partial name="/Views/Fragments/_GcRootNodes.cshtml" model="branch.Children" />
+                </ul>
+            </details>
+        }
+        else
+        {
+            <div class="dn-tree__row dn-tree__row--leaf">
+                <partial name="/Views/Shared/_TreeRow.cshtml" model="branch.Node" />
+            </div>
+        }
+    </li>
+}
