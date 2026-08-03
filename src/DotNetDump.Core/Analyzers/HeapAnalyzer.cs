@@ -305,16 +305,32 @@ namespace DotNetDump.Core.Analyzers {
 				details.Value = $"Array of {obj.Type.ComponentType?.Name}, Count: {obj.AsArray().Length}";
 				var array = obj.AsArray();
 				var limit = Math.Min(array.Length, MaxArrayPreviewSize);
+				// GetObjectValue is only valid for arrays whose elements are object references
+				// (e.g. string[], object[]); it throws InvalidOperationException on primitive
+				// element arrays like byte[]/int[]/double[], which must be read via GetValue<T>
+				// instead (mirrors ReadPrimitiveValue's field-based counterpart below).
+				bool isObjectArray = obj.Type.ComponentType?.IsObjectReference ?? false;
 				for (int i = 0; i < limit; i++) {
-					var element = array.GetObjectValue(i);
-					details.Fields.Add(new ObjectField {
-						Name = $"[{i}]",
-						TypeName = element.Type?.Name ?? "<unknown>",
-						Value = GetObjectValue(element),
-						Address = element.Address,
-						IsReference = element.Type?.IsObjectReference ?? false,
-						Offset = -1
-					});
+					if (isObjectArray) {
+						var element = array.GetObjectValue(i);
+						details.Fields.Add(new ObjectField {
+							Name = $"[{i}]",
+							TypeName = element.Type?.Name ?? "<unknown>",
+							Value = GetObjectValue(element),
+							Address = element.Address,
+							IsReference = element.Type?.IsObjectReference ?? false,
+							Offset = -1
+						});
+					} else {
+						details.Fields.Add(new ObjectField {
+							Name = $"[{i}]",
+							TypeName = obj.Type.ComponentType?.Name ?? "<unknown>",
+							Value = ReadPrimitiveArrayValue(array, i)?.ToString() ?? "{error}",
+							Address = 0,
+							IsReference = false,
+							Offset = -1
+						});
+					}
 				}
 				if (array.Length > MaxArrayPreviewSize) {
 					details.Fields.Add(new ObjectField { Name = $"... ({array.Length - MaxArrayPreviewSize} more items)" });
@@ -387,6 +403,31 @@ namespace DotNetDump.Core.Analyzers {
 				case ClrElementType.NativeInt: return obj.ReadField<IntPtr>(field);
 				case ClrElementType.NativeUInt: return obj.ReadField<UIntPtr>(field);
 				case ClrElementType.Struct: return $"<struct {field.Type?.Name}>";
+				default: return null;
+			}
+		}
+
+		// Reads a primitive element out of an array whose component type is not an object
+		// reference (e.g. byte[], int[]). ClrArray.GetObjectValue throws for these arrays;
+		// ClrArray.GetValue is the correct reader (mirrors ReadPrimitiveValue above, for fields).
+		private object? ReadPrimitiveArrayValue(ClrArray array, int index) {
+			switch (array.Type.ComponentType?.ElementType) {
+				case ClrElementType.Boolean: return array.GetValue<bool>(index);
+				case ClrElementType.UInt8: return array.GetValue<byte>(index);
+				case ClrElementType.Int8: return array.GetValue<sbyte>(index);
+				case ClrElementType.Char: return array.GetValue<char>(index);
+				case ClrElementType.Int16: return array.GetValue<short>(index);
+				case ClrElementType.UInt16: return array.GetValue<ushort>(index);
+				case ClrElementType.Int32: return array.GetValue<int>(index);
+				case ClrElementType.UInt32: return array.GetValue<uint>(index);
+				case ClrElementType.Int64: return array.GetValue<long>(index);
+				case ClrElementType.UInt64: return array.GetValue<ulong>(index);
+				case ClrElementType.Float: return array.GetValue<float>(index);
+				case ClrElementType.Double: return array.GetValue<double>(index);
+				case ClrElementType.Pointer:
+				case ClrElementType.NativeInt: return array.GetValue<IntPtr>(index);
+				case ClrElementType.NativeUInt: return array.GetValue<UIntPtr>(index);
+				case ClrElementType.Struct: return $"<struct {array.Type.ComponentType?.Name}>";
 				default: return null;
 			}
 		}
