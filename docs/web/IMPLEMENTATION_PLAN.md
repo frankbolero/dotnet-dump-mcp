@@ -7,8 +7,9 @@ six tasks (filter bar, chips, sortable headers, infinite scroll, OOB row count, 
 all complete and verified against a real dump; its exit criterion's 10.2M-object scale claim
 specifically is not yet measured (see Phase 4's own notes). Phase 5's four trees are all complete,
 merged, and verified against the real dump — see Phase 5's own notes on what "keyboard navigable"
-means for a native `<details>`-based tree and what has and has not been checked. Phases 6–7
-outstanding.
+means for a native `<details>`-based tree and what has and has not been checked. Phase 6 outstanding.
+Phase 7's task 7.1 (Docker reachability for `serve`) is done, see its own notes on what is and is
+not verified; 7.2–7.5 outstanding.
 
 Eight phases. Phases 0, 1 and 2 run in parallel; the rest are sequential. Each phase has an exit
 criterion that is a demonstrable fact, not a feeling, and the phases that could invalidate later work
@@ -580,13 +581,43 @@ decision taken with these measurements in hand.
 
 Depends on 5 and 6.
 
-| Task | Detail |
-| :--- | :--- |
-| 7.1 | Docker: `serve` entry point on the CLI image, loopback-only port publishing in the wrapper script and in every documented example. |
-| 7.2 | Tests per [`SERVER.md` §7](SERVER.md), including the security tests (binding, `Host` header, no CORS) and the cyclic-graph fixture. |
-| 7.3 | README section presenting `dndump serve` alongside the CLI and the MCP server, with the loopback constraint and the secrets rationale stated, not implied. |
-| 7.4 | Update the `dndump` skill so an agent knows `serve` exists, and knows it is for a human — an agent should keep using the CLI, which is cheaper for it in every respect. |
-| 7.5 | Rewrite [`../CLI_DESIGN.md` §10](../CLI_DESIGN.md) to point here instead of describing this as unplanned future work. |
+| Task | Status | Detail |
+| :--- | :--- | :--- |
+| 7.1 | ✅ | Docker: `serve` already ran inside the CLI image (`DotNetDump.Cli` references `DotNetDump.Web`), but was unreachable — see below. Fixed via `DumpWebHostOptions.BindAnyInterface` / `dndump serve --container`, loopback-only port publishing hardcoded into `scripts/dndump-serve-docker` and every documented example ([`SERVER.md` §6.1](SERVER.md)). |
+| 7.2 | | Tests per [`SERVER.md` §7](SERVER.md), including the security tests (binding, `Host` header, no CORS) and the cyclic-graph fixture. |
+| 7.3 | | README section presenting `dndump serve` alongside the CLI and the MCP server, with the loopback constraint and the secrets rationale stated, not implied. |
+| 7.4 | | Update the `dndump` skill so an agent knows `serve` exists, and knows it is for a human — an agent should keep using the CLI, which is cheaper for it in every respect. |
+| 7.5 | | Rewrite [`../CLI_DESIGN.md` §10](../CLI_DESIGN.md) to point here instead of describing this as unplanned future work. |
+
+### 7.1 — the finding, and what is and isn't verified
+
+Kestrel's loopback bind (§6's `IPAddress.Loopback`) is correct for `serve` running directly on a
+host, but backfires inside Docker: `-p hostPort:containerPort` forwarding delivers packets to the
+container's *routable* interface, never its loopback, so a loopback-bound Kestrel is unreachable
+from the host even with the port published. `SERVER.md` §6.1's original example did not account
+for this and would have hung silently. The fix makes the bind an explicit opt-in
+(`BindAnyInterface`/`--container`) rather than changing the default, and moves the actual
+"unreachable off this machine" guarantee to the host-side `-p 127.0.0.1:<port>:<port>` publish —
+`LoopbackHostMiddleware`'s `Host`-header check needed no change, since it already validates
+independent of bind address (SERVER.md §6.1 explains why).
+
+**Verified:** a real-socket test (`ContainerBindingTests` in `WebSecurityTests.cs`) proves, against
+this machine's actual non-loopback interface (not skipped — this environment has one), both that
+`--container` genuinely makes the server reachable off loopback and that the `Host`-header check
+still rejects a non-loopback name when the connection arrives that way. Full suite 759/0/75 on
+`net8.0`/`net9.0`/`net10.0` (unchanged skip count — no dump available in this session), the touched
+files are `dotnet format --verify-no-changes` clean.
+
+**Not verified:** the other half of the fix — that Docker's own `-p 127.0.0.1:<port>:<port>` NAT
+actually forwards into a container bound this way — is reasoned from documented Docker networking
+semantics, not smoke-tested against a live daemon; no working Docker/podman backend was available
+in the session that built this. Run `./scripts/dndump-serve-docker <a real dump>` and load
+`http://127.0.0.1:5111` in a browser once before treating this as fully closed.
+
+**Unrelated, pre-existing:** `dotnet format --verify-no-changes` fails on the whole solution because
+of a stray trailing final newline in `DotNetDump.Web/Rendering/TreeModels.cs` (`insert_final_newline
+= false` in `src/.editorconfig`), introduced by Phase 5.4's merge, not by this work. Left as found
+rather than fixed opportunistically in an unrelated change.
 
 **Exit criterion.** A fresh clone can `dotnet tool install`, run `dndump serve` against a dump, and
 investigate a leak end to end. `dotnet format --verify-no-changes` and the full test suite pass on

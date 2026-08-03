@@ -18,8 +18,8 @@ namespace DotNetDump.Cli.Commands;
 
 /// <summary>
 /// <c>dndump serve</c> -- the local web interface (docs/web/SERVER.md &#0167;1.2). Starts
-/// <c>DotNetDump.Web</c> in this process, bound to loopback, against one dump for the lifetime of
-/// the process.
+/// <c>DotNetDump.Web</c> in this process, bound to loopback by default (or every interface under
+/// <see cref="ContainerOption"/>, for Docker), against one dump for the lifetime of the process.
 /// </summary>
 /// <remarks>
 /// The dependency runs one way: the CLI references the web host so <c>serve</c> can start it
@@ -42,11 +42,23 @@ public static class ServeCommand {
 		DefaultValueFactory = _ => false,
 	};
 
+	public static readonly Option<bool> ContainerOption = new("--container") {
+		Description = "Bind every interface instead of loopback only. For Docker only: Docker's " +
+			"'-p' port publishing cannot reach a Kestrel bound to the container's own loopback " +
+			"(docs/web/SERVER.md §6.1), so this widens the bind inside the container while the " +
+			"actual 'only this machine can reach it' guarantee moves to publishing the port as " +
+			"'-p 127.0.0.1:<port>:<port>' -- never bare '-p <port>:<port>'. Do not pass this " +
+			"outside a container; it removes the network-level protection a direct 'dndump serve' " +
+			"relies on.",
+		DefaultValueFactory = _ => false,
+	};
+
 	public static Command Create() {
 		var command = new Command("serve", "Local web interface for interactive analysis. Loopback only, no auth.");
 		command.Options.Add(PortOption);
 		command.Options.Add(NoOpenOption);
 		command.Options.Add(NoWarmOption);
+		command.Options.Add(ContainerOption);
 
 		command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) => {
 			string? dumpOption = parseResult.GetValue(GlobalOptions.Dump);
@@ -55,6 +67,7 @@ public static class ServeCommand {
 			int port = parseResult.GetValue(PortOption);
 			bool noOpen = parseResult.GetValue(NoOpenOption);
 			bool noWarm = parseResult.GetValue(NoWarmOption);
+			bool container = parseResult.GetValue(ContainerOption);
 
 			// Resolved first so the path is in hand for the banner and the header bar; the same
 			// --dump -> DNDUMP_PATH -> .dndump/session.json precedence as every other command, so
@@ -74,14 +87,22 @@ public static class ServeCommand {
 				DumpPath = dumpPath,
 				Context = context,
 				Port = port,
+				BindAnyInterface = container,
 			});
 
 			await app.StartAsync(cancellationToken);
 
 			string url = DumpWebHost.ResolveUrl(app);
 			if (!quiet) {
+				int resolvedPort = new Uri(url).Port;
+				// "Loopback only" stops being true the moment --container widens the bind (see
+				// ContainerOption's own description) -- saying so anyway here would be exactly the
+				// kind of claim that reads as coverage it does not provide.
+				string reachability = container
+					? $"reachable only if this container's port is published as 127.0.0.1:{resolvedPort}:{resolvedPort}"
+					: "loopback only";
 				Console.Error.WriteLine($"Dump: {dumpPath}");
-				Console.Error.WriteLine($"dndump serve listening on {url} -- loopback only, no authentication.");
+				Console.Error.WriteLine($"dndump serve listening on {url} -- {reachability}, no authentication.");
 				Console.Error.WriteLine("Press Ctrl+C to stop.");
 			}
 

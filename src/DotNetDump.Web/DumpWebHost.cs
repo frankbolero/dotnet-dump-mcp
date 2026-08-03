@@ -34,11 +34,26 @@ public sealed class DumpWebHostOptions {
 
 	/// <summary>Loopback port. <c>0</c> asks the OS for an ephemeral one.</summary>
 	public int Port { get; init; } = DumpWebHost.DefaultPort;
+
+	/// <summary>
+	/// Binds every interface instead of loopback only. Exists for exactly one reason: inside a
+	/// Docker container, Kestrel binding to <c>127.0.0.1</c> means the container's own loopback,
+	/// and Docker's <c>-p</c> port publishing delivers packets to the container's routable
+	/// interface, never to its loopback — so a loopback-bound Kestrel is unreachable from the host
+	/// even with the port published. Set this only when the process's own network namespace is not
+	/// the host's; the "only this machine can reach it" guarantee then comes entirely from
+	/// publishing the port as <c>-p 127.0.0.1:&lt;port&gt;:&lt;port&gt;</c> (SERVER.md &#0167;6.1)
+	/// rather than from this bind. <see cref="Security.LoopbackHostMiddleware"/> needs no change to
+	/// remain correct here — it already validates the <c>Host</c> header and
+	/// <c>Connection.LocalPort</c>, independent of which address Kestrel bound to.
+	/// </summary>
+	public bool BindAnyInterface { get; init; }
 }
 
 /// <summary>
 /// Builds the <c>dndump serve</c> host: an ASP.NET Core application that renders HTML fragments
-/// from <c>DotNetDump.Core</c> analyzer results, bound to loopback, one dump per process.
+/// from <c>DotNetDump.Core</c> analyzer results, bound to loopback by default (or every interface
+/// under <see cref="DumpWebHostOptions.BindAnyInterface"/>, for Docker), one dump per process.
 /// </summary>
 public static class DumpWebHost {
 	public const int DefaultPort = 5111;
@@ -85,11 +100,13 @@ public static class DumpWebHost {
 		builder.WebHost.UseSetting(WebHostDefaults.PreventHostingStartupKey, "true");
 
 		builder.WebHost.ConfigureKestrel(kestrel => {
-			// Explicit and IPv4 loopback only. Not UseUrls, not a wildcard, and no --bind option
-			// exists to make it one. A single Listen call also fixes the port for '--port 0':
-			// binding a second loopback address would take a different ephemeral port and there
+			// Explicit, not UseUrls, not honoring any inherited configuration. IPv4 loopback only
+			// unless BindAnyInterface opts into every interface for Docker's sake (see that
+			// property's own remarks) -- there is still no general-purpose --bind option, only this
+			// one deliberate, documented exception. A single Listen call also fixes the port for
+			// '--port 0': binding a second address would take a different ephemeral port and there
 			// would be no single URL to print.
-			kestrel.Listen(IPAddress.Loopback, options.Port);
+			kestrel.Listen(options.BindAnyInterface ? IPAddress.Any : IPAddress.Loopback, options.Port);
 			kestrel.AddServerHeader = false;
 		});
 
@@ -157,9 +174,14 @@ public static class DumpWebHost {
 	}
 
 	/// <summary>
-	/// The URL to print and to open, once the server has started. Read back from the server rather
-	/// than reconstructed from <see cref="DumpWebHostOptions.Port"/>, which is <c>0</c> when the OS
-	/// picked the port.
+	/// The URL to print and to open, once the server has started. Only the port is read back from
+	/// the server (needed because <see cref="DumpWebHostOptions.Port"/> is <c>0</c> when the OS
+	/// picked one); the host is always reported as <c>127.0.0.1</c> regardless of
+	/// <see cref="DumpWebHostOptions.BindAnyInterface"/>. From outside the process, loopback is how
+	/// this server is reached either way — directly, or through Docker's own
+	/// <c>-p 127.0.0.1:&lt;port&gt;:&lt;port&gt;</c> publish — whereas Kestrel's own report of an
+	/// any-interface bind (e.g. <c>http://[::]:&lt;port&gt;</c>) is not a usable client URL and would
+	/// be a confusing thing to print or hand to a browser.
 	/// </summary>
 	public static string ResolveUrl(WebApplication app) {
 		var addresses = app.Services
@@ -167,6 +189,11 @@ public static class DumpWebHost {
 			.Features.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>();
 
 		string? address = addresses?.Addresses.FirstOrDefault();
-		return address is null ? $"http://127.0.0.1:{DefaultPort}" : address.TrimEnd('/');
+		if (address is null) {
+			return $"http://127.0.0.1:{DefaultPort}";
+		}
+
+		int port = new Uri(address).Port;
+		return $"http://127.0.0.1:{port}";
 	}
 }

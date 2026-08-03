@@ -61,6 +61,12 @@ FROM runtime-base AS cli
 COPY src/entrypoint-cli.sh .
 RUN chmod +x entrypoint-cli.sh
 
+# Documentation only -- 'docker port'/'docker inspect' introspection. Docker's '-p' publishing
+# works without this, but 'dndump serve --container' (docs/web/SERVER.md §6.1) is the one command
+# in this image that listens on a port at all, and declaring it is what every other containerized
+# service does.
+EXPOSE 5111
+
 ENTRYPOINT ["./entrypoint-cli.sh"]
 
 # --- MCP server image (default target): everything above, plus the server itself. -------------

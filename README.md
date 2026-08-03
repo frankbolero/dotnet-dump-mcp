@@ -157,6 +157,28 @@ export DNDUMP_IMAGE=dotnet-dump-mcp-cli
 ./scripts/dndump-docker dumpheap --top 20
 ```
 
+### Running the web interface (`dndump serve`) via Docker
+
+Same image, same architecture-mismatch fix. `serve` binds loopback-only by default (`docs/web/SERVER.md`
+§6), which a bare Docker `-p` publish cannot reach — Docker's port forwarding delivers to the
+container's own network interface, not its loopback. `scripts/dndump-serve-docker` handles the one
+flag this needs (`--container`, which widens the bind *inside* the container) and always publishes
+the port as `-p 127.0.0.1:<port>:<port>` — never the bare form, which would expose a dump's heap
+contents to the network:
+
+```bash
+docker build -f src/Dockerfile --target cli -t dotnet-dump-mcp-cli .
+
+./scripts/dndump-serve-docker /dumps/prod-oom.core
+# Once it reports listening, open http://127.0.0.1:5111 in a browser on this machine.
+```
+
+> **Note for Mac users with Linux dumps**: set `DNDUMP_PLATFORM=linux/amd64` (or `linux/arm64`) in
+> the environment before running the script, same as the plain CLI's `--platform` flag above.
+
+See `docs/web/SERVER.md` §6.1 for why `--container` exists and what it does and does not change
+about the security posture.
+
 ---
 
 ## 🚀 MCP Server Quick Start

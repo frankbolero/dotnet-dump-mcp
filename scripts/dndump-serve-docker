@@ -1,0 +1,70 @@
+#!/bin/bash
+# dndump-serve-docker -- runs 'dndump serve' inside the CLI image, for the same architecture
+# mismatch reason as scripts/dndump-docker (e.g. Linux dumps analyzed on a Mac). See
+# docs/web/SERVER.md §6.1.
+#
+# Unlike dndump-docker's persistent-container-plus-`docker exec` pattern, this is a single
+# foreground `docker run --rm`: 'dndump serve' is already long-lived and interactive (Ctrl+C to
+# stop), so there is no repeated-invocation cost to hide behind a persistent container.
+#
+# The one thing this script exists to get right every time: '--container' (which makes Kestrel
+# bind every interface instead of loopback only, so Docker's own port publishing can reach it --
+# see DumpWebHostOptions.BindAnyInterface's remarks) is meaningless -- worse, unsafe -- without
+# also publishing the port as '-p 127.0.0.1:<port>:<port>'. Bare '-p <port>:<port>' would expose a
+# dump's heap contents (connection strings, tokens, PII) to the whole network. This script always
+# emits the loopback-prefixed form, hardcoded, never built from an interpolation that could drop
+# it.
+#
+# Configuration (all optional):
+#   DNDUMP_IMAGE            Docker image to run.               default: dotnet-dump-mcp-cli
+#   DNDUMP_DUMPS_DIR        Host directory mounted at /dumps.   default: current directory
+#   DNDUMP_SYMCACHE_VOLUME  Named volume mounted at /symcache.  default: dndump-symcache
+#   DNDUMP_SERVE_PORT       Port to serve on and publish.       default: 5111
+#   DNDUMP_PLATFORM         Passed as --platform to `docker run` if set (e.g. linux/amd64),
+#                           for cross-architecture dumps on Docker Desktop/Apple Silicon.
+#
+# Usage:
+#   dndump-serve-docker <dump-path-inside-/dumps> [extra dndump serve arguments...]
+#   dndump-serve-docker /dumps/prod-oom.core
+#   dndump-serve-docker /dumps/prod-oom.core --dac /dumps/libmscordaccore.so
+set -euo pipefail
+
+IMAGE="${DNDUMP_IMAGE:-dotnet-dump-mcp-cli}"
+DUMPS_DIR="${DNDUMP_DUMPS_DIR:-$(pwd)}"
+SYMCACHE_VOLUME="${DNDUMP_SYMCACHE_VOLUME:-dndump-symcache}"
+PORT="${DNDUMP_SERVE_PORT:-5111}"
+
+if [ "$#" -eq 0 ]; then
+    echo "Usage: dndump-serve-docker <dump-path-inside-/dumps> [extra dndump serve arguments...]" >&2
+    echo "Example: dndump-serve-docker /dumps/prod-oom.core" >&2
+    exit 2
+fi
+
+DUMP_PATH="$1"
+shift
+
+if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+    echo "Error: image '$IMAGE' not found locally. Build it first, e.g.:" >&2
+    echo "  docker build -f src/Dockerfile --target cli -t $IMAGE ." >&2
+    exit 3
+fi
+
+echo "Starting 'dndump serve' from image '$IMAGE' (dumps: $DUMPS_DIR, symcache volume: $SYMCACHE_VOLUME)..." >&2
+echo "Once it reports listening, open http://127.0.0.1:$PORT in a browser on this machine." >&2
+
+# Two explicit branches rather than an optional args array -- the default /bin/bash on macOS is
+# 3.2, which errors on `"${empty_array[@]}"` under `set -u`.
+if [ -n "${DNDUMP_PLATFORM:-}" ]; then
+    docker run --rm -it \
+        --platform "$DNDUMP_PLATFORM" \
+        -p "127.0.0.1:$PORT:$PORT" \
+        -v "$DUMPS_DIR:/dumps" \
+        -v "$SYMCACHE_VOLUME:/symcache" \
+        "$IMAGE" serve --dump "$DUMP_PATH" --port "$PORT" --container --no-open "$@"
+else
+    docker run --rm -it \
+        -p "127.0.0.1:$PORT:$PORT" \
+        -v "$DUMPS_DIR:/dumps" \
+        -v "$SYMCACHE_VOLUME:/symcache" \
+        "$IMAGE" serve --dump "$DUMP_PATH" --port "$PORT" --container --no-open "$@"
+fi

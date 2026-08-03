@@ -21,6 +21,15 @@ namespace DotNetDump.Web.Security;
 /// <c>--port 0</c> without anything having to plumb the resolved port back here — and it cannot
 /// drift out of agreement with the real binding.
 /// </para>
+/// <para>
+/// This check is address-independent by construction, which is exactly what lets it keep working
+/// unchanged under <see cref="DotNetDump.Web.DumpWebHostOptions.BindAnyInterface"/> (the Docker
+/// case): it never
+/// inspects <see cref="ConnectionInfo.RemoteIpAddress"/>, only the <c>Host</c> header and the local
+/// port. Do not "harden" this into a remote-IP-must-be-loopback check — under Docker's NAT the real
+/// remote address is the bridge gateway, not loopback, and such a check would simply break the
+/// container case this control is meant to keep protecting.
+/// </para>
 /// </remarks>
 public sealed class LoopbackHostMiddleware(RequestDelegate next) {
 	/// <summary>

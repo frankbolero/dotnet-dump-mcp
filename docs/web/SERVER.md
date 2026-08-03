@@ -240,7 +240,7 @@ values. The posture is the minimum that is actually safe, not the minimum that l
 
 | Control | Implementation |
 | :--- | :--- |
-| **Loopback only** | Kestrel binds `http://127.0.0.1:{port}` explicitly. No `--bind`, no `0.0.0.0`, no `ASPNETCORE_URLS` honored — the env var is cleared at startup so it cannot widen the binding. |
+| **Loopback only** | Kestrel binds `http://127.0.0.1:{port}` explicitly by default. No general-purpose `--bind`, no `ASPNETCORE_URLS` honored — the env var is cleared at startup so it cannot widen the binding. The one deliberate, documented exception is `--container` (§6.1), for Docker only, where the network-level guarantee moves to the host's own port-publish syntax instead. |
 | **Host-header validation** | Middleware rejects any request whose `Host` is not `localhost`/`127.0.0.1`/`[::1]` + the bound port. Without it, a page on the internet can point DNS at `127.0.0.1` and reach the server from the user's own browser. Loopback binding alone does not stop this. |
 | **No CORS** | No CORS headers are emitted, so cross-origin JavaScript cannot read responses. |
 | **No auth** | Correct given the above: anyone who can reach loopback already runs code on the machine. Adding a token would guard against other local users, which is not this tool's threat model. |
@@ -250,18 +250,35 @@ values. The posture is the minimum that is actually safe, not the minimum that l
 
 ### 6.1 Docker
 
-The CLI image gains a `serve` entry point. The port is published to loopback only:
+The CLI image's `dndump` already includes `serve` — no separate entry point needed. But the
+loopback bind in §6's table (`kestrel.Listen(IPAddress.Loopback, ...)`) means, inside a container,
+Kestrel binds the *container's own* loopback interface. Docker's `-p hostPort:containerPort`
+forwarding delivers packets to the container's routable interface (`eth0`), never to its loopback
+— so a plain `dndump serve` inside a container is unreachable from the host even with the port
+published. The earlier version of this section's example did not account for this and would have
+hung silently.
+
+The fix is `--container` (`DumpWebHostOptions.BindAnyInterface`): it makes Kestrel bind every
+interface *inside* the container, while the "only this machine can reach it" guarantee moves
+entirely to publishing the port as `-p 127.0.0.1:<port>:<port>` on the host side. Nothing about
+§6's other controls changes — in particular, `LoopbackHostMiddleware`'s `Host`-header check keeps
+working unmodified, because it validates the request's `Host` header and `Connection.LocalPort`,
+never the bind address or the remote IP (which under Docker's NAT is the bridge gateway, not
+loopback, so a remote-IP-based check would break this case rather than strengthen it).
 
 ```bash
 docker run --rm -p 127.0.0.1:5111:5111 \
-  -v "/path/to/dumps:/dumps" -v dndump-cache:/cache \
-  -e DNDUMP_CACHE=/cache \
-  dndump-web serve --dump /dumps/prod-oom.core --port 5111
+  -v "/path/to/dumps:/dumps" -v dndump-symcache:/symcache \
+  dotnet-dump-mcp-cli serve --dump /dumps/prod-oom.core --port 5111 --container --no-open
 ```
+
+`scripts/dndump-serve-docker` wraps this (see README).
 
 `-p 5111:5111` without the `127.0.0.1:` prefix publishes on every interface and exposes heap
 contents to the network. The wrapper script must emit the loopback form, and the README must show
-only that form — this is the one place where a copy-pasted command can undo §6 entirely.
+only that form — this is the one place where a copy-pasted command can undo §6 entirely. Passing
+`--container` outside a container is the same mistake from the opposite direction: it removes the
+network-level protection a direct `dndump serve` relies on, for no benefit.
 
 ## 7. Testing
 

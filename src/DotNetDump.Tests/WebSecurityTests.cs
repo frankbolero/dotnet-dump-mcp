@@ -23,7 +23,7 @@ namespace DotNetDump.Tests;
 /// would interleave those writes and make the environment tests report on each other's state.
 /// </summary>
 [CollectionDefinition(Name, DisableParallelization = true)]
-public sealed class WebSecurityCollection : ICollectionFixture<LoopbackServerFixture> {
+public sealed class WebSecurityCollection : ICollectionFixture<LoopbackServerFixture>, ICollectionFixture<ContainerBoundServerFixture> {
 	public const string Name = "web-security";
 }
 
@@ -388,6 +388,151 @@ public sealed class WebSecurityTests(LoopbackServerFixture server) {
 }
 
 /// <summary>
+/// One real <c>dndump serve --container</c> host on an ephemeral port, bound to every interface.
+/// Shares <see cref="WebSecurityCollection"/> with <see cref="LoopbackServerFixture"/> so the two
+/// real hosts never build concurrently in this process.
+/// </summary>
+public sealed class ContainerBoundServerFixture : IAsyncLifetime {
+	private WebApplication? _app;
+
+	public string Url { get; private set; } = string.Empty;
+	public int Port { get; private set; }
+	public IReadOnlyCollection<string> Addresses { get; private set; } = [];
+
+	public async Task InitializeAsync() {
+		_app = DumpWebHost.Build(new DumpWebHostOptions {
+			DumpPath = "(test)",
+			Context = new NoDumpContext(),
+			Cache = new MemoryAnalysisCache(),
+			Port = 0,
+			BindAnyInterface = true,
+		});
+
+		try {
+			await _app.StartAsync();
+		} catch {
+			await _app.DisposeAsync();
+			_app = null;
+			throw;
+		}
+
+		Url = DumpWebHost.ResolveUrl(_app);
+		Port = new Uri(Url).Port;
+		Addresses = LoopbackServerFixture.ServerAddresses(_app);
+	}
+
+	public async Task DisposeAsync() {
+		if (_app is null) {
+			return;
+		}
+
+		await _app.StopAsync();
+		await _app.DisposeAsync();
+		_app = null;
+	}
+}
+
+/// <summary>
+/// <see cref="DumpWebHostOptions.BindAnyInterface"/> — the Docker case (SERVER.md &#0167;6.1). Two
+/// properties matter here, and both must hold simultaneously for the fix to be safe: the server
+/// must actually become reachable off loopback (or Docker's own port publishing would have nothing
+/// to forward to), and <see cref="LoopbackHostMiddleware"/>'s <c>Host</c>-header check must keep
+/// rejecting a request that arrives that way with the wrong name. Proving only the first would
+/// leave the fix indistinguishable from having simply deleted the security posture.
+/// </summary>
+[Collection(WebSecurityCollection.Name)]
+public sealed class ContainerBindingTests(ContainerBoundServerFixture server) {
+	private readonly ContainerBoundServerFixture _server = server;
+
+	[Fact]
+	public void ResolvedUrl_IsStillReportedAsIPv4Loopback() {
+		// DumpWebHost.ResolveUrl always reports 127.0.0.1: that's how this server is actually
+		// reached from outside the container once Docker's own '-p 127.0.0.1:<port>:<port>'
+		// publish is in place, even though the bind itself is wider.
+		Assert.StartsWith("http://127.0.0.1:", _server.Url, StringComparison.Ordinal);
+	}
+
+	[SkippableFact]
+	public async Task Server_IsReachable_OnANonLoopbackLocalAddress() {
+		var addresses = NonLoopbackIPv4Addresses();
+		Skip.If(addresses.Count == 0,
+			"This machine has no non-loopback IPv4 address, so there is no interface to prove the " +
+			"server is reachable on. Skipped rather than passed: a vacuous pass here would read as " +
+			"coverage of the binding.");
+
+		bool reachableOnAny = false;
+		foreach (var address in addresses) {
+			if (await WebSecurityTests.CanConnect(address, _server.Port)) {
+				reachableOnAny = true;
+				break;
+			}
+		}
+
+		Assert.True(reachableOnAny,
+			$"BindAnyInterface=true did not make the server reachable on any non-loopback address " +
+			$"({string.Join(", ", addresses)}:{_server.Port}). This is the property Docker's '-p' " +
+			"port publishing depends on — without it, --container would be a flag that does nothing.");
+	}
+
+	[SkippableFact]
+	public async Task HostHeader_StillRejectsANonLoopbackName_WhenTheConnectionArrivesOffLoopback() {
+		// The regression this guards against: BindAnyInterface widening the network-level bind
+		// without LoopbackHostMiddleware's Host check still holding would leave a dump's heap
+		// contents reachable from anything that can reach this interface, exactly the class of
+		// exposure the loopback bind exists to prevent in the first place. So this connects through
+		// the non-loopback address itself -- not loopback -- to prove the check runs on that path,
+		// not merely on the path WebSecurityTests.HostHeader_IsRejected already covers.
+		var address = await FirstReachableNonLoopbackAddress();
+		Skip.If(address is null,
+			"This machine has no non-loopback IPv4 address the server is reachable on. Skipped " +
+			"rather than passed: a vacuous pass here would read as coverage of the check.");
+
+		var response = await RawHttp.Send(address!, _server.Port, RawRequest("evil.example"));
+		Assert.Equal(400, response.StatusCode);
+	}
+
+	[SkippableFact]
+	public async Task HostHeader_StillAcceptsALoopbackName_WhenTheConnectionArrivesOffLoopback() {
+		// Not vacuous: LoopbackHostMiddleware.IsLoopbackHost checks the Host header's claimed value,
+		// not the socket's actual remote or local address, so a request that arrives over a
+		// non-loopback interface but still names 'localhost' is exactly the shape Docker's own NAT
+		// produces (SERVER.md §6.1) and must keep being served.
+		var address = await FirstReachableNonLoopbackAddress();
+		Skip.If(address is null,
+			"This machine has no non-loopback IPv4 address the server is reachable on. Skipped " +
+			"rather than passed: a vacuous pass here would read as coverage of the check.");
+
+		var response = await RawHttp.Send(
+			address!, _server.Port, RawRequest($"localhost:{_server.Port.ToString(CultureInfo.InvariantCulture)}"));
+		Assert.Equal(200, response.StatusCode);
+	}
+
+	private async Task<IPAddress?> FirstReachableNonLoopbackAddress() {
+		foreach (var address in NonLoopbackIPv4Addresses()) {
+			if (await WebSecurityTests.CanConnect(address, _server.Port)) {
+				return address;
+			}
+		}
+
+		return null;
+	}
+
+	private static string RawRequest(string host) =>
+		$"GET /health HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n";
+
+	private static IReadOnlyList<IPAddress> NonLoopbackIPv4Addresses() =>
+		NetworkInterface.GetAllNetworkInterfaces()
+			.Where(nic => nic.OperationalStatus == OperationalStatus.Up)
+			.Where(nic => nic.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+			.SelectMany(nic => nic.GetIPProperties().UnicastAddresses)
+			.Select(unicast => unicast.Address)
+			.Where(address => address.AddressFamily == AddressFamily.InterNetwork)
+			.Where(address => !IPAddress.IsLoopback(address))
+			.Distinct()
+			.ToArray();
+}
+
+/// <summary>
 /// That no inherited environment can move the binding off loopback (SERVER.md &#0167;6).
 /// </summary>
 /// <remarks>
@@ -603,10 +748,17 @@ internal sealed record RawResponse(int StatusCode, string Head, string Body, IRe
 /// <c>Host</c> check exists to refuse, so it has to be written onto the socket directly.
 /// </summary>
 internal static class RawHttp {
-	public static async Task<RawResponse> Send(int port, string request) {
+	public static Task<RawResponse> Send(int port, string request) => Send(IPAddress.Loopback, port, request);
+
+	/// <summary>
+	/// As <see cref="Send(int,string)"/>, but over a caller-chosen address — used to prove
+	/// <see cref="LoopbackHostMiddleware"/>'s <c>Host</c> check still holds when the connection
+	/// itself arrives over a non-loopback interface (<see cref="ContainerBindingTests"/>).
+	/// </summary>
+	public static async Task<RawResponse> Send(IPAddress address, int port, string request) {
 		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 		using var client = new TcpClient();
-		await client.ConnectAsync(IPAddress.Loopback, port, timeout.Token);
+		await client.ConnectAsync(address, port, timeout.Token);
 
 		using var stream = client.GetStream();
 		await stream.WriteAsync(Encoding.ASCII.GetBytes(request), timeout.Token);
