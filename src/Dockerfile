@@ -30,7 +30,14 @@ RUN dotnet tool install --global dotnet-symbol
 # the single-image build used to reuse for convenience) plus the DAC-fetching tool and dndump
 # itself, since dndump is useful/needed from both the server image (agents with shell access
 # inside the MCP container) and the CLI-only image (its whole purpose).
-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS runtime-base
+#
+# This must be the ASP.NET Core runtime image, not the plain dotnet/runtime image: dndump
+# transitively references DotNetDump.Web (Microsoft.NET.Sdk.Web) for the 'dndump serve' command,
+# which adds a FrameworkReference to Microsoft.AspNetCore.App to dndump.runtimeconfig.json. The
+# host validates every framework listed there at process startup -- before any command-specific
+# code runs -- so Microsoft.AspNetCore.App must be present even for commands (like 'dumpheap')
+# that never touch the web server.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime-base
 WORKDIR /app
 
 COPY --from=build /root/.dotnet/tools /root/.dotnet/tools
@@ -54,6 +61,17 @@ VOLUME /dumps
 # image.
 ENV DOTNETDUMP_SYMBOL_CACHE=/symcache
 VOLUME /symcache
+
+# Analysis cache (heap-objects/heap-stat/etc. JSON entries, FileSystemAnalysisCache.cs) volume.
+# Unset, this falls back to an XDG-style user cache dir under /root, i.e. the container's own
+# writable layer -- which for a large dump's heap-objects cache entry can be large enough to fill
+# the (typically small) VM disk backing Docker/Podman Desktop, producing an ENOSPC failure that
+# has nothing to do with the *host* machine's actual free disk space. Mount
+# `-v dndump-cache:/cache` (or, better, a host bind mount -- see README/CLI_DESIGN.md -- so writes
+# land on real host disk rather than the VM's virtual one) to give this room to grow and to reuse
+# entries across runs/execs instead of recomputing them every time.
+ENV DNDUMP_CACHE=/cache
+VOLUME /cache
 
 # --- CLI-only image: dndump plus the DAC tooling, nothing MCP-specific. -----------------------
 FROM runtime-base AS cli
