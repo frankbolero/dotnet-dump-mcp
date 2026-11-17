@@ -30,7 +30,7 @@ RUN dotnet tool install --global dotnet-symbol
 # the single-image build used to reuse for convenience) plus the DAC-fetching tool and dndump
 # itself, since dndump is useful/needed from both the server image (agents with shell access
 # inside the MCP container) and the CLI-only image (its whole purpose).
-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS runtime-base
+FROM mcr.microsoft.com/dotnet/runtime:11.0 AS runtime-base
 WORKDIR /app
 
 COPY --from=build /root/.dotnet/tools /root/.dotnet/tools
