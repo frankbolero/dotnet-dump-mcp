@@ -3,7 +3,7 @@
 #   docker build --target server ...  (default if --target is omitted) -- the MCP server
 #   docker build --target cli    ...  -- dndump only, no MCP server bits, much smaller pull for
 #                                        shell-driven/agent workflows that never need MCP at all
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 WORKDIR /app
 ARG VERSION=0.0.0-local.0
 ARG ASSEMBLY_VERSION=0.0.0.0
